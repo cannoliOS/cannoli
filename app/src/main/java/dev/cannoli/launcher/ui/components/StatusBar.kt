@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.BatteryManager
 import android.os.Build
 import androidx.compose.foundation.background
@@ -32,7 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.launcher.ui.theme.NerdSymbols
-import dev.cannoli.launcher.ui.theme.Nunito
+import dev.cannoli.launcher.ui.theme.MPlus1Code
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,13 +43,17 @@ import java.util.TimerTask
 
 // Nerd Font codepoints
 private const val ICON_BLUETOOTH = "\uDB80\uDCAF"   // 󰂯 nf-md-bluetooth
-private const val ICON_WIFI = "\uDB80\uDD69"         // 󰅩 nf-md-wifi
+private const val ICON_WIFI = "\uDB81\uDDA9"         // 󰖩 nf-md-wifi
 private const val ICON_BAT_0 = "\uDB80\uDC7A"        // 󰁺 nf-md-battery_10
 private const val ICON_BAT_25 = "\uDB80\uDC7C"       // 󰁼 nf-md-battery_30
 private const val ICON_BAT_50 = "\uDB80\uDC7E"       // 󰁾 nf-md-battery_50
 private const val ICON_BAT_75 = "\uDB80\uDC80"       // 󰂀 nf-md-battery_70
 private const val ICON_BAT_100 = "\uDB80\uDC79"      // 󰁹 nf-md-battery
-private const val ICON_BAT_CHARGE = "\uDB80\uDC84"   // 󰂄 nf-md-battery_charging
+private const val ICON_BAT_CHARGE_0 = "\uDB82\uDC9C"  // 󰢜 nf-md-battery_charging_10
+private const val ICON_BAT_CHARGE_25 = "\uDB80\uDC87" // 󰂇 nf-md-battery_charging_30
+private const val ICON_BAT_CHARGE_50 = "\uDB82\uDC9D" // 󰢝 nf-md-battery_charging_50
+private const val ICON_BAT_CHARGE_75 = "\uDB82\uDC9E" // 󰢞 nf-md-battery_charging_70
+private const val ICON_BAT_CHARGE_100 = "\uDB80\uDC85" // 󰂅 nf-md-battery_charging_100
 
 @Composable
 fun StatusBar(
@@ -86,25 +92,37 @@ fun StatusBar(
         }
         context.registerReceiver(batteryReceiver, batteryFilter)
 
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        var networkCallback: ConnectivityManager.NetworkCallback? = null
         try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            if (cm != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                fun checkWifi() {
                     val net = cm.activeNetwork
                     val caps = if (net != null) cm.getNetworkCapabilities(net) else null
                     hasWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-                } else {
-                    @Suppress("DEPRECATION")
-                    hasWifi = cm.activeNetworkInfo?.type == ConnectivityManager.TYPE_WIFI
                 }
+                checkWifi()
+                networkCallback = object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) { checkWifi() }
+                    override fun onLost(network: Network) { checkWifi() }
+                    override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) { checkWifi() }
+                }
+                cm.registerDefaultNetworkCallback(networkCallback!!)
             }
         } catch (_: SecurityException) {
             hasWifi = false
         }
 
+        val btReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                hasBluetooth = state == BluetoothAdapter.STATE_ON
+            }
+        }
         try {
             val btAdapter = BluetoothAdapter.getDefaultAdapter()
             hasBluetooth = btAdapter?.isEnabled == true
+            context.registerReceiver(btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         } catch (_: SecurityException) {
             hasBluetooth = false
         }
@@ -112,16 +130,27 @@ fun StatusBar(
         onDispose {
             timer.cancel()
             try { context.unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
+            try { context.unregisterReceiver(btReceiver) } catch (_: Exception) {}
+            try { networkCallback?.let { cm?.unregisterNetworkCallback(it) } } catch (_: Exception) {}
         }
     }
 
-    val batteryIcon = when {
-        isCharging -> ICON_BAT_CHARGE
-        batteryLevel >= 90 -> ICON_BAT_100
-        batteryLevel >= 60 -> ICON_BAT_75
-        batteryLevel >= 40 -> ICON_BAT_50
-        batteryLevel >= 15 -> ICON_BAT_25
-        else -> ICON_BAT_0
+    val batteryIcon = if (isCharging) {
+        when {
+            batteryLevel >= 90 -> ICON_BAT_CHARGE_100
+            batteryLevel >= 60 -> ICON_BAT_CHARGE_75
+            batteryLevel >= 40 -> ICON_BAT_CHARGE_50
+            batteryLevel >= 15 -> ICON_BAT_CHARGE_25
+            else -> ICON_BAT_CHARGE_0
+        }
+    } else {
+        when {
+            batteryLevel >= 90 -> ICON_BAT_100
+            batteryLevel >= 60 -> ICON_BAT_75
+            batteryLevel >= 40 -> ICON_BAT_50
+            batteryLevel >= 15 -> ICON_BAT_25
+            else -> ICON_BAT_0
+        }
     }
 
     val iconStyle = TextStyle(
@@ -132,7 +161,7 @@ fun StatusBar(
     )
 
     val textStyle = TextStyle(
-        fontFamily = Nunito,
+        fontFamily = MPlus1Code,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         color = Color.Black

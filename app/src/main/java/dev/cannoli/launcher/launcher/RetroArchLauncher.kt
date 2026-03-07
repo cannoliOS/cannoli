@@ -10,10 +10,6 @@ class RetroArchLauncher(
     private val retroArchPackage: String
 ) {
     fun launch(romFile: File, coreName: String): LaunchResult {
-        if (!isCoreInstalled(coreName)) {
-            return LaunchResult.CoreNotInstalled(coreName)
-        }
-
         if (!isPackageInstalled(retroArchPackage)) {
             return LaunchResult.AppNotInstalled(retroArchPackage)
         }
@@ -21,7 +17,7 @@ class RetroArchLauncher(
         val intent = Intent().apply {
             component = ComponentName(
                 retroArchPackage,
-                "$retroArchPackage.browser.retroactivity.RetroActivityFuture"
+                "com.retroarch.browser.retroactivity.RetroActivityFuture"
             )
             putExtra("LIBRETRO", "/data/data/$retroArchPackage/cores/${coreName}_android.so")
             putExtra("ROM", romFile.absolutePath)
@@ -35,11 +31,6 @@ class RetroArchLauncher(
         } catch (e: Exception) {
             LaunchResult.Error(e.message ?: "Failed to launch RetroArch")
         }
-    }
-
-    private fun isCoreInstalled(coreName: String): Boolean {
-        val coreFile = File("/data/data/$retroArchPackage/cores/${coreName}_android.so")
-        return coreFile.exists()
     }
 
     private fun isPackageInstalled(packageName: String): Boolean {

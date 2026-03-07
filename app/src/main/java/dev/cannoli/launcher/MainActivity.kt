@@ -37,6 +37,7 @@ import dev.cannoli.launcher.settings.SettingsRepository
 import dev.cannoli.launcher.settings.TimeFormat
 import dev.cannoli.launcher.ui.screens.DialogState
 import dev.cannoli.launcher.ui.theme.CannoliTheme
+import dev.cannoli.launcher.ui.theme.initFonts
 import dev.cannoli.launcher.ui.viewmodel.GameListViewModel
 import dev.cannoli.launcher.ui.viewmodel.SettingsViewModel
 import dev.cannoli.launcher.ui.viewmodel.SystemListViewModel
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         settings = SettingsRepository(this)
+        initFonts(assets)
 
         if (hasStoragePermission()) {
             initializeApp()
@@ -153,8 +155,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun wireInput() {
+        fun dialogOpen() = dialogState.value != DialogState.None
+
         inputHandler.onUp = {
-            when (currentScreen()) {
+            if (!dialogOpen()) when (currentScreen()) {
                 Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(-1)
                 Screen.GAME_LIST -> gameListViewModel.moveSelection(-1)
                 Screen.SETTINGS -> settingsViewModel.moveSelection(-1)
@@ -162,7 +166,7 @@ class MainActivity : ComponentActivity() {
         }
 
         inputHandler.onDown = {
-            when (currentScreen()) {
+            if (!dialogOpen()) when (currentScreen()) {
                 Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(1)
                 Screen.GAME_LIST -> gameListViewModel.moveSelection(1)
                 Screen.SETTINGS -> settingsViewModel.moveSelection(1)
@@ -170,7 +174,7 @@ class MainActivity : ComponentActivity() {
         }
 
         inputHandler.onLeft = {
-            when (currentScreen()) {
+            if (!dialogOpen()) when (currentScreen()) {
                 Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(-pageJumpSize)
                 Screen.GAME_LIST -> gameListViewModel.moveSelection(-pageJumpSize)
                 Screen.SETTINGS -> settingsViewModel.moveSelection(-pageJumpSize)
@@ -178,7 +182,7 @@ class MainActivity : ComponentActivity() {
         }
 
         inputHandler.onRight = {
-            when (currentScreen()) {
+            if (!dialogOpen()) when (currentScreen()) {
                 Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(pageJumpSize)
                 Screen.GAME_LIST -> gameListViewModel.moveSelection(pageJumpSize)
                 Screen.SETTINGS -> settingsViewModel.moveSelection(pageJumpSize)
@@ -186,17 +190,15 @@ class MainActivity : ComponentActivity() {
         }
 
         inputHandler.onConfirm = {
-            if (dialogState.value == DialogState.None) {
-                when (currentScreen()) {
-                    Screen.SYSTEM_LIST -> onSystemListConfirm()
-                    Screen.GAME_LIST -> onGameListConfirm()
-                    Screen.SETTINGS -> settingsViewModel.toggleSelected()
-                }
+            if (!dialogOpen()) when (currentScreen()) {
+                Screen.SYSTEM_LIST -> onSystemListConfirm()
+                Screen.GAME_LIST -> onGameListConfirm()
+                Screen.SETTINGS -> settingsViewModel.toggleSelected()
             }
         }
 
         inputHandler.onBack = {
-            if (dialogState.value != DialogState.None) {
+            if (dialogOpen()) {
                 dialogState.value = DialogState.None
             } else {
                 when (currentScreen()) {
@@ -212,7 +214,7 @@ class MainActivity : ComponentActivity() {
         }
 
         inputHandler.onStart = {
-            if (currentScreen() == Screen.SYSTEM_LIST) {
+            if (!dialogOpen() && currentScreen() == Screen.SYSTEM_LIST) {
                 settingsViewModel.load()
                 navController?.navigate(Routes.SETTINGS)
             }
@@ -223,13 +225,13 @@ class MainActivity : ComponentActivity() {
         }
 
         inputHandler.onL1 = {
-            if (currentScreen() == Screen.GAME_LIST) {
+            if (!dialogOpen() && currentScreen() == Screen.GAME_LIST) {
                 switchPlatform(-1)
             }
         }
 
         inputHandler.onR1 = {
-            if (currentScreen() == Screen.GAME_LIST) {
+            if (!dialogOpen() && currentScreen() == Screen.GAME_LIST) {
                 switchPlatform(1)
             }
         }

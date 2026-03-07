@@ -18,7 +18,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.cannoli.launcher.ui.theme.Nunito
+import dev.cannoli.launcher.ui.theme.MPlus1Code
 
 private val outerPillColor = Color.White.copy(alpha = 0.15f)
 private val innerPillColor = Color.White.copy(alpha = 0.30f)
@@ -44,7 +44,7 @@ fun LegendPill(button: String, label: String) {
             Text(
                 text = button,
                 style = TextStyle(
-                    fontFamily = Nunito,
+                    fontFamily = MPlus1Code,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = Color.White

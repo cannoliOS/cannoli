@@ -1,5 +1,7 @@
 package dev.cannoli.launcher.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,7 +42,11 @@ fun AppNavGraph(
 
     NavHost(
         navController = navController,
-        startDestination = Routes.SYSTEM_LIST
+        startDestination = Routes.SYSTEM_LIST,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
     ) {
         composable(Routes.SYSTEM_LIST) {
             SystemListScreen(

@@ -28,12 +28,6 @@ fun MissingCoreDialog(coreName: String) {
             color = GrayText,
             modifier = Modifier.padding(top = 4.dp)
         )
-        Text(
-            text = "B to dismiss",
-            style = MaterialTheme.typography.labelSmall,
-            color = GrayText,
-            modifier = Modifier.padding(top = 12.dp)
-        )
     }
 }
 
@@ -45,12 +39,6 @@ fun MissingAppDialog(packageName: String) {
             style = MaterialTheme.typography.bodyLarge,
             color = Color.White
         )
-        Text(
-            text = "B to dismiss",
-            style = MaterialTheme.typography.labelSmall,
-            color = GrayText,
-            modifier = Modifier.padding(top = 12.dp)
-        )
     }
 }
 
@@ -59,11 +47,22 @@ private fun DialogOverlay(content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f)),
-        contentAlignment = Alignment.Center
+            .background(Color.Black.copy(alpha = 0.85f))
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(24.dp)
+        ) {
             content()
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 20.dp)
+        ) {
+            LegendPill(button = "B", label = "CLOSE")
         }
     }
 }
