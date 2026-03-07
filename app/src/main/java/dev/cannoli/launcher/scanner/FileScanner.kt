@@ -45,22 +45,33 @@ class FileScanner(
 
         return files
             .filter { it.name != ".emu_launch" }
+            .filter { file ->
+                if (file.isDirectory) {
+                    val hasM3u = File(file, "${file.name}.m3u").exists()
+                    hasM3u || (file.listFiles()?.any { it.name != ".emu_launch" } == true)
+                } else true
+            }
             .map { file ->
+                val m3uFile = if (file.isDirectory) {
+                    File(file, "${file.name}.m3u").takeIf { it.exists() }
+                } else null
+                val isGameDir = m3uFile != null
+                val launchFile = m3uFile ?: file
                 val displayName = if (file.isDirectory) file.name else file.nameWithoutExtension
                 val artFile = findArt(tag, displayName)
 
                 val target = when {
-                    file.isDirectory -> LaunchTarget.RetroArch // placeholder, subfolder
+                    file.isDirectory && !isGameDir -> LaunchTarget.RetroArch
                     emuLaunch != null -> emuLaunch
                     coreName != null -> LaunchTarget.RetroArch
-                    else -> LaunchTarget.RetroArch // will show warning
+                    else -> LaunchTarget.RetroArch
                 }
 
                 Game(
-                    file = file,
+                    file = if (isGameDir) launchFile else file,
                     displayName = displayName,
                     platformTag = tag,
-                    isSubfolder = file.isDirectory,
+                    isSubfolder = file.isDirectory && !isGameDir,
                     artFile = artFile,
                     launchTarget = target
                 )
@@ -80,7 +91,6 @@ class FileScanner(
                 .map { File(it) }
                 .filter { it.exists() }
 
-            // Clean stale entries
             if (entries.size < file.readLines().count { it.trim().isNotEmpty() }) {
                 file.writeText(entries.joinToString("\n") { it.absolutePath } + "\n")
             }
@@ -92,6 +102,65 @@ class FileScanner(
             )
         }.filter { it.entries.isNotEmpty() }
             .sortedNatural { it.name }
+    }
+
+    fun scanCollectionGames(collectionName: String): List<Game> {
+        val collFile = File(collectionsDir, "$collectionName.txt")
+        if (!collFile.exists()) return emptyList()
+
+        return collFile.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { File(it) }
+            .filter { it.exists() && it.isFile }
+            .map { file ->
+                val tag = file.parentFile?.name ?: ""
+                val displayName = file.nameWithoutExtension
+                val artFile = findArt(tag, displayName)
+                val emuLaunch = platformResolver.getEmuLaunch(tag, romsDir)
+                val coreName = platformResolver.getCoreName(tag)
+
+                val target = when {
+                    emuLaunch != null -> emuLaunch
+                    coreName != null -> LaunchTarget.RetroArch
+                    else -> LaunchTarget.RetroArch
+                }
+
+                Game(
+                    file = file,
+                    displayName = displayName,
+                    platformTag = tag,
+                    artFile = artFile,
+                    launchTarget = target
+                )
+            }
+            .sortedNatural { it.displayName }
+    }
+
+    fun addToCollection(collectionName: String, romPath: String) {
+        collectionsDir.mkdirs()
+        val collFile = File(collectionsDir, "$collectionName.txt")
+        val existing = if (collFile.exists()) collFile.readLines().map { it.trim() } else emptyList()
+        if (romPath !in existing) {
+            collFile.appendText("$romPath\n")
+        }
+    }
+
+    fun createCollection(name: String) {
+        collectionsDir.mkdirs()
+        File(collectionsDir, "$name.txt").createNewFile()
+    }
+
+    fun getCollectionNames(): List<String> {
+        if (!collectionsDir.exists()) return emptyList()
+        return collectionsDir.listFiles { f -> f.extension == "txt" }
+            ?.map { it.nameWithoutExtension }
+            ?.sorted()
+            ?: emptyList()
+    }
+
+    fun deleteGame(game: Game) {
+        game.file.delete()
     }
 
     fun scanApkLaunches(dir: File): List<LaunchTarget.ApkLaunch> {
@@ -123,6 +192,7 @@ class FileScanner(
             File(cannoliRoot, "Recordings"),
             File(cannoliRoot, "Config"),
             File(cannoliRoot, "Backup"),
+            File(cannoliRoot, "Wallpapers"),
             toolsDir, portsDir
         ).forEach { it.mkdirs() }
     }
