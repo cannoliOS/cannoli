@@ -3,6 +3,7 @@ package dev.cannoli.scorza.launcher
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import java.io.File
 
 class RetroArchLauncher(
@@ -10,7 +11,7 @@ class RetroArchLauncher(
     private val retroArchPackage: String
 ) {
     fun launch(romFile: File, coreName: String): LaunchResult {
-        if (!isPackageInstalled(retroArchPackage)) {
+        if (!context.isPackageInstalled(retroArchPackage)) {
             return LaunchResult.AppNotInstalled(retroArchPackage)
         }
 
@@ -32,13 +33,14 @@ class RetroArchLauncher(
             LaunchResult.Error(e.message ?: "Failed to launch RetroArch")
         }
     }
+}
 
-    private fun isPackageInstalled(packageName: String): Boolean {
-        return try {
-            context.packageManager.getPackageInfo(packageName, 0)
-            true
-        } catch (e: Exception) {
-            false
-        }
+/** Checks whether a package is installed on the device. */
+fun Context.isPackageInstalled(packageName: String): Boolean {
+    return try {
+        packageManager.getPackageInfo(packageName, 0)
+        true
+    } catch (_: PackageManager.NameNotFoundException) {
+        false
     }
 }

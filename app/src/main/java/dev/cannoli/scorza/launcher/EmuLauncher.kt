@@ -10,7 +10,7 @@ import java.io.File
 class EmuLauncher(private val context: Context) {
 
     fun launch(romFile: File, packageName: String, activityName: String, action: String): LaunchResult {
-        if (!isPackageInstalled(packageName)) {
+        if (!context.isPackageInstalled(packageName)) {
             return LaunchResult.AppNotInstalled(packageName)
         }
 
@@ -23,8 +23,7 @@ class EmuLauncher(private val context: Context) {
         val intent = Intent(action).apply {
             setDataAndType(uri, "*/*")
             component = ComponentName(packageName, activityName)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
         return try {
@@ -32,15 +31,6 @@ class EmuLauncher(private val context: Context) {
             LaunchResult.Success
         } catch (e: Exception) {
             LaunchResult.Error(e.message ?: "Failed to launch emulator")
-        }
-    }
-
-    private fun isPackageInstalled(packageName: String): Boolean {
-        return try {
-            context.packageManager.getPackageInfo(packageName, 0)
-            true
-        } catch (e: Exception) {
-            false
         }
     }
 }

@@ -1,15 +1,15 @@
 package dev.cannoli.scorza.model
 
-sealed class LaunchTarget {
-    object RetroArch : LaunchTarget()
+sealed interface LaunchTarget {
+    data object RetroArch : LaunchTarget
 
     data class EmuLaunch(
         val packageName: String,
         val activityName: String,
         val action: String = "android.intent.action.VIEW"
-    ) : LaunchTarget()
+    ) : LaunchTarget
 
     data class ApkLaunch(
         val packageName: String
-    ) : LaunchTarget()
+    ) : LaunchTarget
 }
