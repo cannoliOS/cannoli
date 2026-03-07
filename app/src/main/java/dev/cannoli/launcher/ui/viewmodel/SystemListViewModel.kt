@@ -40,10 +40,8 @@ class SystemListViewModel(
 
             val items = mutableListOf<ListItem>()
 
-            // Platforms
             platforms.forEach { items.add(ListItem.PlatformItem(it)) }
 
-            // Collections
             if (collections.isNotEmpty()) {
                 items.add(ListItem.Divider())
                 collections.forEach { (name, count) ->
@@ -51,7 +49,6 @@ class SystemListViewModel(
                 }
             }
 
-            // Tools
             if (tools.isNotEmpty()) {
                 items.add(ListItem.Divider("Tools"))
                 tools.forEach { (name, launch) ->
@@ -59,7 +56,6 @@ class SystemListViewModel(
                 }
             }
 
-            // Ports
             if (ports.isNotEmpty()) {
                 items.add(ListItem.Divider("Ports"))
                 ports.forEach { (name, launch) ->
@@ -67,10 +63,17 @@ class SystemListViewModel(
                 }
             }
 
+            val prevIndex = _state.value.selectedIndex
+            val selectableIndices = items.indices.filter { items[it] !is ListItem.Divider }
+            val safeIndex = when {
+                selectableIndices.isEmpty() -> 0
+                prevIndex in selectableIndices -> prevIndex
+                else -> selectableIndices.firstOrNull { it >= prevIndex } ?: selectableIndices.last()
+            }
             _state.value = State(
                 items = items,
                 platforms = platforms,
-                selectedIndex = 0,
+                selectedIndex = safeIndex,
                 isLoading = false
             )
         }

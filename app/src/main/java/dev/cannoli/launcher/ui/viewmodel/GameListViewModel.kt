@@ -21,7 +21,9 @@ class GameListViewModel(
         val games: List<Game> = emptyList(),
         val selectedIndex: Int = 0,
         val subfolderPath: String? = null,
-        val isLoading: Boolean = true
+        val isLoading: Boolean = true,
+        val isCollection: Boolean = false,
+        val collectionName: String? = null
     )
 
     private val _state = MutableStateFlow(State())
@@ -33,6 +35,30 @@ class GameListViewModel(
         breadcrumbStack.clear()
         _state.value = State(platformTag = tag)
         loadGames(tag, null)
+    }
+
+    fun loadCollection(collectionName: String) {
+        breadcrumbStack.clear()
+        viewModelScope.launch(Dispatchers.IO) {
+            val games = scanner.scanCollectionGames(collectionName)
+            _state.value = State(
+                breadcrumb = collectionName.uppercase(),
+                games = games,
+                selectedIndex = 0,
+                isLoading = false,
+                isCollection = true,
+                collectionName = collectionName
+            )
+        }
+    }
+
+    fun reload() {
+        val current = _state.value
+        if (current.isCollection && current.collectionName != null) {
+            loadCollection(current.collectionName)
+        } else if (current.platformTag.isNotEmpty()) {
+            loadGames(current.platformTag, current.subfolderPath)
+        }
     }
 
     fun enterSubfolder(folderName: String) {

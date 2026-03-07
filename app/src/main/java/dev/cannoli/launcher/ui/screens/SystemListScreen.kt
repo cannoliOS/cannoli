@@ -17,11 +17,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.cannoli.launcher.ui.components.BottomBar
-import dev.cannoli.launcher.ui.components.StatusBar
+import dev.cannoli.launcher.ui.components.ScreenBackground
 import dev.cannoli.launcher.ui.viewmodel.SystemListViewModel
 import dev.cannoli.launcher.ui.viewmodel.SystemListViewModel.ListItem
 
@@ -31,8 +35,10 @@ private val pillInternalH = 14.dp
 @Composable
 fun SystemListScreen(
     viewModel: SystemListViewModel,
-    showBatteryPercentage: Boolean = false,
-    use24hTime: Boolean = false,
+    backgroundImagePath: String? = null,
+    listFontSize: TextUnit = 22.sp,
+    listLineHeight: TextUnit = 32.sp,
+    listVerticalPadding: Dp = 8.dp,
     onPlatformSelected: (String) -> Unit,
     onCollectionSelected: (String) -> Unit,
     onToolSelected: (String) -> Unit,
@@ -48,19 +54,12 @@ fun SystemListScreen(
         }
     }
 
+    ScreenBackground(backgroundImagePath = backgroundImagePath) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .padding(screenPadding)
     ) {
-        Box(modifier = Modifier.align(Alignment.TopEnd)) {
-            StatusBar(
-                showBatteryPercentage = showBatteryPercentage,
-                use24hTime = use24hTime
-            )
-        }
-
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -71,19 +70,31 @@ fun SystemListScreen(
                 when (item) {
                     is ListItem.PlatformItem -> MenuRow(
                         label = item.platform.displayName,
-                        isSelected = state.selectedIndex == index
+                        isSelected = state.selectedIndex == index,
+                        fontSize = listFontSize,
+                        lineHeight = listLineHeight,
+                        verticalPadding = listVerticalPadding
                     )
                     is ListItem.CollectionItem -> MenuRow(
                         label = item.name,
-                        isSelected = state.selectedIndex == index
+                        isSelected = state.selectedIndex == index,
+                        fontSize = listFontSize,
+                        lineHeight = listLineHeight,
+                        verticalPadding = listVerticalPadding
                     )
                     is ListItem.ToolItem -> MenuRow(
                         label = item.name,
-                        isSelected = state.selectedIndex == index
+                        isSelected = state.selectedIndex == index,
+                        fontSize = listFontSize,
+                        lineHeight = listLineHeight,
+                        verticalPadding = listVerticalPadding
                     )
                     is ListItem.PortItem -> MenuRow(
                         label = item.name,
-                        isSelected = state.selectedIndex == index
+                        isSelected = state.selectedIndex == index,
+                        fontSize = listFontSize,
+                        lineHeight = listLineHeight,
+                        verticalPadding = listVerticalPadding
                     )
                     is ListItem.Divider -> {}
                 }
@@ -92,42 +103,49 @@ fun SystemListScreen(
 
         BottomBar(
             modifier = Modifier.align(Alignment.BottomCenter),
-            leftItems = listOf("POWER" to "SLEEP"),
-            rightItems = listOf("A" to "OPEN")
+            leftItems = listOf("\uDB81\uDC25" to stringResource(dev.cannoli.launcher.R.string.label_sleep)),
+            rightItems = listOf("A" to stringResource(dev.cannoli.launcher.R.string.label_select))
         )
+    }
     }
 }
 
 @Composable
 private fun MenuRow(
     label: String,
-    isSelected: Boolean
+    isSelected: Boolean,
+    fontSize: TextUnit,
+    lineHeight: TextUnit,
+    verticalPadding: Dp
 ) {
+    val textStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontSize = fontSize,
+        lineHeight = lineHeight
+    )
+
     if (isSelected) {
-        // Pill wraps text, text inside aligns with unselected text
         Box(
             modifier = Modifier
                 .padding(vertical = 2.dp)
                 .clip(RoundedCornerShape(50))
                 .background(Color.White)
-                .padding(horizontal = pillInternalH, vertical = 8.dp)
+                .padding(horizontal = pillInternalH, vertical = verticalPadding)
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyLarge,
+                style = textStyle,
                 color = Color.Black
             )
         }
     } else {
-        // Unselected text aligns with text inside the pill
         Box(
             modifier = Modifier
                 .padding(vertical = 2.dp)
-                .padding(start = pillInternalH, top = 8.dp, bottom = 8.dp)
+                .padding(start = pillInternalH, top = verticalPadding, bottom = verticalPadding)
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyLarge,
+                style = textStyle,
                 color = Color.White
             )
         }

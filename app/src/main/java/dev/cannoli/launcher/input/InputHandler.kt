@@ -3,7 +3,10 @@ package dev.cannoli.launcher.input
 import android.view.KeyEvent
 import dev.cannoli.launcher.settings.ButtonLayout
 
-class InputHandler(private val getButtonLayout: () -> ButtonLayout) {
+class InputHandler(
+    private val getButtonLayout: () -> ButtonLayout,
+    private val getSwapStartSelect: () -> Boolean = { false }
+) {
 
     var onUp: () -> Unit = {}
     var onDown: () -> Unit = {}
@@ -37,17 +40,18 @@ class InputHandler(private val getButtonLayout: () -> ButtonLayout) {
                 true
             }
 
-            KeyEvent.KEYCODE_BUTTON_SELECT,
-            KeyEvent.KEYCODE_BACK -> {
-                if (event.keyCode == KeyEvent.KEYCODE_BACK) {
-                    onBack()
-                } else {
-                    onSelect()
-                }
+            KeyEvent.KEYCODE_BUTTON_SELECT -> {
+                if (getSwapStartSelect()) onStart() else onSelect()
                 true
             }
 
-            KeyEvent.KEYCODE_BUTTON_START -> { onStart(); true }
+            KeyEvent.KEYCODE_BACK -> { onBack(); true }
+
+            KeyEvent.KEYCODE_BUTTON_START,
+            KeyEvent.KEYCODE_MENU -> {
+                if (getSwapStartSelect()) onSelect() else onStart()
+                true
+            }
             KeyEvent.KEYCODE_BUTTON_L1 -> { onL1(); true }
             KeyEvent.KEYCODE_BUTTON_R1 -> { onR1(); true }
 

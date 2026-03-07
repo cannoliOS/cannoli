@@ -41,7 +41,6 @@ import java.util.Locale
 import java.util.Timer
 import java.util.TimerTask
 
-// Nerd Font codepoints
 private const val ICON_BLUETOOTH = "\uDB80\uDCAF"   // 󰂯 nf-md-bluetooth
 private const val ICON_WIFI = "\uDB81\uDDA9"         // 󰖩 nf-md-wifi
 private const val ICON_BAT_0 = "\uDB80\uDC7A"        // 󰁺 nf-md-battery_10
@@ -66,17 +65,13 @@ fun StatusBar(
     var isCharging by remember { mutableStateOf(false) }
     var hasWifi by remember { mutableStateOf(false) }
     var hasBluetooth by remember { mutableStateOf(false) }
-    var timeText by remember { mutableStateOf("") }
-
-    fun updateTime() {
-        timeText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-    }
+    var rawTime by remember { mutableStateOf(Date()) }
 
     DisposableEffect(Unit) {
-        updateTime()
+        rawTime = Date()
         val timer = Timer()
         timer.scheduleAtFixedRate(object : TimerTask() {
-            override fun run() { updateTime() }
+            override fun run() { rawTime = Date() }
         }, 1000, 15000)
 
         val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
@@ -133,6 +128,12 @@ fun StatusBar(
             try { context.unregisterReceiver(btReceiver) } catch (_: Exception) {}
             try { networkCallback?.let { cm?.unregisterNetworkCallback(it) } } catch (_: Exception) {}
         }
+    }
+
+    val timeText = if (use24hTime) {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(rawTime)
+    } else {
+        SimpleDateFormat("h:mm a", Locale.getDefault()).format(rawTime)
     }
 
     val batteryIcon = if (isCharging) {

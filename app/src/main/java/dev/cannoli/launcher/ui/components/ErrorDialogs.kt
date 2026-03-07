@@ -11,22 +11,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.cannoli.launcher.R
 import dev.cannoli.launcher.ui.theme.GrayText
 
 @Composable
 fun MissingCoreDialog(coreName: String) {
     DialogOverlay {
         Text(
-            text = "Core not installed: $coreName",
+            text = stringResource(R.string.dialog_missing_core, coreName),
             style = MaterialTheme.typography.bodyLarge,
             color = Color.White
-        )
-        Text(
-            text = "Install it via RetroArch > Online Updater.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = GrayText,
-            modifier = Modifier.padding(top = 4.dp)
         )
     }
 }
@@ -35,7 +31,7 @@ fun MissingCoreDialog(coreName: String) {
 fun MissingAppDialog(packageName: String) {
     DialogOverlay {
         Text(
-            text = "App not installed: $packageName",
+            text = stringResource(R.string.dialog_missing_app, packageName),
             style = MaterialTheme.typography.bodyLarge,
             color = Color.White
         )
@@ -62,7 +58,7 @@ private fun DialogOverlay(content: @Composable () -> Unit) {
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 20.dp)
         ) {
-            LegendPill(button = "B", label = "CLOSE")
+            LegendPill(button = "B", label = stringResource(R.string.label_close))
         }
     }
 }

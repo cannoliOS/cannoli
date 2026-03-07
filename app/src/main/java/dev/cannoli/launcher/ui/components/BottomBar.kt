@@ -33,7 +33,6 @@ fun LegendPill(button: String, label: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Inner pill with button name
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
@@ -52,7 +51,6 @@ fun LegendPill(button: String, label: String) {
             )
         }
 
-        // Action label
         Text(
             text = label,
             style = TextStyle(

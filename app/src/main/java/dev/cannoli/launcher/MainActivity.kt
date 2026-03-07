@@ -33,15 +33,19 @@ import dev.cannoli.launcher.navigation.AppNavGraph
 import dev.cannoli.launcher.navigation.Routes
 import dev.cannoli.launcher.scanner.FileScanner
 import dev.cannoli.launcher.scanner.PlatformResolver
+import dev.cannoli.launcher.settings.ScrollSpeed
 import dev.cannoli.launcher.settings.SettingsRepository
-import dev.cannoli.launcher.settings.TimeFormat
 import dev.cannoli.launcher.ui.screens.DialogState
 import dev.cannoli.launcher.ui.theme.CannoliTheme
 import dev.cannoli.launcher.ui.theme.initFonts
 import dev.cannoli.launcher.ui.viewmodel.GameListViewModel
 import dev.cannoli.launcher.ui.viewmodel.SettingsViewModel
 import dev.cannoli.launcher.ui.viewmodel.SystemListViewModel
+import dev.cannoli.launcher.util.AtomicRename
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -58,10 +62,12 @@ class MainActivity : ComponentActivity() {
     private lateinit var apkLauncher: ApkLauncher
 
     private lateinit var inputHandler: InputHandler
+    private lateinit var atomicRename: AtomicRename
     private var navController: NavHostController? = null
 
     private val dialogState = MutableStateFlow<DialogState>(DialogState.None)
     private val pageJumpSize = 10
+    private val ioScope = CoroutineScope(Dispatchers.IO)
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -104,7 +110,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        // Block all touch input
         return true
     }
 
@@ -125,13 +130,17 @@ class MainActivity : ComponentActivity() {
 
         systemListViewModel = SystemListViewModel(scanner)
         gameListViewModel = GameListViewModel(scanner, platformResolver)
-        settingsViewModel = SettingsViewModel(settings)
+        settingsViewModel = SettingsViewModel(settings, root)
+        atomicRename = AtomicRename(root)
 
         retroArchLauncher = RetroArchLauncher(this, settings.retroArchPackage)
         emuLauncher = EmuLauncher(this)
         apkLauncher = ApkLauncher(this)
 
-        inputHandler = InputHandler { settings.buttonLayout }
+        inputHandler = InputHandler(
+            getButtonLayout = { settings.buttonLayout },
+            getSwapStartSelect = { settings.swapStartSelect }
+        )
         wireInput()
 
         systemListViewModel.scan()
@@ -146,7 +155,6 @@ class MainActivity : ComponentActivity() {
                         systemListViewModel = systemListViewModel,
                         gameListViewModel = gameListViewModel,
                         settingsViewModel = settingsViewModel,
-                        settings = settings,
                         dialogState = dialogState
                     )
                 }
@@ -158,70 +166,172 @@ class MainActivity : ComponentActivity() {
         fun dialogOpen() = dialogState.value != DialogState.None
 
         inputHandler.onUp = {
-            if (!dialogOpen()) when (currentScreen()) {
-                Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(-1)
-                Screen.GAME_LIST -> gameListViewModel.moveSelection(-1)
-                Screen.SETTINGS -> settingsViewModel.moveSelection(-1)
+            when (val ds = dialogState.value) {
+                is DialogState.ContextMenu -> {
+                    val newIdx = if (ds.selectedOption <= 0) ds.options.lastIndex else ds.selectedOption - 1
+                    dialogState.value = ds.copy(selectedOption = newIdx)
+                }
+                is DialogState.CollectionPicker -> {
+                    val total = ds.collections.size + 1
+                    val newIdx = if (ds.selectedIndex <= 0) total - 1 else ds.selectedIndex - 1
+                    dialogState.value = ds.copy(selectedIndex = newIdx)
+                }
+                is DialogState.RenameInput -> {
+                    val chars = ds.currentName.toCharArray()
+                    if (ds.cursorPos < chars.size) {
+                        chars[ds.cursorPos] = nextChar(chars[ds.cursorPos], 1)
+                        dialogState.value = ds.copy(currentName = String(chars))
+                    }
+                }
+                DialogState.None -> when (currentScreen()) {
+                    Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(-1)
+                    Screen.GAME_LIST -> gameListViewModel.moveSelection(-1)
+                    Screen.SETTINGS -> settingsViewModel.moveSelection(-1)
+                }
+                else -> {}
             }
         }
 
         inputHandler.onDown = {
-            if (!dialogOpen()) when (currentScreen()) {
-                Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(1)
-                Screen.GAME_LIST -> gameListViewModel.moveSelection(1)
-                Screen.SETTINGS -> settingsViewModel.moveSelection(1)
+            when (val ds = dialogState.value) {
+                is DialogState.ContextMenu -> {
+                    val newIdx = if (ds.selectedOption >= ds.options.lastIndex) 0 else ds.selectedOption + 1
+                    dialogState.value = ds.copy(selectedOption = newIdx)
+                }
+                is DialogState.CollectionPicker -> {
+                    val total = ds.collections.size + 1
+                    val newIdx = if (ds.selectedIndex >= total - 1) 0 else ds.selectedIndex + 1
+                    dialogState.value = ds.copy(selectedIndex = newIdx)
+                }
+                is DialogState.RenameInput -> {
+                    val chars = ds.currentName.toCharArray()
+                    if (ds.cursorPos < chars.size) {
+                        chars[ds.cursorPos] = nextChar(chars[ds.cursorPos], -1)
+                        dialogState.value = ds.copy(currentName = String(chars))
+                    }
+                }
+                DialogState.None -> when (currentScreen()) {
+                    Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(1)
+                    Screen.GAME_LIST -> gameListViewModel.moveSelection(1)
+                    Screen.SETTINGS -> settingsViewModel.moveSelection(1)
+                }
+                else -> {}
             }
         }
 
         inputHandler.onLeft = {
-            if (!dialogOpen()) when (currentScreen()) {
-                Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(-pageJumpSize)
-                Screen.GAME_LIST -> gameListViewModel.moveSelection(-pageJumpSize)
-                Screen.SETTINGS -> settingsViewModel.moveSelection(-pageJumpSize)
+            when (val ds = dialogState.value) {
+                is DialogState.RenameInput -> {
+                    if (ds.cursorPos > 0) {
+                        dialogState.value = ds.copy(cursorPos = ds.cursorPos - 1)
+                    }
+                }
+                DialogState.None -> when (currentScreen()) {
+                    Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(-pageJumpSize)
+                    Screen.GAME_LIST -> gameListViewModel.moveSelection(-pageJumpSize)
+                    Screen.SETTINGS -> if (settingsViewModel.state.value.inSubList) settingsViewModel.cycleSelected(-1)
+                }
+                else -> {}
             }
         }
 
         inputHandler.onRight = {
-            if (!dialogOpen()) when (currentScreen()) {
-                Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(pageJumpSize)
-                Screen.GAME_LIST -> gameListViewModel.moveSelection(pageJumpSize)
-                Screen.SETTINGS -> settingsViewModel.moveSelection(pageJumpSize)
+            when (val ds = dialogState.value) {
+                is DialogState.RenameInput -> {
+                    if (ds.cursorPos < ds.currentName.length - 1) {
+                        dialogState.value = ds.copy(cursorPos = ds.cursorPos + 1)
+                    }
+                }
+                DialogState.None -> when (currentScreen()) {
+                    Screen.SYSTEM_LIST -> systemListViewModel.moveSelection(pageJumpSize)
+                    Screen.GAME_LIST -> gameListViewModel.moveSelection(pageJumpSize)
+                    Screen.SETTINGS -> if (settingsViewModel.state.value.inSubList) settingsViewModel.cycleSelected(1)
+                }
+                else -> {}
             }
         }
 
         inputHandler.onConfirm = {
-            if (!dialogOpen()) when (currentScreen()) {
-                Screen.SYSTEM_LIST -> onSystemListConfirm()
-                Screen.GAME_LIST -> onGameListConfirm()
-                Screen.SETTINGS -> settingsViewModel.toggleSelected()
+            when (val ds = dialogState.value) {
+                is DialogState.ContextMenu -> onContextMenuConfirm(ds)
+                is DialogState.DeleteConfirm -> onDeleteConfirm()
+                is DialogState.CollectionPicker -> onCollectionPickerConfirm(ds)
+                is DialogState.RenameInput -> onRenameConfirm(ds)
+                DialogState.None -> when (currentScreen()) {
+                    Screen.SYSTEM_LIST -> onSystemListConfirm()
+                    Screen.GAME_LIST -> onGameListConfirm()
+                    Screen.SETTINGS -> {
+                        if (!settingsViewModel.state.value.inSubList) {
+                            settingsViewModel.enterCategory()
+                        } else {
+                            val key = settingsViewModel.enterSelected()
+                            if (key != null) {
+                                val displayValue = settingsViewModel.getSelectedItemDisplayValue()
+                                dialogState.value = DialogState.RenameInput(
+                                    gameName = key,
+                                    currentName = displayValue,
+                                    cursorPos = (displayValue.length - 1).coerceAtLeast(0)
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> {}
             }
         }
 
         inputHandler.onBack = {
-            if (dialogOpen()) {
-                dialogState.value = DialogState.None
-            } else {
-                when (currentScreen()) {
+            when (dialogState.value) {
+                is DialogState.ContextMenu, is DialogState.DeleteConfirm,
+                is DialogState.CollectionPicker, is DialogState.RenameInput,
+                is DialogState.RenameResult, is DialogState.MissingCore,
+                is DialogState.MissingApp -> {
+                    dialogState.value = DialogState.None
+                }
+                DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> { /* root screen, nowhere to go */ }
                     Screen.GAME_LIST -> {
                         if (!gameListViewModel.exitSubfolder()) {
                             navController?.popBackStack()
                         }
                     }
-                    Screen.SETTINGS -> navController?.popBackStack()
+                    Screen.SETTINGS -> {
+                        if (!settingsViewModel.exitSubList()) {
+                            settingsViewModel.cancel()
+                            navController?.popBackStack()
+                        }
+                    }
                 }
             }
         }
 
         inputHandler.onStart = {
-            if (!dialogOpen() && currentScreen() == Screen.SYSTEM_LIST) {
-                settingsViewModel.load()
-                navController?.navigate(Routes.SETTINGS)
+            if (!dialogOpen()) {
+                when (currentScreen()) {
+                    Screen.SYSTEM_LIST -> {
+                        settingsViewModel.load()
+                        navController?.navigate(Routes.SETTINGS)
+                    }
+                    Screen.SETTINGS -> {
+                        if (settingsViewModel.state.value.inSubList) {
+                            settingsViewModel.exitSubList()
+                        } else {
+                            navController?.popBackStack()
+                            systemListViewModel.scan()
+                        }
+                    }
+                    else -> {}
+                }
             }
         }
 
         inputHandler.onSelect = {
-            // Context menu — TODO
+            if (!dialogOpen() && currentScreen() == Screen.GAME_LIST) {
+                val game = gameListViewModel.getSelectedGame()
+                if (game != null && !game.isSubfolder) {
+                    dialogState.value = DialogState.ContextMenu(gameName = game.displayName)
+                }
+            }
         }
 
         inputHandler.onL1 = {
@@ -244,7 +354,8 @@ class MainActivity : ComponentActivity() {
                 navController?.navigate(Routes.gameList(item.platform.tag))
             }
             is SystemListViewModel.ListItem.CollectionItem -> {
-                // TODO: open collection game list
+                gameListViewModel.loadCollection(item.name)
+                navController?.navigate(Routes.gameList("collection_${item.name}"))
             }
             is SystemListViewModel.ListItem.ToolItem -> {
                 val result = apkLauncher.launch(item.packageName)
@@ -301,6 +412,88 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
+        val game = gameListViewModel.getSelectedGame() ?: return
+        when (state.options[state.selectedOption]) {
+            "Rename" -> {
+                dialogState.value = DialogState.RenameInput(
+                    gameName = game.displayName,
+                    currentName = game.displayName,
+                    cursorPos = game.displayName.length - 1
+                )
+            }
+            "Delete" -> {
+                dialogState.value = DialogState.DeleteConfirm(gameName = game.displayName)
+            }
+            "Add to Collection" -> {
+                val collections = scanner.getCollectionNames()
+                dialogState.value = DialogState.CollectionPicker(
+                    gamePath = game.file.absolutePath,
+                    collections = collections,
+                    selectedIndex = 0
+                )
+            }
+        }
+    }
+
+    private fun onDeleteConfirm() {
+        val game = gameListViewModel.getSelectedGame() ?: return
+        ioScope.launch {
+            scanner.deleteGame(game)
+            gameListViewModel.reload()
+        }
+        dialogState.value = DialogState.None
+    }
+
+    private fun onCollectionPickerConfirm(state: DialogState.CollectionPicker) {
+        val totalOptions = state.collections.size + 1 // +1 for "New Collection"
+        if (state.selectedIndex < state.collections.size) {
+            val collName = state.collections[state.selectedIndex]
+            ioScope.launch {
+                scanner.addToCollection(collName, state.gamePath)
+            }
+            dialogState.value = DialogState.None
+        } else {
+            ioScope.launch {
+                val existing = scanner.getCollectionNames()
+                var name = "Favorites"
+                var i = 2
+                while (name in existing) {
+                    name = "Favorites $i"
+                    i++
+                }
+                scanner.createCollection(name)
+                scanner.addToCollection(name, state.gamePath)
+            }
+            dialogState.value = DialogState.None
+        }
+    }
+
+    private fun onRenameConfirm(state: DialogState.RenameInput) {
+        val game = gameListViewModel.getSelectedGame() ?: return
+        val newName = state.currentName.trim()
+        if (newName.isEmpty() || newName == game.displayName) {
+            dialogState.value = DialogState.None
+            return
+        }
+
+        ioScope.launch {
+            val result = atomicRename.rename(game.file, newName, game.platformTag)
+            dialogState.value = DialogState.RenameResult(result.success, result.error ?: "")
+            if (result.success) {
+                gameListViewModel.reload()
+            }
+        }
+    }
+
+    private fun nextChar(c: Char, direction: Int): Char {
+        val min = ' '
+        val max = '~'
+        val range = max - min + 1
+        val offset = c - min + direction
+        return min + ((offset % range + range) % range)
+    }
+
     private fun switchPlatform(delta: Int) {
         val tags = systemListViewModel.getPlatformTags()
         if (tags.isEmpty()) return
@@ -319,7 +512,6 @@ class MainActivity : ComponentActivity() {
 
         val newTag = tags[newIndex]
         gameListViewModel.loadPlatform(newTag)
-        // Update nav back stack to reflect new tag
         navController?.let { nav ->
             nav.popBackStack()
             nav.navigate(Routes.gameList(newTag))

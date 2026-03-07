@@ -9,7 +9,6 @@ class SettingsRepository(context: Context) {
         context.getSharedPreferences("cannoli_settings", Context.MODE_PRIVATE)
 
     init {
-        // Migrate old default package name
         if (prefs.getString(KEY_RA_PACKAGE, null) == "com.retroarch") {
             prefs.edit().putString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE).apply()
         }
@@ -59,6 +58,10 @@ class SettingsRepository(context: Context) {
         get() = prefs.getString(KEY_BG_IMAGE, null)
         set(value) = prefs.edit().putString(KEY_BG_IMAGE, value).apply()
 
+    var swapStartSelect: Boolean
+        get() = prefs.getBoolean(KEY_SWAP_START_SELECT, false)
+        set(value) = prefs.edit().putBoolean(KEY_SWAP_START_SELECT, value).apply()
+
     companion object {
         const val DEFAULT_ROOT = "/sdcard/Cannoli/"
         const val DEFAULT_RA_PACKAGE = "com.retroarch.aarch64"
@@ -74,6 +77,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_TIME_FORMAT = "time_format"
         private const val KEY_BATTERY_PCT = "battery_percentage"
         private const val KEY_BG_IMAGE = "bg_image"
+        private const val KEY_SWAP_START_SELECT = "swap_start_select"
     }
 }
 
