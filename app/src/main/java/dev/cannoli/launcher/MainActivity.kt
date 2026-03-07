@@ -10,7 +10,6 @@ import android.os.Environment
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -89,7 +88,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         hideSystemUI()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         settings = SettingsRepository(this)
         initFonts(assets)
