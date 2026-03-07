@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.cannoli.launcher"
+    namespace = "dev.cannoli.scorza"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -12,7 +12,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.cannoli.launcher"
+        applicationId = "dev.cannoli.scorza"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

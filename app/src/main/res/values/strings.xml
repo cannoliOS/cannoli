@@ -14,6 +14,8 @@
     <string name="label_delete">DELETE</string>
     <string name="label_add">ADD</string>
     <string name="label_confirm">CONFIRM</string>
+    <string name="label_toggle">TOGGLE</string>
+    <string name="label_new">NEW</string>
 
     <string name="settings_title">Settings</string>
 
