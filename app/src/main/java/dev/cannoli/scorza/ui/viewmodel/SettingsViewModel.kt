@@ -216,7 +216,6 @@ class SettingsViewModel(
         return if (item.isEditable) {
             item.key
         } else {
-            cycleSelected(1)
             null
         }
     }
