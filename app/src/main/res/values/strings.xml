@@ -33,10 +33,14 @@
     <string name="setting_box_art">Box Art</string>
     <string name="setting_text_size">Text Size</string>
     <string name="setting_bg_image">Background Image</string>
+    <string name="setting_wifi">Wi-Fi</string>
+    <string name="setting_bluetooth">Bluetooth</string>
+    <string name="setting_clock">Clock</string>
+    <string name="setting_battery">Battery</string>
     <string name="setting_time_format">Time Format</string>
     <string name="setting_button_layout">Button Layout</string>
-    <string name="setting_swap_start_select">Swap Start/Select</string>
-    <string name="setting_platform_switching">Platform Switching</string>
+    <string name="setting_swap_start_select">Swap Start / Select</string>
+    <string name="setting_platform_switching">L1 / R1 Platform Switch</string>
     <string name="setting_scroll_speed">Scroll Speed</string>
     <string name="setting_show_tools">Tools</string>
     <string name="setting_show_ports">Ports</string>
@@ -54,6 +58,8 @@
     <!-- Setting values -->
     <string name="value_on">On</string>
     <string name="value_off">Off</string>
+    <string name="value_show">Show</string>
+    <string name="value_hide">Hide</string>
     <string name="value_none">None</string>
 
     <!-- Dialogs -->

@@ -62,6 +62,22 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_PLATFORM_SWITCHING, false)
         set(value) = prefs.edit().putBoolean(KEY_PLATFORM_SWITCHING, value).apply()
 
+    var showWifi: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_WIFI, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_WIFI, value).apply()
+
+    var showBluetooth: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_BLUETOOTH, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_BLUETOOTH, value).apply()
+
+    var showClock: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_CLOCK, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_CLOCK, value).apply()
+
+    var showBattery: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_BATTERY, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_BATTERY, value).apply()
+
     var showTools: Boolean
         get() = prefs.getBoolean(KEY_SHOW_TOOLS, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_TOOLS, value).apply()
@@ -121,6 +137,10 @@ class SettingsRepository(context: Context) {
         private const val KEY_COLOR_HIGHLIGHT_TEXT = "color_highlight_text"
         private const val KEY_COLOR_ACCENT = "color_accent"
         private const val KEY_PLATFORM_SWITCHING = "platform_switching"
+        private const val KEY_SHOW_WIFI = "show_wifi"
+        private const val KEY_SHOW_BLUETOOTH = "show_bluetooth"
+        private const val KEY_SHOW_CLOCK = "show_clock"
+        private const val KEY_SHOW_BATTERY = "show_battery"
         private const val KEY_SHOW_TOOLS = "show_tools"
         private const val KEY_SHOW_PORTS = "show_ports"
         private const val KEY_TOOLS_NAME = "tools_name"

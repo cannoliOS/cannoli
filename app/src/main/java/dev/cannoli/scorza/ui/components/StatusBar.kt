@@ -57,6 +57,10 @@ private const val ICON_WIFI = "\uDB81\uDDA9"         // 󰖩 nf-md-wifi
 @Composable
 fun StatusBar(
     use24hTime: Boolean = false,
+    showWifi: Boolean = true,
+    showBluetooth: Boolean = true,
+    showClock: Boolean = true,
+    showBattery: Boolean = true,
     lineHeight: TextUnit = 32.sp,
     verticalPadding: Dp = 4.dp
 ) {
@@ -164,20 +168,24 @@ fun StatusBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (hasBluetooth) {
+        if (showBluetooth && hasBluetooth) {
             Text(text = ICON_BLUETOOTH, style = iconStyle)
         }
 
-        if (hasWifi) {
+        if (showWifi && hasWifi) {
             Text(text = ICON_WIFI, style = iconStyle)
         }
 
-        BatteryGauge(
-            level = batteryLevel,
-            isCharging = isCharging,
-            textColor = colors.highlightText
-        )
-        Text(text = timeText, style = textStyle)
+        if (showBattery) {
+            BatteryGauge(
+                level = batteryLevel,
+                isCharging = isCharging,
+                textColor = colors.highlightText
+            )
+        }
+        if (showClock) {
+            Text(text = timeText, style = textStyle)
+        }
     }
 }
 

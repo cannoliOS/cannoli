@@ -53,6 +53,10 @@ class SettingsViewModel(
         val colorText: Color = Color.White,
         val colorHighlightText: Color = Color.Black,
         val colorAccent: Color = Color.White,
+        val showWifi: Boolean = true,
+        val showBluetooth: Boolean = true,
+        val showClock: Boolean = true,
+        val showBattery: Boolean = true,
         val showTools: Boolean = false,
         val showPorts: Boolean = false
     )
@@ -74,6 +78,10 @@ class SettingsViewModel(
         colorText = hexToColor(settings.colorText) ?: Color.White,
         colorHighlightText = hexToColor(settings.colorHighlightText) ?: Color.Black,
         colorAccent = hexToColor(settings.colorAccent) ?: Color.White,
+        showWifi = settings.showWifi,
+        showBluetooth = settings.showBluetooth,
+        showClock = settings.showClock,
+        showBattery = settings.showBattery,
         showTools = settings.showTools,
         showPorts = settings.showPorts
     )
@@ -164,8 +172,17 @@ class SettingsViewModel(
                 val cur = entries.indexOf(settings.scrollSpeed)
                 settings.scrollSpeed = entries[((cur + direction) % entries.size + entries.size) % entries.size]
             }
-            "time_format" -> {
-                settings.timeFormat = if (settings.timeFormat == TimeFormat.TWELVE_HOUR) TimeFormat.TWENTY_FOUR_HOUR else TimeFormat.TWELVE_HOUR
+            "show_clock" -> {
+                if (!settings.showClock) {
+                    settings.showClock = true
+                    settings.timeFormat = if (direction > 0) TimeFormat.TWELVE_HOUR else TimeFormat.TWENTY_FOUR_HOUR
+                } else if (settings.timeFormat == TimeFormat.TWELVE_HOUR && direction > 0) {
+                    settings.timeFormat = TimeFormat.TWENTY_FOUR_HOUR
+                } else if (settings.timeFormat == TimeFormat.TWENTY_FOUR_HOUR && direction < 0) {
+                    settings.timeFormat = TimeFormat.TWELVE_HOUR
+                } else {
+                    settings.showClock = false
+                }
             }
             "bg_image" -> cycleBackgroundImage(direction)
             "bg_tint" -> {
@@ -179,6 +196,9 @@ class SettingsViewModel(
             }
             "swap_start_select" -> settings.swapStartSelect = !settings.swapStartSelect
             "platform_switching" -> settings.platformSwitching = !settings.platformSwitching
+            "show_wifi" -> settings.showWifi = !settings.showWifi
+            "show_bluetooth" -> settings.showBluetooth = !settings.showBluetooth
+            "show_battery" -> settings.showBattery = !settings.showBattery
             "show_tools" -> settings.showTools = !settings.showTools
             "show_ports" -> settings.showPorts = !settings.showPorts
         }
@@ -275,6 +295,10 @@ class SettingsViewModel(
         "color_accent" to settings.colorAccent,
         "swap_start_select" to settings.swapStartSelect,
         "platform_switching" to settings.platformSwitching,
+        "show_wifi" to settings.showWifi,
+        "show_bluetooth" to settings.showBluetooth,
+        "show_clock" to settings.showClock,
+        "show_battery" to settings.showBattery,
         "show_tools" to settings.showTools,
         "show_ports" to settings.showPorts,
         "sd_root" to settings.sdCardRoot,
@@ -295,6 +319,10 @@ class SettingsViewModel(
         (snap["color_accent"] as? String)?.let { settings.colorAccent = it }
         (snap["swap_start_select"] as? Boolean)?.let { settings.swapStartSelect = it }
         (snap["platform_switching"] as? Boolean)?.let { settings.platformSwitching = it }
+        (snap["show_wifi"] as? Boolean)?.let { settings.showWifi = it }
+        (snap["show_bluetooth"] as? Boolean)?.let { settings.showBluetooth = it }
+        (snap["show_clock"] as? Boolean)?.let { settings.showClock = it }
+        (snap["show_battery"] as? Boolean)?.let { settings.showBattery = it }
         (snap["show_tools"] as? Boolean)?.let { settings.showTools = it }
         (snap["show_ports"] as? Boolean)?.let { settings.showPorts = it }
         (snap["sd_root"] as? String)?.let { settings.sdCardRoot = it }
@@ -302,6 +330,7 @@ class SettingsViewModel(
     }
 
     private fun onOff(value: Boolean) = if (value) R.string.value_on else R.string.value_off
+    private fun showHide(value: Boolean) = if (value) R.string.value_show else R.string.value_hide
 
     private fun buildItemsForCategory(categoryKey: String): List<SettingsItem> = when (categoryKey) {
         "appearance" -> buildList {
@@ -319,17 +348,20 @@ class SettingsViewModel(
             add(SettingsItem("text_size", R.string.setting_text_size, valueText = settings.textSize.name.lowercase().replaceFirstChar { it.uppercase() }))
             add(SettingsItem("box_art", R.string.setting_box_art, valueRes = onOff(settings.boxArtEnabled)))
             add(SettingsItem("scroll_speed", R.string.setting_scroll_speed, valueText = settings.scrollSpeed.name.lowercase().replaceFirstChar { it.uppercase() }))
-            add(SettingsItem("show_tools", R.string.setting_show_tools, valueRes = onOff(settings.showTools)))
+            add(SettingsItem("show_tools", R.string.setting_show_tools, valueRes = showHide(settings.showTools)))
             if (settings.showTools) {
                 add(SettingsItem("manage_tools", R.string.setting_manage_tools, isEditable = true))
             }
-            add(SettingsItem("show_ports", R.string.setting_show_ports, valueRes = onOff(settings.showPorts)))
+            add(SettingsItem("show_ports", R.string.setting_show_ports, valueRes = showHide(settings.showPorts)))
             if (settings.showPorts) {
                 add(SettingsItem("manage_ports", R.string.setting_manage_ports, isEditable = true))
             }
         }
         "status_bar" -> listOf(
-            SettingsItem("time_format", R.string.setting_time_format, valueText = if (settings.timeFormat == TimeFormat.TWELVE_HOUR) "12h" else "24h")
+            SettingsItem("show_battery", R.string.setting_battery, valueRes = showHide(settings.showBattery)),
+            SettingsItem("show_bluetooth", R.string.setting_bluetooth, valueRes = showHide(settings.showBluetooth)),
+            SettingsItem("show_clock", R.string.setting_clock, valueText = if (!settings.showClock) null else if (settings.timeFormat == TimeFormat.TWELVE_HOUR) "12h" else "24h", valueRes = if (!settings.showClock) R.string.value_hide else null),
+            SettingsItem("show_wifi", R.string.setting_wifi, valueRes = showHide(settings.showWifi))
         )
         "input" -> listOf(
             SettingsItem("button_layout", R.string.setting_button_layout, valueText = settings.buttonLayout.name.lowercase().replaceFirstChar { it.uppercase() }),

@@ -125,6 +125,8 @@ fun AppNavGraph(
             }
         }
 
+        val statusBarVisible = appSettings.showWifi || appSettings.showBluetooth || appSettings.showClock || appSettings.showBattery
+        if (statusBarVisible) {
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -132,9 +134,14 @@ fun AppNavGraph(
         ) {
             StatusBar(
                 use24hTime = appSettings.use24h,
+                showWifi = appSettings.showWifi,
+                showBluetooth = appSettings.showBluetooth,
+                showClock = appSettings.showClock,
+                showBattery = appSettings.showBattery,
                 lineHeight = listLineHeight,
                 verticalPadding = listVerticalPadding
             )
+        }
         }
     }
     }
