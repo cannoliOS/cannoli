@@ -1058,6 +1058,11 @@ class MainActivity : ComponentActivity() {
             is LaunchTarget.RetroArch -> {
                 val core = platformResolver.getCoreName(game.platformTag)
                 if (core != null) {
+                    val embeddedCorePath = findEmbeddedCore(core)
+                    if (embeddedCorePath != null) {
+                        launchEmbedded(game, embeddedCorePath)
+                        return
+                    }
                     retroArchLauncher.launch(game.file, core)
                 } else {
                     LaunchResult.CoreNotInstalled("unknown")
@@ -1068,6 +1073,10 @@ class MainActivity : ComponentActivity() {
             }
             is LaunchTarget.ApkLaunch -> {
                 apkLauncher.launch(target.packageName)
+            }
+            is LaunchTarget.Embedded -> {
+                launchEmbedded(game, target.corePath)
+                return
             }
         }
 
@@ -1083,6 +1092,34 @@ class MainActivity : ComponentActivity() {
             }
             LaunchResult.Success -> {}
         }
+    }
+
+    private fun findEmbeddedCore(coreName: String): String? {
+        val coresDir = java.io.File(settings.sdCardRoot, "Cores")
+        val coreFile = java.io.File(coresDir, "${coreName}_android.so")
+        return if (coreFile.exists()) coreFile.absolutePath else null
+    }
+
+    private fun launchEmbedded(game: dev.cannoli.scorza.model.Game, corePath: String) {
+        val cannoliRoot = java.io.File(settings.sdCardRoot)
+        val romName = game.file.nameWithoutExtension
+        val saveDir = java.io.File(cannoliRoot, "Saves/${game.platformTag}")
+        saveDir.mkdirs()
+
+        val intent = android.content.Intent(this, dev.cannoli.scorza.libretro.LibretroActivity::class.java).apply {
+            putExtra("game_title", game.displayName)
+            putExtra("core_path", corePath)
+            putExtra("rom_path", game.file.absolutePath)
+            putExtra("sram_path", java.io.File(saveDir, "$romName.srm").absolutePath)
+            putExtra("state_path", java.io.File(saveDir, "$romName.state").absolutePath)
+            putExtra("system_dir", java.io.File(cannoliRoot, "BIOS").absolutePath)
+            putExtra("save_dir", saveDir.absolutePath)
+            putExtra("color_highlight", settings.colorHighlight)
+            putExtra("color_text", settings.colorText)
+            putExtra("color_highlight_text", settings.colorHighlightText)
+            putExtra("color_accent", settings.colorAccent)
+        }
+        startActivity(intent)
     }
 
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
