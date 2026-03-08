@@ -96,6 +96,10 @@ class SettingsViewModel(
         _appSettings.value = readAppSettings()
     }
 
+    fun save() {
+        snapshot = captureSettings()
+    }
+
     fun cancel() {
         restoreSettings(snapshot)
         _appSettings.value = readAppSettings()

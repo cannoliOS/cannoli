@@ -705,6 +705,7 @@ class MainActivity : ComponentActivity() {
                     }
                     Screen.SETTINGS -> {
                         if (settingsViewModel.state.value.inSubList) {
+                            settingsViewModel.save()
                             settingsViewModel.exitSubList()
                             rescanSystemList()
                         }
