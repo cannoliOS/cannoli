@@ -83,6 +83,30 @@ class GameListViewModel(
         }
     }
 
+    fun loadApkList(type: String, onReady: () -> Unit = {}) {
+        breadcrumbStack.clear()
+        indexStack.clear()
+        viewModelScope.launch(Dispatchers.IO) {
+            val entries = if (type == "tools") scanner.scanTools() else scanner.scanPorts()
+            val games = entries.map { (name, launch) ->
+                Game(
+                    file = java.io.File(name),
+                    displayName = name,
+                    platformTag = type,
+                    launchTarget = launch
+                )
+            }
+            _state.value = State(
+                platformTag = type,
+                breadcrumb = if (type == "tools") "Tools" else "Ports",
+                games = games,
+                selectedIndex = 0,
+                isLoading = false
+            )
+            withContext(Dispatchers.Main) { onReady() }
+        }
+    }
+
     fun loadCollectionsList(restoreIndex: Boolean = false, onReady: () -> Unit = {}) {
         breadcrumbStack.clear()
         indexStack.clear()

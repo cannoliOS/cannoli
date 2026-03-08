@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.cannoli.scorza.model.Platform
 import dev.cannoli.scorza.scanner.FileScanner
-import dev.cannoli.scorza.util.sortedNatural
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,8 +18,8 @@ class SystemListViewModel(
         data class CollectionsFolder(val count: Int) : ListItem()
         data class PlatformItem(val platform: Platform) : ListItem()
         data class CollectionItem(val name: String, val count: Int) : ListItem()
-        data class ToolItem(val name: String, val packageName: String) : ListItem()
-        data class PortItem(val name: String, val packageName: String) : ListItem()
+        data class ToolsFolder(val count: Int) : ListItem()
+        data class PortsFolder(val count: Int) : ListItem()
         data class Divider(val label: String? = null) : ListItem()
     }
 
@@ -42,7 +41,7 @@ class SystemListViewModel(
     var pageSize: Int = 10
     var firstVisibleIndex: Int = 0
 
-    fun scan() {
+    fun scan(showTools: Boolean = false, showPorts: Boolean = false) {
         val prev = _state.value
         val prevItemCount = prev.items.size
         val prevSelectedIndex = prev.selectedIndex
@@ -67,22 +66,16 @@ class SystemListViewModel(
                 items.add(ListItem.CollectionsFolder(otherCollections.size))
             }
 
-            val orderedPlatforms = applyCustomOrder(platforms, scanner.loadPlatformOrder())
-            orderedPlatforms.forEach { items.add(ListItem.PlatformItem(it)) }
-
-            if (tools.isNotEmpty()) {
-                items.add(ListItem.Divider("Tools"))
-                tools.forEach { (name, launch) ->
-                    items.add(ListItem.ToolItem(name, launch.packageName))
-                }
+            val reorderableItems = mutableListOf<ListItem>()
+            platforms.forEach { reorderableItems.add(ListItem.PlatformItem(it)) }
+            if (showPorts && ports.isNotEmpty()) {
+                reorderableItems.add(ListItem.PortsFolder(ports.size))
             }
-
-            if (ports.isNotEmpty()) {
-                items.add(ListItem.Divider("Ports"))
-                ports.forEach { (name, launch) ->
-                    items.add(ListItem.PortItem(name, launch.packageName))
-                }
+            if (showTools && tools.isNotEmpty()) {
+                reorderableItems.add(ListItem.ToolsFolder(tools.size))
             }
+            val ordered = applyCustomOrder(reorderableItems, scanner.loadPlatformOrder())
+            items.addAll(ordered)
 
             val sameSize = items.size == prevItemCount && prevItemCount > 0
             val selectableIndices = items.indices.filter { items[it] !is ListItem.Divider }
@@ -165,7 +158,7 @@ class SystemListViewModel(
     fun enterReorderMode() {
         val current = _state.value
         val item = current.items.getOrNull(current.selectedIndex) ?: return
-        if (item !is ListItem.PlatformItem) return
+        if (!item.isReorderable()) return
         _state.value = current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
     }
 
@@ -176,7 +169,7 @@ class SystemListViewModel(
         if (!current.reorderMode) return
         val idx = current.selectedIndex
         val items = current.items.toMutableList()
-        val prevSelectable = (idx - 1 downTo 0).firstOrNull { items[it] !is ListItem.Divider && items[it] is ListItem.PlatformItem }
+        val prevSelectable = (idx - 1 downTo 0).firstOrNull { items[it].isReorderable() }
             ?: return
         items[idx] = items[prevSelectable].also { items[prevSelectable] = items[idx] }
         _state.value = current.copy(items = items, selectedIndex = prevSelectable)
@@ -187,7 +180,7 @@ class SystemListViewModel(
         if (!current.reorderMode) return
         val idx = current.selectedIndex
         val items = current.items.toMutableList()
-        val nextSelectable = (idx + 1..items.lastIndex).firstOrNull { items[it] !is ListItem.Divider && items[it] is ListItem.PlatformItem }
+        val nextSelectable = (idx + 1..items.lastIndex).firstOrNull { items[it].isReorderable() }
             ?: return
         items[idx] = items[nextSelectable].also { items[nextSelectable] = items[idx] }
         _state.value = current.copy(items = items, selectedIndex = nextSelectable)
@@ -196,17 +189,17 @@ class SystemListViewModel(
     fun confirmReorder() {
         val current = _state.value
         if (!current.reorderMode) return
-        val tags = current.items.filterIsInstance<ListItem.PlatformItem>().map { it.platform.tag }
+        val tags = current.items.mapNotNull { it.orderTag() }
         viewModelScope.launch(Dispatchers.IO) {
             scanner.savePlatformOrder(tags)
         }
         _state.value = current.copy(reorderMode = false, reorderOriginalIndex = -1)
     }
 
-    fun cancelReorder() {
+    fun cancelReorder(showTools: Boolean = false, showPorts: Boolean = false) {
         val current = _state.value
         if (!current.reorderMode) return
-        scan()
+        scan(showTools, showPorts)
     }
 
     fun enterMultiSelect() {
@@ -244,14 +237,28 @@ class SystemListViewModel(
         _state.value = current.copy(multiSelectMode = false, checkedIndices = emptySet())
     }
 
-    private fun applyCustomOrder(platforms: List<Platform>, order: List<String>): List<Platform> {
-        if (order.isEmpty()) return platforms
-        val byTag = platforms.associateBy { it.tag }
-        val ordered = mutableListOf<Platform>()
+    private fun ListItem.isReorderable(): Boolean = this is ListItem.PlatformItem || this is ListItem.ToolsFolder || this is ListItem.PortsFolder
+
+    private fun ListItem.orderTag(): String? = when (this) {
+        is ListItem.PlatformItem -> platform.tag
+        is ListItem.ToolsFolder -> TAG_TOOLS
+        is ListItem.PortsFolder -> TAG_PORTS
+        else -> null
+    }
+
+    private fun applyCustomOrder(items: List<ListItem>, order: List<String>): List<ListItem> {
+        if (order.isEmpty()) return items
+        val byTag = items.associateBy { it.orderTag() }
+        val ordered = mutableListOf<ListItem>()
         for (tag in order) {
             byTag[tag]?.let { ordered.add(it) }
         }
-        val remaining = platforms.filter { it.tag !in order }.sortedNatural { it.displayName }
+        val remaining = items.filter { it.orderTag() !in order }
         return ordered + remaining
+    }
+
+    companion object {
+        const val TAG_TOOLS = "__tools__"
+        const val TAG_PORTS = "__ports__"
     }
 }

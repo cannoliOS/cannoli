@@ -22,9 +22,9 @@ import dev.cannoli.scorza.ui.components.ColorPickerOverlay
 import dev.cannoli.scorza.ui.components.HexColorInputOverlay
 import dev.cannoli.scorza.ui.components.KeyboardOverlay
 import dev.cannoli.scorza.ui.components.List
-import dev.cannoli.scorza.ui.components.ScreenBackground
 import dev.cannoli.scorza.ui.components.PillRowKeyValue
 import dev.cannoli.scorza.ui.components.PillRowText
+import dev.cannoli.scorza.ui.components.ScreenBackground
 import dev.cannoli.scorza.ui.components.ScreenTitle
 import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.viewmodel.SettingsViewModel
@@ -108,6 +108,47 @@ fun SettingsScreen(
                 caps = dialogState.caps,
                 symbols = dialogState.symbols
             )
+            return
+        }
+        is DialogState.AppPicker -> {
+            ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(screenPadding)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 4.dp, bottom = 48.dp)
+                    ) {
+                        ScreenTitle(
+                            text = dialogState.title,
+                            fontSize = listFontSize,
+                            lineHeight = listLineHeight
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        List(
+                            items = dialogState.apps,
+                            selectedIndex = dialogState.selectedIndex
+                        ) { index, app ->
+                            PillRowText(
+                                label = app,
+                                isSelected = dialogState.selectedIndex == index,
+                                fontSize = listFontSize,
+                                lineHeight = listLineHeight,
+                                verticalPadding = listVerticalPadding,
+                                checkState = index in dialogState.checkedIndices
+                            )
+                        }
+                    }
+                    BottomBar(
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        leftItems = listOf("B" to stringResource(R.string.label_back)),
+                        rightItems = listOf("\uDB81\uDC0A" to stringResource(R.string.label_confirm))
+                    )
+                }
+            }
             return
         }
         else -> {}

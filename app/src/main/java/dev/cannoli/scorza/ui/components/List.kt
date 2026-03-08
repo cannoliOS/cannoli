@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun <T> List(
-    items: kotlin.collections.List<T>,
+    items: List<T>,
     selectedIndex: Int,
     modifier: Modifier = Modifier,
     scrollTarget: Int = 0,

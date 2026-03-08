@@ -17,7 +17,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
-import dev.cannoli.scorza.settings.ScrollSpeed
 import dev.cannoli.scorza.settings.TextSize
 import dev.cannoli.scorza.ui.components.StatusBar
 import dev.cannoli.scorza.ui.screens.DialogState
@@ -97,8 +96,6 @@ fun AppNavGraph(
                     listVerticalPadding = listVerticalPadding,
                     onPlatformSelected = { },
                     onCollectionSelected = { },
-                    onToolSelected = { },
-                    onPortSelected = { },
                     onSettingsRequested = { }
                 )
             }

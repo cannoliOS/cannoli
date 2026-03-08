@@ -66,6 +66,14 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_PLATFORM_SWITCHING, false)
         set(value) = prefs.edit().putBoolean(KEY_PLATFORM_SWITCHING, value).apply()
 
+    var showTools: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_TOOLS, false)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_TOOLS, value).apply()
+
+    var showPorts: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_PORTS, false)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_PORTS, value).apply()
+
     /** Background tint opacity 0–90 in steps of 10. 0 = off. */
     var backgroundTint: Int
         get() = prefs.getInt(KEY_BG_TINT, 0)
@@ -109,6 +117,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_COLOR_HIGHLIGHT_TEXT = "color_highlight_text"
         private const val KEY_COLOR_ACCENT = "color_accent"
         private const val KEY_PLATFORM_SWITCHING = "platform_switching"
+        private const val KEY_SHOW_TOOLS = "show_tools"
+        private const val KEY_SHOW_PORTS = "show_ports"
     }
 }
 

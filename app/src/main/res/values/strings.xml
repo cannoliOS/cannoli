@@ -6,6 +6,7 @@
     <string name="label_cancel">CANCEL</string>
     <string name="label_select">SELECT</string>
     <string name="label_play">PLAY</string>
+    <string name="label_launch">LAUNCH</string>
     <string name="label_open">OPEN</string>
     <string name="label_save">SAVE</string>
     <string name="label_change">CHANGE</string>
@@ -36,6 +37,10 @@
     <string name="setting_swap_start_select">Swap Start/Select</string>
     <string name="setting_platform_switching">Platform Switching</string>
     <string name="setting_scroll_speed">Scroll Speed</string>
+    <string name="setting_show_tools">Tools</string>
+    <string name="setting_show_ports">Ports</string>
+    <string name="setting_manage_tools">Manage Tools</string>
+    <string name="setting_manage_ports">Manage Ports</string>
     <string name="setting_bg_tint">Tint</string>
     <string name="setting_color_highlight">Highlight</string>
     <string name="setting_color_text">Text</string>

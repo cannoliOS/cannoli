@@ -1,9 +1,9 @@
 package dev.cannoli.scorza.ui.viewmodel
 
 import androidx.annotation.StringRes
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import dev.cannoli.scorza.R
-import androidx.compose.ui.graphics.Color
 import dev.cannoli.scorza.settings.ButtonLayout
 import dev.cannoli.scorza.settings.ScrollSpeed
 import dev.cannoli.scorza.settings.SettingsRepository
@@ -53,7 +53,9 @@ class SettingsViewModel(
         val colorHighlight: Color = Color.White,
         val colorText: Color = Color.White,
         val colorHighlightText: Color = Color.Black,
-        val colorAccent: Color = Color.White
+        val colorAccent: Color = Color.White,
+        val showTools: Boolean = false,
+        val showPorts: Boolean = false
     )
 
     private val _state = MutableStateFlow(State())
@@ -73,7 +75,9 @@ class SettingsViewModel(
         colorHighlight = hexToColor(settings.colorHighlight) ?: Color.White,
         colorText = hexToColor(settings.colorText) ?: Color.White,
         colorHighlightText = hexToColor(settings.colorHighlightText) ?: Color.Black,
-        colorAccent = hexToColor(settings.colorAccent) ?: Color.White
+        colorAccent = hexToColor(settings.colorAccent) ?: Color.White,
+        showTools = settings.showTools,
+        showPorts = settings.showPorts
     )
 
     private val allCategories = listOf(
@@ -174,6 +178,8 @@ class SettingsViewModel(
             }
             "swap_start_select" -> settings.swapStartSelect = !settings.swapStartSelect
             "platform_switching" -> settings.platformSwitching = !settings.platformSwitching
+            "show_tools" -> settings.showTools = !settings.showTools
+            "show_ports" -> settings.showPorts = !settings.showPorts
         }
 
         val catKey = current.activeCategory ?: return
@@ -269,6 +275,8 @@ class SettingsViewModel(
         "color_accent" to settings.colorAccent,
         "swap_start_select" to settings.swapStartSelect,
         "platform_switching" to settings.platformSwitching,
+        "show_tools" to settings.showTools,
+        "show_ports" to settings.showPorts,
         "sd_root" to settings.sdCardRoot,
         "ra_package" to settings.retroArchPackage
     )
@@ -288,6 +296,8 @@ class SettingsViewModel(
         (snap["color_accent"] as? String)?.let { settings.colorAccent = it }
         (snap["swap_start_select"] as? Boolean)?.let { settings.swapStartSelect = it }
         (snap["platform_switching"] as? Boolean)?.let { settings.platformSwitching = it }
+        (snap["show_tools"] as? Boolean)?.let { settings.showTools = it }
+        (snap["show_ports"] as? Boolean)?.let { settings.showPorts = it }
         (snap["sd_root"] as? String)?.let { settings.sdCardRoot = it }
         (snap["ra_package"] as? String)?.let { settings.retroArchPackage = it }
     }
@@ -306,11 +316,19 @@ class SettingsViewModel(
                 add(SettingsItem("bg_tint", R.string.setting_bg_tint, valueText = if (tintVal == 0) null else "$tintVal%", valueRes = if (tintVal == 0) R.string.value_off else null))
             }
         }
-        "display" -> listOf(
-            SettingsItem("text_size", R.string.setting_text_size, valueText = settings.textSize.name.lowercase().replaceFirstChar { it.uppercase() }),
-            SettingsItem("box_art", R.string.setting_box_art, valueRes = onOff(settings.boxArtEnabled)),
-            SettingsItem("scroll_speed", R.string.setting_scroll_speed, valueText = settings.scrollSpeed.name.lowercase().replaceFirstChar { it.uppercase() })
-        )
+        "display" -> buildList {
+            add(SettingsItem("text_size", R.string.setting_text_size, valueText = settings.textSize.name.lowercase().replaceFirstChar { it.uppercase() }))
+            add(SettingsItem("box_art", R.string.setting_box_art, valueRes = onOff(settings.boxArtEnabled)))
+            add(SettingsItem("scroll_speed", R.string.setting_scroll_speed, valueText = settings.scrollSpeed.name.lowercase().replaceFirstChar { it.uppercase() }))
+            add(SettingsItem("show_tools", R.string.setting_show_tools, valueRes = onOff(settings.showTools)))
+            if (settings.showTools) {
+                add(SettingsItem("manage_tools", R.string.setting_manage_tools, isEditable = true))
+            }
+            add(SettingsItem("show_ports", R.string.setting_show_ports, valueRes = onOff(settings.showPorts)))
+            if (settings.showPorts) {
+                add(SettingsItem("manage_ports", R.string.setting_manage_ports, isEditable = true))
+            }
+        }
         "status_bar" -> listOf(
             SettingsItem("time_format", R.string.setting_time_format, valueText = if (settings.timeFormat == TimeFormat.TWELVE_HOUR) "12h" else "24h"),
             SettingsItem("battery_pct", R.string.setting_battery_pct, valueRes = onOff(settings.batteryPercentage))

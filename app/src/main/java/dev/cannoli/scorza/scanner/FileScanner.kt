@@ -206,6 +206,18 @@ class FileScanner(
         return scanApkLaunchesWithNames(portsDir)
     }
 
+    val tools: File get() = toolsDir
+    val ports: File get() = portsDir
+
+    fun syncApkLaunches(dir: File, selected: List<Pair<String, String>>) {
+        dir.mkdirs()
+        dir.listFiles { f -> f.extension == "apk_launch" }?.forEach { it.delete() }
+        selected.forEach { (displayName, packageName) ->
+            val safeName = displayName.replace(Regex("[/\\\\:*?\"<>|]"), "_")
+            File(dir, "$safeName.apk_launch").writeText(packageName)
+        }
+    }
+
     fun ensureDirectories() {
         listOf(
             romsDir, artDir, collectionsDir,

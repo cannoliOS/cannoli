@@ -33,8 +33,6 @@ fun SystemListScreen(
     listVerticalPadding: Dp = 8.dp,
     onPlatformSelected: (String) -> Unit,
     onCollectionSelected: (String) -> Unit,
-    onToolSelected: (String) -> Unit,
-    onPortSelected: (String) -> Unit,
     onSettingsRequested: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
@@ -62,12 +60,12 @@ fun SystemListScreen(
                     is ListItem.CollectionsFolder -> "Collections"
                     is ListItem.PlatformItem -> item.platform.displayName
                     is ListItem.CollectionItem -> item.name
-                    is ListItem.ToolItem -> item.name
-                    is ListItem.PortItem -> item.name
+                    is ListItem.ToolsFolder -> "Tools"
+                    is ListItem.PortsFolder -> "Ports"
                     is ListItem.Divider -> null
                 }
                 if (label != null) {
-                    val showReorder = state.reorderMode && state.selectedIndex == index && item is ListItem.PlatformItem
+                    val showReorder = state.reorderMode && state.selectedIndex == index && (item is ListItem.PlatformItem || item is ListItem.ToolsFolder || item is ListItem.PortsFolder)
                     val check = if (state.multiSelectMode) index in state.checkedIndices else null
                     PillRowText(
                         label = label,

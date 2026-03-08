@@ -1,9 +1,9 @@
 package dev.cannoli.scorza.ui.screens
 
 import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import dev.cannoli.scorza.ui.components.List
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -28,22 +27,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.delay
 import dev.cannoli.scorza.R
 import dev.cannoli.scorza.model.Game
 import dev.cannoli.scorza.settings.ScrollSpeed
 import dev.cannoli.scorza.ui.components.BottomBar
 import dev.cannoli.scorza.ui.components.ConfirmOverlay
 import dev.cannoli.scorza.ui.components.KeyboardOverlay
+import dev.cannoli.scorza.ui.components.List
 import dev.cannoli.scorza.ui.components.MessageOverlay
 import dev.cannoli.scorza.ui.components.MissingAppDialog
 import dev.cannoli.scorza.ui.components.MissingCoreDialog
@@ -55,6 +53,7 @@ import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.GrayText
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun GameListScreen(
@@ -288,6 +287,8 @@ fun GameListScreen(
                         stringResource(R.string.label_toggle)
                     } else if (selectedGame?.isSubfolder == true || state.isCollectionsList) {
                         stringResource(R.string.label_open)
+                    } else if (state.platformTag == "tools") {
+                        stringResource(R.string.label_launch)
                     } else {
                         stringResource(R.string.label_play)
                     }
@@ -371,6 +372,7 @@ sealed interface DialogState {
     data class HexColorInput(val settingKey: String, val currentHex: String = "", val selectedIndex: Int = 0) : DialogState
     data class CoreMappingList(val mappings: List<Pair<String, String>>, val selectedIndex: Int = 0) : DialogState
     data class CoreMappingEdit(val tag: String, override val currentName: String, override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState
+    data class AppPicker(val type: String, val title: String, val apps: List<String>, val packages: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet()) : DialogState
 }
 
 @Composable
