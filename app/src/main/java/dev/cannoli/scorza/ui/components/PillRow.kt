@@ -1,11 +1,13 @@
 package dev.cannoli.scorza.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -20,12 +22,13 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.scorza.ui.theme.GrayText
+import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 
 val screenPadding = 20.dp
 val pillInternalH = 14.dp
 
 /**
- * A row that highlights with a white pill when selected.
+ * A row that highlights with a pill when selected.
  * Use the content slot for custom inner content (e.g. marquee text).
  */
 @Composable
@@ -34,12 +37,13 @@ fun PillRow(
     verticalPadding: Dp = 8.dp,
     content: @Composable () -> Unit
 ) {
+    val colors = LocalCannoliColors.current
     if (isSelected) {
         Box(
             modifier = Modifier
                 .padding(vertical = 2.dp)
                 .clip(RoundedCornerShape(50))
-                .background(Color.White)
+                .background(colors.highlight)
                 .padding(horizontal = pillInternalH, vertical = verticalPadding)
         ) {
             content()
@@ -62,12 +66,13 @@ fun PillRow(
 fun PillRowText(
     label: String,
     isSelected: Boolean,
-    fontSize: TextUnit = 22.sp,
-    lineHeight: TextUnit = 32.sp,
-    verticalPadding: Dp = 8.dp,
+    fontSize: TextUnit,
+    lineHeight: TextUnit,
+    verticalPadding: Dp,
     showReorderIcon: Boolean = false,
     checkState: Boolean? = null
 ) {
+    val colors = LocalCannoliColors.current
     val textStyle = MaterialTheme.typography.bodyLarge.copy(
         fontSize = fontSize,
         lineHeight = lineHeight
@@ -79,7 +84,7 @@ fun PillRowText(
                 Text(
                     text = if (checkState) "☑" else "☐",
                     style = textStyle,
-                    color = if (isSelected) Color.Black else Color.White
+                    color = if (isSelected) colors.highlightText else colors.text
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
@@ -87,14 +92,14 @@ fun PillRowText(
                 Text(
                     text = "↕",
                     style = textStyle,
-                    color = if (isSelected) Color.Black else Color.White
+                    color = if (isSelected) colors.highlightText else colors.text
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Text(
                 text = label,
                 style = textStyle,
-                color = if (isSelected) Color.Black else Color.White
+                color = if (isSelected) colors.highlightText else colors.text
             )
         }
     }
@@ -108,10 +113,12 @@ fun PillRowKeyValue(
     label: String,
     value: String,
     isSelected: Boolean,
-    fontSize: TextUnit = 22.sp,
-    lineHeight: TextUnit = 32.sp,
-    verticalPadding: Dp = 8.dp
+    fontSize: TextUnit,
+    lineHeight: TextUnit,
+    verticalPadding: Dp,
+    swatchColor: Color? = null
 ) {
+    val colors = LocalCannoliColors.current
     val textStyle = MaterialTheme.typography.bodyLarge.copy(
         fontSize = fontSize,
         lineHeight = lineHeight
@@ -126,21 +133,31 @@ fun PillRowKeyValue(
                 .fillMaxWidth()
                 .padding(vertical = 2.dp)
                 .clip(RoundedCornerShape(50))
-                .background(Color.White)
+                .background(colors.highlight)
                 .padding(horizontal = pillInternalH, vertical = verticalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = label,
                 style = textStyle,
-                color = Color.Black,
+                color = colors.highlightText,
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
+            if (swatchColor != null) {
+                Box(
+                    modifier = Modifier
+                        .size((fontSize.value * 0.7f).dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(swatchColor)
+                        .border(1.dp, colors.highlightText.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Text(
                 text = value,
                 style = valueStyle,
-                color = Color.Black.copy(alpha = 0.5f),
+                color = colors.highlightText.copy(alpha = 0.5f),
                 maxLines = 1
             )
         }
@@ -155,10 +172,20 @@ fun PillRowKeyValue(
             Text(
                 text = label,
                 style = textStyle,
-                color = Color.White,
+                color = colors.text,
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
+            if (swatchColor != null) {
+                Box(
+                    modifier = Modifier
+                        .size((fontSize.value * 0.7f).dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(swatchColor)
+                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Text(
                 text = value,
                 style = valueStyle,

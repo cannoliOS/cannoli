@@ -33,6 +33,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 import dev.cannoli.scorza.ui.theme.NerdSymbols
 import dev.cannoli.scorza.ui.theme.MPlus1Code
 import java.text.SimpleDateFormat
@@ -154,24 +155,26 @@ fun StatusBar(
         }
     }
 
+    val colors = LocalCannoliColors.current
+
     val iconStyle = TextStyle(
         fontFamily = NerdSymbols,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
-        color = Color.Black
+        color = colors.highlightText
     )
 
     val textStyle = TextStyle(
         fontFamily = MPlus1Code,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
-        color = Color.Black
+        color = colors.highlightText
     )
 
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(Color.White)
+            .background(colors.highlight)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)

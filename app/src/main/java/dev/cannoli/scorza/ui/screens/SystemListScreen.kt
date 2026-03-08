@@ -27,6 +27,7 @@ import dev.cannoli.scorza.ui.viewmodel.SystemListViewModel.ListItem
 fun SystemListScreen(
     viewModel: SystemListViewModel,
     backgroundImagePath: String? = null,
+    backgroundTint: Int = 0,
     listFontSize: TextUnit = 22.sp,
     listLineHeight: TextUnit = 32.sp,
     listVerticalPadding: Dp = 8.dp,
@@ -38,7 +39,7 @@ fun SystemListScreen(
 ) {
     val state by viewModel.state.collectAsState()
 
-    ScreenBackground(backgroundImagePath = backgroundImagePath) {
+    ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -47,6 +48,7 @@ fun SystemListScreen(
             List(
                 items = state.items,
                 selectedIndex = state.selectedIndex,
+                scrollTarget = state.scrollTarget,
                 onVisibleRangeChanged = { first, count ->
                     viewModel.firstVisibleIndex = first
                     viewModel.pageSize = count

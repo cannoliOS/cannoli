@@ -4,6 +4,7 @@ import dev.cannoli.scorza.model.LaunchTarget
 import dev.cannoli.scorza.model.Platform
 import dev.cannoli.scorza.util.IniData
 import dev.cannoli.scorza.util.IniParser
+import org.json.JSONObject
 import java.io.File
 
 class PlatformResolver(private val cannoliRoot: File) {
@@ -79,6 +80,8 @@ class PlatformResolver(private val cannoliRoot: File) {
     )
 
     private var ini: IniData = IniData(emptyMap())
+    private var userCores: MutableMap<String, String> = mutableMapOf()
+    private val coresFile get() = File(cannoliRoot, "Config/cores.json")
 
     fun load() {
         val configFile = File(cannoliRoot, "Config/platforms.ini")
@@ -86,6 +89,44 @@ class PlatformResolver(private val cannoliRoot: File) {
             writeDefaultIni(configFile)
         }
         ini = IniParser.parse(configFile)
+        loadCoreMappings()
+    }
+
+    private fun loadCoreMappings() {
+        userCores.clear()
+        if (!coresFile.exists()) return
+        try {
+            val json = JSONObject(coresFile.readText())
+            for (key in json.keys()) {
+                userCores[key] = json.getString(key)
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun saveCoreMappings() {
+        val json = JSONObject()
+        for ((tag, core) in userCores) {
+            json.put(tag, core)
+        }
+        coresFile.parentFile?.mkdirs()
+        coresFile.writeText(json.toString(2))
+    }
+
+    fun getCoreMapping(tag: String): String {
+        return userCores[tag] ?: defaultCores[tag] ?: ""
+    }
+
+    fun setCoreMapping(tag: String, core: String) {
+        if (core.isBlank() || core == defaultCores[tag]) {
+            userCores.remove(tag)
+        } else {
+            userCores[tag] = core
+        }
+    }
+
+    fun getAllCoreMappings(): List<Pair<String, String>> {
+        val tags = (defaultCores.keys + userCores.keys).sorted()
+        return tags.map { tag -> tag to getCoreMapping(tag) }
     }
 
     fun getDisplayName(tag: String): String {
@@ -95,7 +136,8 @@ class PlatformResolver(private val cannoliRoot: File) {
     }
 
     fun getCoreName(tag: String): String? {
-        return ini.get("cores", tag)
+        return userCores[tag]
+            ?: ini.get("cores", tag)
             ?: defaultCores[tag]
     }
 

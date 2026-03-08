@@ -21,6 +21,8 @@
 
     <!-- Settings categories -->
     <string name="settings_appearance">Appearance</string>
+    <string name="settings_display">Display</string>
+    <string name="settings_status_bar">Status Bar</string>
     <string name="settings_input">Input</string>
     <string name="settings_advanced">Advanced</string>
 
@@ -32,7 +34,14 @@
     <string name="setting_battery_pct">Battery Percentage</string>
     <string name="setting_button_layout">Button Layout</string>
     <string name="setting_swap_start_select">Swap Start/Select</string>
+    <string name="setting_platform_switching">Platform Switching</string>
     <string name="setting_scroll_speed">Scroll Speed</string>
+    <string name="setting_bg_tint">Tint</string>
+    <string name="setting_color_highlight">Highlight</string>
+    <string name="setting_color_text">Text</string>
+    <string name="setting_color_highlight_text">Highlight Text</string>
+    <string name="setting_color_accent">Accent</string>
+    <string name="setting_core_mapping">Core Mapping</string>
     <string name="setting_sd_root">SD Card Root</string>
     <string name="setting_ra_package">RetroArch Package</string>
 

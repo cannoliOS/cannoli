@@ -13,22 +13,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 import dev.cannoli.scorza.ui.theme.MPlus1Code
-
-private val outerPillColor = Color.White.copy(alpha = 0.15f)
-private val innerPillColor = Color.White.copy(alpha = 0.30f)
 
 @Composable
 fun LegendPill(button: String, label: String) {
+    val accent = LocalCannoliColors.current.accent
+    val outerPill = accent.copy(alpha = 0.15f)
+    val innerPill = accent.copy(alpha = 0.30f)
+
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(outerPillColor)
+            .background(outerPill)
             .padding(start = 5.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -36,7 +37,7 @@ fun LegendPill(button: String, label: String) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
-                .background(innerPillColor)
+                .background(innerPill)
                 .padding(horizontal = 10.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -46,7 +47,7 @@ fun LegendPill(button: String, label: String) {
                     fontFamily = MPlus1Code,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = Color.White
+                    color = accent
                 )
             )
         }
@@ -56,7 +57,7 @@ fun LegendPill(button: String, label: String) {
             style = TextStyle(
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
-                color = Color.White
+                color = accent
             )
         )
     }
@@ -65,8 +66,8 @@ fun LegendPill(button: String, label: String) {
 @Composable
 fun BottomBar(
     modifier: Modifier = Modifier,
-    leftItems: List<Pair<String, String>> = emptyList(),
-    rightItems: List<Pair<String, String>> = emptyList()
+    leftItems: List<Pair<String, String>>,
+    rightItems: List<Pair<String, String>>
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),

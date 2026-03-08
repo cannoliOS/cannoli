@@ -16,6 +16,7 @@ import java.io.File
 @Composable
 fun ScreenBackground(
     backgroundImagePath: String?,
+    backgroundTint: Int = 0,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
@@ -41,6 +42,14 @@ fun ScreenBackground(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
+
+                if (backgroundTint > 0) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = backgroundTint / 100f))
+                    )
+                }
             }
         }
 

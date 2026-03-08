@@ -5,16 +5,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 
 @Composable
 fun ScreenTitle(
     text: String,
-    fontSize: TextUnit = 22.sp,
-    lineHeight: TextUnit = 32.sp
+    fontSize: TextUnit,
+    lineHeight: TextUnit
 ) {
     Text(
         text = text,
@@ -22,7 +22,7 @@ fun ScreenTitle(
             fontSize = fontSize * 1.2f,
             lineHeight = lineHeight * 1.2f
         ),
-        color = Color.White,
+        color = LocalCannoliColors.current.text,
         modifier = Modifier.padding(start = 2.dp)
     )
 }

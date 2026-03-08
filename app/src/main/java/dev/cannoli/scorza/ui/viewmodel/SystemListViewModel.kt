@@ -159,7 +159,8 @@ class SystemListViewModel(
         return (getSelectedItem() as? ListItem.PlatformItem)?.platform?.tag
     }
 
-    fun getPlatformTags(): List<String> = _state.value.platforms.map { it.tag }
+    fun getPlatformTags(): List<String> =
+        _state.value.items.filterIsInstance<ListItem.PlatformItem>().map { it.platform.tag }
 
     fun enterReorderMode() {
         val current = _state.value

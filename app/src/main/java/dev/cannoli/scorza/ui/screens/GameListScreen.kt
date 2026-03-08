@@ -53,12 +53,14 @@ import dev.cannoli.scorza.ui.components.ScreenBackground
 import dev.cannoli.scorza.ui.components.ScreenTitle
 import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.GrayText
+import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
 
 @Composable
 fun GameListScreen(
     viewModel: GameListViewModel,
     backgroundImagePath: String? = null,
+    backgroundTint: Int = 0,
     listFontSize: TextUnit = 22.sp,
     listLineHeight: TextUnit = 32.sp,
     listVerticalPadding: Dp = 8.dp,
@@ -73,7 +75,7 @@ fun GameListScreen(
 
     when (dialogState) {
         is DialogState.ContextMenu -> {
-            ScreenBackground(backgroundImagePath = backgroundImagePath) {
+            ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -105,14 +107,15 @@ fun GameListScreen(
                     }
                     BottomBar(
                         modifier = Modifier.align(Alignment.BottomCenter),
-                        leftItems = listOf("B" to stringResource(R.string.label_back))
+                        leftItems = listOf("B" to stringResource(R.string.label_back)),
+                        rightItems = emptyList()
                     )
                 }
             }
         }
 
         is DialogState.BulkContextMenu -> {
-            ScreenBackground(backgroundImagePath = backgroundImagePath) {
+            ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -144,14 +147,15 @@ fun GameListScreen(
                     }
                     BottomBar(
                         modifier = Modifier.align(Alignment.BottomCenter),
-                        leftItems = listOf("B" to stringResource(R.string.label_back))
+                        leftItems = listOf("B" to stringResource(R.string.label_back)),
+                        rightItems = emptyList()
                     )
                 }
             }
         }
 
         is DialogState.CollectionPicker -> {
-            ScreenBackground(backgroundImagePath = backgroundImagePath) {
+            ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -215,7 +219,7 @@ fun GameListScreen(
                 }
             } else null
 
-            ScreenBackground(backgroundImagePath = backgroundImagePath) {
+            ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -241,6 +245,7 @@ fun GameListScreen(
                             List(
                                 items = state.games,
                                 selectedIndex = state.selectedIndex,
+                                scrollTarget = state.scrollTarget,
                                 onVisibleRangeChanged = { first, count ->
                                     viewModel.firstVisibleIndex = first
                                     viewModel.pageSize = count
@@ -306,30 +311,19 @@ fun GameListScreen(
                         is DialogState.DeleteCollectionConfirm -> ConfirmOverlay(
                             message = stringResource(R.string.dialog_delete_confirm, dialogState.collectionName)
                         )
-                        is DialogState.RenameInput -> KeyboardOverlay(
-                            text = dialogState.currentName,
-                            cursorPos = dialogState.cursorPos,
-                            keyRow = dialogState.keyRow,
-                            keyCol = dialogState.keyCol,
-                            caps = dialogState.caps,
-                            symbols = dialogState.symbols
-                        )
-                        is DialogState.NewCollectionInput -> KeyboardOverlay(
-                            text = dialogState.currentName,
-                            cursorPos = dialogState.cursorPos,
-                            keyRow = dialogState.keyRow,
-                            keyCol = dialogState.keyCol,
-                            caps = dialogState.caps,
-                            symbols = dialogState.symbols
-                        )
-                        is DialogState.CollectionRenameInput -> KeyboardOverlay(
-                            text = dialogState.currentName,
-                            cursorPos = dialogState.cursorPos,
-                            keyRow = dialogState.keyRow,
-                            keyCol = dialogState.keyCol,
-                            caps = dialogState.caps,
-                            symbols = dialogState.symbols
-                        )
+                        is DialogState.RenameInput,
+                        is DialogState.NewCollectionInput,
+                        is DialogState.CollectionRenameInput -> {
+                            val ks = dialogState as KeyboardInputState
+                            KeyboardOverlay(
+                                text = ks.currentName,
+                                cursorPos = ks.cursorPos,
+                                keyRow = ks.keyRow,
+                                keyCol = ks.keyCol,
+                                caps = ks.caps,
+                                symbols = ks.symbols
+                            )
+                        }
                         is DialogState.RenameResult -> MessageOverlay(
                             message = if (dialogState.success) {
                                 stringResource(R.string.dialog_rename_success)
@@ -349,20 +343,34 @@ fun GameListScreen(
     }
 }
 
-sealed class DialogState {
-    object None : DialogState()
-    data class MissingCore(val coreName: String) : DialogState()
-    data class MissingApp(val packageName: String) : DialogState()
-    data class ContextMenu(val gameName: String, val selectedOption: Int = 0, val options: List<String> = listOf("Add to Favorites", "Manage Collections", "Rename", "Delete")) : DialogState()
-    data class BulkContextMenu(val gamePaths: List<String>, val selectedOption: Int = 0, val options: List<String> = listOf("Add to Favorites", "Manage Collections", "Delete")) : DialogState()
-    data class DeleteConfirm(val gameName: String) : DialogState()
-    data class CollectionPicker(val gamePaths: List<String>, val title: String, val collections: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet()) : DialogState()
-    data class RenameInput(val gameName: String, val currentName: String, val cursorPos: Int = 0, val keyRow: Int = 2, val keyCol: Int = 0, val caps: Boolean = false, val symbols: Boolean = false) : DialogState()
-    data class NewCollectionInput(val gamePaths: List<String> = emptyList(), val currentName: String = "", val cursorPos: Int = 0, val keyRow: Int = 2, val keyCol: Int = 0, val caps: Boolean = false, val symbols: Boolean = false) : DialogState()
-    data class CollectionRenameInput(val oldName: String, val currentName: String, val cursorPos: Int = 0, val keyRow: Int = 2, val keyCol: Int = 0, val caps: Boolean = false, val symbols: Boolean = false) : DialogState()
-    data class DeleteCollectionConfirm(val collectionName: String) : DialogState()
-    data class RenameResult(val success: Boolean, val message: String) : DialogState()
-    data class CollectionCreated(val collectionName: String) : DialogState()
+/** Common interface for dialog states that involve keyboard input. */
+interface KeyboardInputState {
+    val currentName: String
+    val cursorPos: Int
+    val keyRow: Int
+    val keyCol: Int
+    val caps: Boolean
+    val symbols: Boolean
+}
+
+sealed interface DialogState {
+    data object None : DialogState
+    data class MissingCore(val coreName: String) : DialogState
+    data class MissingApp(val packageName: String) : DialogState
+    data class ContextMenu(val gameName: String, val selectedOption: Int = 0, val options: List<String> = listOf("Add to Favorites", "Manage Collections", "Rename", "Delete")) : DialogState
+    data class BulkContextMenu(val gamePaths: List<String>, val selectedOption: Int = 0, val options: List<String> = listOf("Add to Favorites", "Manage Collections", "Delete")) : DialogState
+    data class DeleteConfirm(val gameName: String) : DialogState
+    data class CollectionPicker(val gamePaths: List<String>, val title: String, val collections: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet()) : DialogState
+    data class RenameInput(val gameName: String, override val currentName: String, override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState
+    data class NewCollectionInput(val gamePaths: List<String> = emptyList(), override val currentName: String = "", override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState
+    data class CollectionRenameInput(val oldName: String, override val currentName: String, override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState
+    data class DeleteCollectionConfirm(val collectionName: String) : DialogState
+    data class RenameResult(val success: Boolean, val message: String) : DialogState
+    data class CollectionCreated(val collectionName: String) : DialogState
+    data class ColorPicker(val settingKey: String, val currentColor: Long, val selectedRow: Int = 0, val selectedCol: Int = 0) : DialogState
+    data class HexColorInput(val settingKey: String, val currentHex: String = "", val selectedIndex: Int = 0) : DialogState
+    data class CoreMappingList(val mappings: List<Pair<String, String>>, val selectedIndex: Int = 0) : DialogState
+    data class CoreMappingEdit(val tag: String, override val currentName: String, override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState
 }
 
 @Composable
@@ -383,9 +391,9 @@ private fun GameRow(
     val scrollState = rememberScrollState()
 
     val pxPerMs = when (scrollSpeed) {
-        ScrollSpeed.SLOW -> 16
-        ScrollSpeed.NORMAL -> 8
-        ScrollSpeed.FAST -> 4
+        ScrollSpeed.SLOW -> 8
+        ScrollSpeed.NORMAL -> 4
+        ScrollSpeed.FAST -> 2
     }
 
     LaunchedEffect(isSelected, scrollSpeed) {
@@ -410,6 +418,7 @@ private fun GameRow(
         }
     }
 
+    val colors = LocalCannoliColors.current
     PillRow(isSelected = isSelected, verticalPadding = verticalPadding) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -419,7 +428,7 @@ private fun GameRow(
                 Text(
                     text = if (checkState) "☑" else "☐",
                     style = textStyle,
-                    color = if (isSelected) Color.Black else Color.White
+                    color = if (isSelected) colors.highlightText else colors.text
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
@@ -427,7 +436,7 @@ private fun GameRow(
                 Text(
                     text = "↕",
                     style = textStyle,
-                    color = if (isSelected) Color.Black else Color.White
+                    color = if (isSelected) colors.highlightText else colors.text
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
@@ -435,14 +444,14 @@ private fun GameRow(
                 Text(
                     text = "/",
                     style = textStyle,
-                    color = if (isSelected) Color.Black else GrayText
+                    color = if (isSelected) colors.highlightText else GrayText
                 )
                 Spacer(modifier = Modifier.width(4.dp))
             }
             Text(
                 text = game.displayName,
                 style = textStyle,
-                color = if (isSelected) Color.Black else Color.White,
+                color = if (isSelected) colors.highlightText else colors.text,
                 maxLines = 1,
                 softWrap = false
             )

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -23,6 +24,8 @@ import dev.cannoli.scorza.ui.screens.DialogState
 import dev.cannoli.scorza.ui.screens.GameListScreen
 import dev.cannoli.scorza.ui.screens.SettingsScreen
 import dev.cannoli.scorza.ui.screens.SystemListScreen
+import dev.cannoli.scorza.ui.theme.CannoliColors
+import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.cannoli.scorza.ui.viewmodel.SettingsViewModel
 import dev.cannoli.scorza.ui.viewmodel.SystemListViewModel
@@ -67,6 +70,14 @@ fun AppNavGraph(
         TextSize.LARGE -> 6.dp
     }
 
+    val cannoliColors = CannoliColors(
+        highlight = appSettings.colorHighlight,
+        text = appSettings.colorText,
+        highlightText = appSettings.colorHighlightText,
+        accent = appSettings.colorAccent
+    )
+
+    CompositionLocalProvider(LocalCannoliColors provides cannoliColors) {
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
@@ -80,6 +91,7 @@ fun AppNavGraph(
                 SystemListScreen(
                     viewModel = systemListViewModel,
                     backgroundImagePath = appSettings.backgroundImagePath,
+                    backgroundTint = appSettings.backgroundTint,
                     listFontSize = listFontSize,
                     listLineHeight = listLineHeight,
                     listVerticalPadding = listVerticalPadding,
@@ -95,6 +107,7 @@ fun AppNavGraph(
                 GameListScreen(
                     viewModel = gameListViewModel,
                     backgroundImagePath = appSettings.backgroundImagePath,
+                    backgroundTint = appSettings.backgroundTint,
                     listFontSize = listFontSize,
                     listLineHeight = listLineHeight,
                     listVerticalPadding = listVerticalPadding,
@@ -110,9 +123,12 @@ fun AppNavGraph(
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     viewModel = settingsViewModel,
+                    backgroundImagePath = appSettings.backgroundImagePath,
+                    backgroundTint = appSettings.backgroundTint,
                     listFontSize = listFontSize,
                     listLineHeight = listLineHeight,
                     listVerticalPadding = listVerticalPadding,
+                    dialogState = dialog,
                     onBack = { }
                 )
             }
@@ -130,5 +146,6 @@ fun AppNavGraph(
                 )
             }
         }
+    }
     }
 }

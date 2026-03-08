@@ -62,6 +62,31 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_SWAP_START_SELECT, false)
         set(value) = prefs.edit().putBoolean(KEY_SWAP_START_SELECT, value).apply()
 
+    var platformSwitching: Boolean
+        get() = prefs.getBoolean(KEY_PLATFORM_SWITCHING, false)
+        set(value) = prefs.edit().putBoolean(KEY_PLATFORM_SWITCHING, value).apply()
+
+    /** Background tint opacity 0–90 in steps of 10. 0 = off. */
+    var backgroundTint: Int
+        get() = prefs.getInt(KEY_BG_TINT, 0)
+        set(value) = prefs.edit().putInt(KEY_BG_TINT, value.coerceIn(0, 90)).apply()
+
+    var colorHighlight: String
+        get() = prefs.getString(KEY_COLOR_HIGHLIGHT, "#FFFFFF") ?: "#FFFFFF"
+        set(value) = prefs.edit().putString(KEY_COLOR_HIGHLIGHT, value).apply()
+
+    var colorText: String
+        get() = prefs.getString(KEY_COLOR_TEXT, "#FFFFFF") ?: "#FFFFFF"
+        set(value) = prefs.edit().putString(KEY_COLOR_TEXT, value).apply()
+
+    var colorHighlightText: String
+        get() = prefs.getString(KEY_COLOR_HIGHLIGHT_TEXT, "#000000") ?: "#000000"
+        set(value) = prefs.edit().putString(KEY_COLOR_HIGHLIGHT_TEXT, value).apply()
+
+    var colorAccent: String
+        get() = prefs.getString(KEY_COLOR_ACCENT, "#FFFFFF") ?: "#FFFFFF"
+        set(value) = prefs.edit().putString(KEY_COLOR_ACCENT, value).apply()
+
     companion object {
         const val DEFAULT_ROOT = "/storage/emulated/0/Cannoli/"
         const val DEFAULT_RA_PACKAGE = "com.retroarch.aarch64"
@@ -78,6 +103,12 @@ class SettingsRepository(context: Context) {
         private const val KEY_BATTERY_PCT = "battery_percentage"
         private const val KEY_BG_IMAGE = "bg_image"
         private const val KEY_SWAP_START_SELECT = "swap_start_select"
+        private const val KEY_BG_TINT = "bg_tint"
+        private const val KEY_COLOR_HIGHLIGHT = "color_highlight"
+        private const val KEY_COLOR_TEXT = "color_text"
+        private const val KEY_COLOR_HIGHLIGHT_TEXT = "color_highlight_text"
+        private const val KEY_COLOR_ACCENT = "color_accent"
+        private const val KEY_PLATFORM_SWITCHING = "platform_switching"
     }
 }
 
@@ -85,7 +116,7 @@ enum class ButtonLayout {
     XBOX, NINTENDO;
     companion object {
         fun fromString(value: String?): ButtonLayout =
-            values().firstOrNull { it.name == value } ?: XBOX
+            entries.firstOrNull { it.name == value } ?: XBOX
     }
 }
 
@@ -93,7 +124,7 @@ enum class TextSize {
     SMALL, MEDIUM, LARGE;
     companion object {
         fun fromString(value: String?): TextSize =
-            values().firstOrNull { it.name == value } ?: MEDIUM
+            entries.firstOrNull { it.name == value } ?: MEDIUM
     }
 }
 
@@ -101,7 +132,7 @@ enum class SortOrder {
     NATURAL, DATE_ADDED;
     companion object {
         fun fromString(value: String?): SortOrder =
-            values().firstOrNull { it.name == value } ?: NATURAL
+            entries.firstOrNull { it.name == value } ?: NATURAL
     }
 }
 
@@ -109,7 +140,7 @@ enum class ScrollSpeed {
     SLOW, NORMAL, FAST;
     companion object {
         fun fromString(value: String?): ScrollSpeed =
-            values().firstOrNull { it.name == value } ?: NORMAL
+            entries.firstOrNull { it.name == value } ?: NORMAL
     }
 }
 
@@ -117,6 +148,6 @@ enum class TimeFormat {
     TWELVE_HOUR, TWENTY_FOUR_HOUR;
     companion object {
         fun fromString(value: String?): TimeFormat =
-            values().firstOrNull { it.name == value } ?: TWELVE_HOUR
+            entries.firstOrNull { it.name == value } ?: TWELVE_HOUR
     }
 }

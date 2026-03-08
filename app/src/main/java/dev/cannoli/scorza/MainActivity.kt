@@ -32,7 +32,6 @@ import dev.cannoli.scorza.navigation.AppNavGraph
 import dev.cannoli.scorza.navigation.Routes
 import dev.cannoli.scorza.scanner.FileScanner
 import dev.cannoli.scorza.scanner.PlatformResolver
-import dev.cannoli.scorza.settings.ScrollSpeed
 import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.ui.components.KEY_BACKSPACE
 import dev.cannoli.scorza.ui.components.KEY_ENTER
@@ -40,8 +39,14 @@ import dev.cannoli.scorza.ui.components.KEY_SHIFT
 import dev.cannoli.scorza.ui.components.KEY_SPACE
 import dev.cannoli.scorza.ui.components.KEY_SYMBOLS
 import dev.cannoli.scorza.ui.components.getKeyboardRows
+import dev.cannoli.scorza.ui.components.COLOR_GRID_COLS
+import dev.cannoli.scorza.ui.components.HEX_KEYS
 import dev.cannoli.scorza.ui.screens.DialogState
+import dev.cannoli.scorza.ui.screens.KeyboardInputState
+import dev.cannoli.scorza.ui.theme.COLOR_PRESETS
 import dev.cannoli.scorza.ui.theme.CannoliTheme
+import dev.cannoli.scorza.ui.theme.colorToArgbLong
+import dev.cannoli.scorza.ui.theme.hexToColor
 import dev.cannoli.scorza.ui.theme.initFonts
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
 import dev.cannoli.scorza.ui.viewmodel.SettingsViewModel
@@ -73,6 +78,13 @@ class MainActivity : ComponentActivity() {
     private val dialogState = MutableStateFlow<DialogState>(DialogState.None)
     private val ioScope = CoroutineScope(Dispatchers.IO)
     @Volatile private var navigating = false
+
+    // Tracks context menu to return to after sub-dialog actions
+    private sealed interface ContextReturn {
+        data class Single(val gameName: String, val options: List<String>) : ContextReturn
+        data class Bulk(val gamePaths: List<String>, val options: List<String>) : ContextReturn
+    }
+    private var pendingContextReturn: ContextReturn? = null
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -182,17 +194,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun wireInput() {
-        fun dialogOpen() = dialogState.value != DialogState.None
-
         inputHandler.onUp = {
             when (val ds = dialogState.value) {
-                is DialogState.ContextMenu, is DialogState.BulkContextMenu -> {
-                    val menu = ds as? DialogState.ContextMenu
-                    val bulk = ds as? DialogState.BulkContextMenu
-                    val opts = menu?.options ?: bulk!!.options
-                    val cur = menu?.selectedOption ?: bulk!!.selectedOption
-                    val newIdx = if (cur <= 0) opts.lastIndex else cur - 1
-                    dialogState.value = menu?.copy(selectedOption = newIdx) ?: bulk!!.copy(selectedOption = newIdx)
+                is DialogState.ContextMenu,
+                is DialogState.BulkContextMenu -> {
+                    ds.withMenuDelta(-1)?.let { dialogState.value = it }
                 }
                 is DialogState.CollectionPicker -> {
                     if (ds.collections.isNotEmpty()) {
@@ -200,23 +206,35 @@ class MainActivity : ComponentActivity() {
                         dialogState.value = ds.copy(selectedIndex = newIdx)
                     }
                 }
-                is DialogState.RenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val newRow = if (ds.keyRow <= 0) rows.lastIndex else ds.keyRow - 1
-                    val newCol = ds.keyCol.coerceAtMost(rows[newRow].lastIndex)
-                    dialogState.value = ds.copy(keyRow = newRow, keyCol = newCol)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    val rows = getKeyboardRows(ks.caps, ks.symbols)
+                    val newRow = if (ks.keyRow <= 0) rows.lastIndex else ks.keyRow - 1
+                    val newCol = ks.keyCol.coerceAtMost(rows[newRow].lastIndex)
+                    dialogState.value = ds.withKeyboard(newRow, newCol)
                 }
-                is DialogState.NewCollectionInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val newRow = if (ds.keyRow <= 0) rows.lastIndex else ds.keyRow - 1
-                    val newCol = ds.keyCol.coerceAtMost(rows[newRow].lastIndex)
-                    dialogState.value = ds.copy(keyRow = newRow, keyCol = newCol)
+                is DialogState.CoreMappingList -> {
+                    if (ds.mappings.isNotEmpty()) {
+                        val newIdx = if (ds.selectedIndex <= 0) ds.mappings.lastIndex else ds.selectedIndex - 1
+                        dialogState.value = ds.copy(selectedIndex = newIdx)
+                    }
                 }
-                is DialogState.CollectionRenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val newRow = if (ds.keyRow <= 0) rows.lastIndex else ds.keyRow - 1
-                    val newCol = ds.keyCol.coerceAtMost(rows[newRow].lastIndex)
-                    dialogState.value = ds.copy(keyRow = newRow, keyCol = newCol)
+                is DialogState.ColorPicker -> {
+                    val totalRows = (COLOR_PRESETS.size + COLOR_GRID_COLS - 1) / COLOR_GRID_COLS
+                    val newRow = if (ds.selectedRow <= 0) totalRows - 1 else ds.selectedRow - 1
+                    dialogState.value = ds.copy(selectedRow = newRow)
+                }
+                is DialogState.HexColorInput -> {
+                    val rowSize = 9
+                    val curRow = ds.selectedIndex / rowSize
+                    val col = ds.selectedIndex % rowSize
+                    val totalRows = (HEX_KEYS.size + rowSize - 1) / rowSize
+                    val newRow = if (curRow <= 0) totalRows - 1 else curRow - 1
+                    val newIdx = (newRow * rowSize + col).coerceAtMost(HEX_KEYS.lastIndex)
+                    dialogState.value = ds.copy(selectedIndex = newIdx)
                 }
                 DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> {
@@ -235,13 +253,9 @@ class MainActivity : ComponentActivity() {
 
         inputHandler.onDown = {
             when (val ds = dialogState.value) {
-                is DialogState.ContextMenu, is DialogState.BulkContextMenu -> {
-                    val menu = ds as? DialogState.ContextMenu
-                    val bulk = ds as? DialogState.BulkContextMenu
-                    val opts = menu?.options ?: bulk!!.options
-                    val cur = menu?.selectedOption ?: bulk!!.selectedOption
-                    val newIdx = if (cur >= opts.lastIndex) 0 else cur + 1
-                    dialogState.value = menu?.copy(selectedOption = newIdx) ?: bulk!!.copy(selectedOption = newIdx)
+                is DialogState.ContextMenu,
+                is DialogState.BulkContextMenu -> {
+                    ds.withMenuDelta(1)?.let { dialogState.value = it }
                 }
                 is DialogState.CollectionPicker -> {
                     if (ds.collections.isNotEmpty()) {
@@ -249,23 +263,35 @@ class MainActivity : ComponentActivity() {
                         dialogState.value = ds.copy(selectedIndex = newIdx)
                     }
                 }
-                is DialogState.RenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val newRow = if (ds.keyRow >= rows.lastIndex) 0 else ds.keyRow + 1
-                    val newCol = ds.keyCol.coerceAtMost(rows[newRow].lastIndex)
-                    dialogState.value = ds.copy(keyRow = newRow, keyCol = newCol)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    val rows = getKeyboardRows(ks.caps, ks.symbols)
+                    val newRow = if (ks.keyRow >= rows.lastIndex) 0 else ks.keyRow + 1
+                    val newCol = ks.keyCol.coerceAtMost(rows[newRow].lastIndex)
+                    dialogState.value = ds.withKeyboard(newRow, newCol)
                 }
-                is DialogState.NewCollectionInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val newRow = if (ds.keyRow >= rows.lastIndex) 0 else ds.keyRow + 1
-                    val newCol = ds.keyCol.coerceAtMost(rows[newRow].lastIndex)
-                    dialogState.value = ds.copy(keyRow = newRow, keyCol = newCol)
+                is DialogState.CoreMappingList -> {
+                    if (ds.mappings.isNotEmpty()) {
+                        val newIdx = if (ds.selectedIndex >= ds.mappings.lastIndex) 0 else ds.selectedIndex + 1
+                        dialogState.value = ds.copy(selectedIndex = newIdx)
+                    }
                 }
-                is DialogState.CollectionRenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val newRow = if (ds.keyRow >= rows.lastIndex) 0 else ds.keyRow + 1
-                    val newCol = ds.keyCol.coerceAtMost(rows[newRow].lastIndex)
-                    dialogState.value = ds.copy(keyRow = newRow, keyCol = newCol)
+                is DialogState.ColorPicker -> {
+                    val totalRows = (COLOR_PRESETS.size + COLOR_GRID_COLS - 1) / COLOR_GRID_COLS
+                    val newRow = if (ds.selectedRow >= totalRows - 1) 0 else ds.selectedRow + 1
+                    dialogState.value = ds.copy(selectedRow = newRow)
+                }
+                is DialogState.HexColorInput -> {
+                    val rowSize = 9
+                    val curRow = ds.selectedIndex / rowSize
+                    val col = ds.selectedIndex % rowSize
+                    val totalRows = (HEX_KEYS.size + rowSize - 1) / rowSize
+                    val newRow = if (curRow >= totalRows - 1) 0 else curRow + 1
+                    val newIdx = (newRow * rowSize + col).coerceAtMost(HEX_KEYS.lastIndex)
+                    dialogState.value = ds.copy(selectedIndex = newIdx)
                 }
                 DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> {
@@ -284,23 +310,26 @@ class MainActivity : ComponentActivity() {
 
         inputHandler.onLeft = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val rowSize = rows[ds.keyRow.coerceIn(0, rows.lastIndex)].size
-                    val newCol = if (ds.keyCol <= 0) rowSize - 1 else ds.keyCol - 1
-                    dialogState.value = ds.copy(keyCol = newCol)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    val rows = getKeyboardRows(ks.caps, ks.symbols)
+                    val rowSize = rows[ks.keyRow.coerceIn(0, rows.lastIndex)].size
+                    val newCol = if (ks.keyCol <= 0) rowSize - 1 else ks.keyCol - 1
+                    dialogState.value = ds.withKeyboard(ks.keyRow, newCol)
                 }
-                is DialogState.NewCollectionInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val rowSize = rows[ds.keyRow.coerceIn(0, rows.lastIndex)].size
-                    val newCol = if (ds.keyCol <= 0) rowSize - 1 else ds.keyCol - 1
-                    dialogState.value = ds.copy(keyCol = newCol)
+                is DialogState.ColorPicker -> {
+                    val newCol = if (ds.selectedCol <= 0) COLOR_GRID_COLS - 1 else ds.selectedCol - 1
+                    dialogState.value = ds.copy(selectedCol = newCol)
                 }
-                is DialogState.CollectionRenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val rowSize = rows[ds.keyRow.coerceIn(0, rows.lastIndex)].size
-                    val newCol = if (ds.keyCol <= 0) rowSize - 1 else ds.keyCol - 1
-                    dialogState.value = ds.copy(keyCol = newCol)
+                is DialogState.HexColorInput -> {
+                    val rowSize = 9
+                    val curRow = ds.selectedIndex / rowSize
+                    val col = ds.selectedIndex % rowSize
+                    val newCol = if (col <= 0) rowSize - 1 else col - 1
+                    dialogState.value = ds.copy(selectedIndex = curRow * rowSize + newCol)
                 }
                 DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> if (!systemListViewModel.isReorderMode()) systemListViewModel.pageJump(-systemListViewModel.pageSize)
@@ -313,23 +342,26 @@ class MainActivity : ComponentActivity() {
 
         inputHandler.onRight = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val rowSize = rows[ds.keyRow.coerceIn(0, rows.lastIndex)].size
-                    val newCol = if (ds.keyCol >= rowSize - 1) 0 else ds.keyCol + 1
-                    dialogState.value = ds.copy(keyCol = newCol)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    val rows = getKeyboardRows(ks.caps, ks.symbols)
+                    val rowSize = rows[ks.keyRow.coerceIn(0, rows.lastIndex)].size
+                    val newCol = if (ks.keyCol >= rowSize - 1) 0 else ks.keyCol + 1
+                    dialogState.value = ds.withKeyboard(ks.keyRow, newCol)
                 }
-                is DialogState.NewCollectionInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val rowSize = rows[ds.keyRow.coerceIn(0, rows.lastIndex)].size
-                    val newCol = if (ds.keyCol >= rowSize - 1) 0 else ds.keyCol + 1
-                    dialogState.value = ds.copy(keyCol = newCol)
+                is DialogState.ColorPicker -> {
+                    val newCol = if (ds.selectedCol >= COLOR_GRID_COLS - 1) 0 else ds.selectedCol + 1
+                    dialogState.value = ds.copy(selectedCol = newCol)
                 }
-                is DialogState.CollectionRenameInput -> {
-                    val rows = getKeyboardRows(ds.caps, ds.symbols)
-                    val rowSize = rows[ds.keyRow.coerceIn(0, rows.lastIndex)].size
-                    val newCol = if (ds.keyCol >= rowSize - 1) 0 else ds.keyCol + 1
-                    dialogState.value = ds.copy(keyCol = newCol)
+                is DialogState.HexColorInput -> {
+                    val rowSize = 9
+                    val curRow = ds.selectedIndex / rowSize
+                    val col = ds.selectedIndex % rowSize
+                    val newCol = if (col >= rowSize - 1) 0 else col + 1
+                    dialogState.value = ds.copy(selectedIndex = curRow * rowSize + newCol)
                 }
                 DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> if (!systemListViewModel.isReorderMode()) systemListViewModel.pageJump(systemListViewModel.pageSize)
@@ -371,8 +403,59 @@ class MainActivity : ComponentActivity() {
                     onSymbols = { dialogState.value = ds.copy(symbols = !ds.symbols) },
                     onEnter = { onCollectionRenameConfirm(ds) }
                 )
+                is DialogState.CoreMappingList -> {
+                    val (tag, core) = ds.mappings[ds.selectedIndex]
+                    dialogState.value = DialogState.CoreMappingEdit(
+                        tag = tag,
+                        currentName = core,
+                        cursorPos = core.length
+                    )
+                }
+                is DialogState.CoreMappingEdit -> handleKeyboardConfirm(ds.caps, ds.symbols, ds.keyRow, ds.keyCol, ds.currentName, ds.cursorPos,
+                    onChar = { name, pos -> dialogState.value = ds.copy(currentName = name, cursorPos = pos) },
+                    onShift = { dialogState.value = ds.copy(caps = !ds.caps) },
+                    onSymbols = { dialogState.value = ds.copy(symbols = !ds.symbols) },
+                    onEnter = {
+                        platformResolver.setCoreMapping(ds.tag, ds.currentName.trim())
+                        val mappings = platformResolver.getAllCoreMappings()
+                        val idx = mappings.indexOfFirst { it.first == ds.tag }.coerceAtLeast(0)
+                        dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
+                    }
+                )
+                is DialogState.ColorPicker -> {
+                    val idx = ds.selectedRow * COLOR_GRID_COLS + ds.selectedCol
+                    val preset = COLOR_PRESETS.getOrNull(idx)
+                    if (preset != null) {
+                        val hex = "#%06X".format(preset.color and 0xFFFFFF)
+                        settingsViewModel.setColor(ds.settingKey, hex)
+                        dialogState.value = DialogState.None
+                    }
+                }
+                is DialogState.HexColorInput -> {
+                    val key = HEX_KEYS.getOrNull(ds.selectedIndex) ?: ""
+                    when (key) {
+                        "" -> {}
+                        "←" -> {
+                            if (ds.currentHex.isNotEmpty()) {
+                                dialogState.value = ds.copy(currentHex = ds.currentHex.dropLast(1))
+                            }
+                        }
+                        "↵" -> {
+                            if (ds.currentHex.length == 6) {
+                                settingsViewModel.setColor(ds.settingKey, "#${ds.currentHex}")
+                                dialogState.value = DialogState.None
+                            }
+                        }
+                        else -> {
+                            if (ds.currentHex.length < 6) {
+                                dialogState.value = ds.copy(currentHex = ds.currentHex + key)
+                            }
+                        }
+                    }
+                }
                 is DialogState.DeleteCollectionConfirm -> {
                     val name = ds.collectionName
+                    pendingContextReturn = null
                     dialogState.value = DialogState.None
                     ioScope.launch {
                         scanner.deleteCollection(name)
@@ -384,7 +467,7 @@ class MainActivity : ComponentActivity() {
                                 systemListViewModel.scan()
                             }
                         } else {
-                            gameListViewModel.loadCollectionsList()
+                            gameListViewModel.loadCollectionsList(restoreIndex = true)
                         }
                     }
                 }
@@ -406,6 +489,12 @@ class MainActivity : ComponentActivity() {
                             val key = settingsViewModel.enterSelected()
                             if (key == "sd_root") {
                                 folderPickerLauncher.launch(null)
+                            } else if (key != null && key.startsWith("color_")) {
+                                openColorPicker(key)
+                            } else if (key == "core_mapping") {
+                                dialogState.value = DialogState.CoreMappingList(
+                                    mappings = platformResolver.getAllCoreMappings()
+                                )
                             } else if (key != null) {
                                 val displayValue = settingsViewModel.getSelectedItemDisplayValue()
                                 dialogState.value = DialogState.RenameInput(
@@ -423,30 +512,60 @@ class MainActivity : ComponentActivity() {
 
         inputHandler.onBack = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> {
-                    if (ds.cursorPos > 0) {
-                        val newName = ds.currentName.removeRange(ds.cursorPos - 1, ds.cursorPos)
-                        dialogState.value = ds.copy(currentName = newName, cursorPos = ds.cursorPos - 1)
-                    }
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    ds.withBackspace()?.let { dialogState.value = it }
                 }
-                is DialogState.NewCollectionInput -> {
-                    if (ds.cursorPos > 0) {
-                        val newName = ds.currentName.removeRange(ds.cursorPos - 1, ds.cursorPos)
-                        dialogState.value = ds.copy(currentName = newName, cursorPos = ds.cursorPos - 1)
-                    }
+                is DialogState.CoreMappingList -> {
+                    platformResolver.saveCoreMappings()
+                    dialogState.value = DialogState.None
                 }
-                is DialogState.CollectionRenameInput -> {
-                    if (ds.cursorPos > 0) {
-                        val newName = ds.currentName.removeRange(ds.cursorPos - 1, ds.cursorPos)
-                        dialogState.value = ds.copy(currentName = newName, cursorPos = ds.cursorPos - 1)
-                    }
+                is DialogState.ColorPicker -> {
+                    dialogState.value = DialogState.None
                 }
-                is DialogState.ContextMenu, is DialogState.BulkContextMenu,
+                is DialogState.HexColorInput -> {
+                    // Go back to color picker
+                    openColorPicker(ds.settingKey)
+                }
+                is DialogState.ContextMenu, is DialogState.BulkContextMenu -> {
+                    pendingContextReturn = null
+                    dialogState.value = DialogState.None
+                }
                 is DialogState.DeleteConfirm,
-                is DialogState.DeleteCollectionConfirm,
-                is DialogState.CollectionPicker,
-                is DialogState.CollectionCreated,
-                is DialogState.RenameResult, is DialogState.MissingCore,
+                is DialogState.DeleteCollectionConfirm -> {
+                    restoreContextMenu()
+                }
+                is DialogState.CollectionPicker -> {
+                    restoreContextMenu()
+                }
+                is DialogState.CollectionCreated -> {
+                    // Return to collection picker, which will return to context menu on its own dismiss
+                    val ret = pendingContextReturn
+                    val gamePaths = when (ret) {
+                        is ContextReturn.Single -> {
+                            val game = gameListViewModel.getSelectedGame()
+                            if (game != null) listOf(game.file.absolutePath) else emptyList()
+                        }
+                        is ContextReturn.Bulk -> ret.gamePaths
+                        null -> emptyList()
+                    }
+                    val title = when (ret) {
+                        is ContextReturn.Single -> ret.gameName
+                        is ContextReturn.Bulk -> "${ret.gamePaths.size} Selected"
+                        null -> ""
+                    }
+                    if (gamePaths.isNotEmpty()) {
+                        openCollectionManager(gamePaths, title)
+                    } else {
+                        restoreContextMenu()
+                    }
+                }
+                is DialogState.RenameResult -> {
+                    restoreContextMenu()
+                }
+                is DialogState.MissingCore,
                 is DialogState.MissingApp -> {
                     dialogState.value = DialogState.None
                 }
@@ -465,7 +584,7 @@ class MainActivity : ComponentActivity() {
                             if (!gameListViewModel.exitSubfolder()) {
                                 if (glState.isCollection && glState.collectionName != null
                                     && !glState.collectionName.equals("Favorites", ignoreCase = true)) {
-                                    gameListViewModel.loadCollectionsList()
+                                    gameListViewModel.loadCollectionsList(restoreIndex = true)
                                 } else {
                                     navController?.popBackStack()
                                     systemListViewModel.scan()
@@ -489,6 +608,16 @@ class MainActivity : ComponentActivity() {
                 is DialogState.RenameInput -> onRenameConfirm(ds)
                 is DialogState.NewCollectionInput -> onNewCollectionConfirm(ds)
                 is DialogState.CollectionRenameInput -> onCollectionRenameConfirm(ds)
+                is DialogState.CoreMappingEdit -> {
+                    platformResolver.setCoreMapping(ds.tag, ds.currentName.trim())
+                    val mappings = platformResolver.getAllCoreMappings()
+                    val idx = mappings.indexOfFirst { it.first == ds.tag }.coerceAtLeast(0)
+                    dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
+                }
+                is DialogState.CoreMappingList -> {
+                    platformResolver.saveCoreMappings()
+                    dialogState.value = DialogState.None
+                }
                 DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> {
                         if (systemListViewModel.isMultiSelectMode()) {
@@ -556,9 +685,13 @@ class MainActivity : ComponentActivity() {
 
         inputHandler.onSelect = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> dialogState.value = ds.copy(caps = !ds.caps)
-                is DialogState.NewCollectionInput -> dialogState.value = ds.copy(caps = !ds.caps)
-                is DialogState.CollectionRenameInput -> dialogState.value = ds.copy(caps = !ds.caps)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    dialogState.value = ds.withCaps(!ks.caps)
+                }
                 DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> {
                         if (systemListViewModel.isReorderMode()) {
@@ -594,16 +727,56 @@ class MainActivity : ComponentActivity() {
                 is DialogState.CollectionPicker -> {
                     dialogState.value = DialogState.NewCollectionInput(gamePaths = ds.gamePaths)
                 }
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    ds.withInsertedChar(" ")?.let { dialogState.value = it }
+                }
+                is DialogState.ColorPicker -> {
+                    // Open hex keyboard
+                    val currentHex = settingsViewModel.getColorHex(ds.settingKey).removePrefix("#")
+                    dialogState.value = DialogState.HexColorInput(
+                        settingKey = ds.settingKey,
+                        currentHex = currentHex
+                    )
+                }
                 else -> {}
             }
         }
 
         inputHandler.onY = {
-            when (dialogState.value) {
+            when (val ds = dialogState.value) {
+                is DialogState.CoreMappingEdit -> {
+                    val mappings = platformResolver.getAllCoreMappings()
+                    val idx = mappings.indexOfFirst { it.first == ds.tag }.coerceAtLeast(0)
+                    dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
+                }
                 is DialogState.RenameInput,
-                is DialogState.NewCollectionInput,
                 is DialogState.CollectionRenameInput -> {
-                    dialogState.value = DialogState.None
+                    restoreContextMenu()
+                }
+                is DialogState.NewCollectionInput -> {
+                    // Return to collection picker
+                    val ret = pendingContextReturn
+                    val gamePaths = when (ret) {
+                        is ContextReturn.Single -> {
+                            val game = gameListViewModel.getSelectedGame()
+                            if (game != null) listOf(game.file.absolutePath) else emptyList()
+                        }
+                        is ContextReturn.Bulk -> ret.gamePaths
+                        null -> emptyList()
+                    }
+                    val title = when (ret) {
+                        is ContextReturn.Single -> ret.gameName
+                        is ContextReturn.Bulk -> "${ret.gamePaths.size} Selected"
+                        null -> ""
+                    }
+                    if (gamePaths.isNotEmpty()) {
+                        openCollectionManager(gamePaths, title)
+                    } else {
+                        restoreContextMenu()
+                    }
                 }
                 else -> {}
             }
@@ -611,41 +784,71 @@ class MainActivity : ComponentActivity() {
 
         inputHandler.onL1 = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> if (ds.cursorPos > 0) dialogState.value = ds.copy(cursorPos = ds.cursorPos - 1)
-                is DialogState.NewCollectionInput -> if (ds.cursorPos > 0) dialogState.value = ds.copy(cursorPos = ds.cursorPos - 1)
-                is DialogState.CollectionRenameInput -> if (ds.cursorPos > 0) dialogState.value = ds.copy(cursorPos = ds.cursorPos - 1)
-                DialogState.None -> if (currentScreen() == Screen.GAME_LIST) switchPlatform(-1)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    if (ks.cursorPos > 0) dialogState.value = ds.withCursor(ks.cursorPos - 1)
+                }
+                DialogState.None -> if (currentScreen() == Screen.GAME_LIST && settings.platformSwitching) switchPlatform(-1)
                 else -> {}
             }
         }
 
         inputHandler.onR1 = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> if (ds.cursorPos < ds.currentName.length) dialogState.value = ds.copy(cursorPos = ds.cursorPos + 1)
-                is DialogState.NewCollectionInput -> if (ds.cursorPos < ds.currentName.length) dialogState.value = ds.copy(cursorPos = ds.cursorPos + 1)
-                is DialogState.CollectionRenameInput -> if (ds.cursorPos < ds.currentName.length) dialogState.value = ds.copy(cursorPos = ds.cursorPos + 1)
-                DialogState.None -> if (currentScreen() == Screen.GAME_LIST) switchPlatform(1)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    if (ks.cursorPos < ks.currentName.length) dialogState.value = ds.withCursor(ks.cursorPos + 1)
+                }
+                DialogState.None -> if (currentScreen() == Screen.GAME_LIST && settings.platformSwitching) switchPlatform(1)
                 else -> {}
             }
         }
 
         inputHandler.onL2 = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> dialogState.value = ds.copy(cursorPos = 0)
-                is DialogState.NewCollectionInput -> dialogState.value = ds.copy(cursorPos = 0)
-                is DialogState.CollectionRenameInput -> dialogState.value = ds.copy(cursorPos = 0)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    dialogState.value = ds.withCursor(0)
+                }
                 else -> {}
             }
         }
 
         inputHandler.onR2 = {
             when (val ds = dialogState.value) {
-                is DialogState.RenameInput -> dialogState.value = ds.copy(cursorPos = ds.currentName.length)
-                is DialogState.NewCollectionInput -> dialogState.value = ds.copy(cursorPos = ds.currentName.length)
-                is DialogState.CollectionRenameInput -> dialogState.value = ds.copy(cursorPos = ds.currentName.length)
+                is DialogState.RenameInput,
+                is DialogState.NewCollectionInput,
+                is DialogState.CollectionRenameInput,
+                is DialogState.CoreMappingEdit -> {
+                    val ks = ds.asKeyboardState()!!
+                    dialogState.value = ds.withCursor(ks.currentName.length)
+                }
                 else -> {}
             }
         }
+    }
+
+    private fun openColorPicker(settingKey: String) {
+        val hex = settingsViewModel.getColorHex(settingKey)
+        val color = hexToColor(hex) ?: androidx.compose.ui.graphics.Color.White
+        val argb = colorToArgbLong(color)
+        val idx = COLOR_PRESETS.indexOfFirst { it.color == argb }
+        val row = if (idx >= 0) idx / COLOR_GRID_COLS else 0
+        val col = if (idx >= 0) idx % COLOR_GRID_COLS else 0
+        dialogState.value = DialogState.ColorPicker(
+            settingKey = settingKey,
+            currentColor = argb,
+            selectedRow = row,
+            selectedCol = col
+        )
     }
 
     private fun onSystemListConfirm() {
@@ -679,16 +882,16 @@ class MainActivity : ComponentActivity() {
                     navigating = false
                 }
             }
-            is SystemListViewModel.ListItem.ToolItem -> {
-                val result = apkLauncher.launch(item.packageName)
-                if (result is LaunchResult.AppNotInstalled) {
-                    dialogState.value = DialogState.MissingApp(item.packageName)
-                }
-            }
+            is SystemListViewModel.ListItem.ToolItem,
             is SystemListViewModel.ListItem.PortItem -> {
-                val result = apkLauncher.launch(item.packageName)
+                val pkg = when (item) {
+                    is SystemListViewModel.ListItem.ToolItem -> item.packageName
+                    is SystemListViewModel.ListItem.PortItem -> item.packageName
+                    else -> return
+                }
+                val result = apkLauncher.launch(pkg)
                 if (result is LaunchResult.AppNotInstalled) {
-                    dialogState.value = DialogState.MissingApp(item.packageName)
+                    dialogState.value = DialogState.MissingApp(pkg)
                 }
             }
             else -> {}
@@ -746,6 +949,8 @@ class MainActivity : ComponentActivity() {
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
         val game = gameListViewModel.getSelectedGame() ?: return
         val glState = gameListViewModel.state.value
+        // Single-game context menu: always close after action
+        pendingContextReturn = null
         when (state.options[state.selectedOption]) {
             "Rename" -> {
                 if (glState.isCollectionsList) {
@@ -791,6 +996,7 @@ class MainActivity : ComponentActivity() {
 
     private fun onDeleteConfirm() {
         val game = gameListViewModel.getSelectedGame() ?: return
+        pendingContextReturn = null
         ioScope.launch {
             scanner.deleteGame(game)
             gameListViewModel.reload()
@@ -813,7 +1019,39 @@ class MainActivity : ComponentActivity() {
                 systemListViewModel.scan()
             }
         }
-        dialogState.value = DialogState.None
+        restoreContextMenu()
+    }
+
+    private fun restoreContextMenu() {
+        when (val ret = pendingContextReturn) {
+            is ContextReturn.Single -> {
+                val game = gameListViewModel.getSelectedGame()
+                if (game != null && !game.isSubfolder) {
+                    val isFav = scanner.isInCollection("Favorites", game.file.absolutePath)
+                    val favOption = if (isFav) "Remove from Favorites" else "Add to Favorites"
+                    val glState = gameListViewModel.state.value
+                    val options = if (glState.isCollectionsList) {
+                        listOf("Rename", "Delete")
+                    } else {
+                        listOf(favOption, "Manage Collections", "Rename", "Delete")
+                    }
+                    dialogState.value = DialogState.ContextMenu(
+                        gameName = game.displayName,
+                        options = options
+                    )
+                } else {
+                    pendingContextReturn = null
+                    dialogState.value = DialogState.None
+                }
+            }
+            is ContextReturn.Bulk -> {
+                dialogState.value = DialogState.BulkContextMenu(
+                    gamePaths = ret.gamePaths,
+                    options = ret.options
+                )
+            }
+            null -> dialogState.value = DialogState.None
+        }
     }
 
     private fun openCollectionManager(gamePaths: List<String>, title: String) {
@@ -836,6 +1074,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onBulkContextMenuConfirm(state: DialogState.BulkContextMenu) {
+        pendingContextReturn = ContextReturn.Bulk(state.gamePaths, state.options)
         when (state.options[state.selectedOption]) {
             "Add to Favorites" -> {
                 ioScope.launch {
@@ -844,15 +1083,17 @@ class MainActivity : ComponentActivity() {
                     }
                     systemListViewModel.scan()
                 }
-                dialogState.value = DialogState.None
+                restoreContextMenu()
             }
             "Manage Collections" -> {
                 openCollectionManager(state.gamePaths, "${state.gamePaths.size} Selected")
             }
             "Delete" -> {
+                pendingContextReturn = null
                 dialogState.value = DialogState.DeleteConfirm(gameName = "${state.gamePaths.size} items")
             }
             "Remove from Collection" -> {
+                pendingContextReturn = null
                 val collName = gameListViewModel.state.value.collectionName ?: return
                 ioScope.launch {
                     state.gamePaths.forEach { path ->
@@ -918,13 +1159,13 @@ class MainActivity : ComponentActivity() {
     private fun onCollectionRenameConfirm(state: DialogState.CollectionRenameInput) {
         val newName = state.currentName.trim()
         if (newName.isEmpty() || newName == state.oldName) {
-            dialogState.value = DialogState.None
+            restoreContextMenu()
             return
         }
-        dialogState.value = DialogState.None
+        restoreContextMenu()
         ioScope.launch {
             scanner.renameCollection(state.oldName, newName)
-            gameListViewModel.loadCollectionsList()
+            gameListViewModel.loadCollectionsList(restoreIndex = true)
         }
     }
 
@@ -932,11 +1173,11 @@ class MainActivity : ComponentActivity() {
         val game = gameListViewModel.getSelectedGame() ?: return
         val newName = state.currentName.trim()
         if (newName.isEmpty() || newName == game.displayName) {
-            dialogState.value = DialogState.None
+            restoreContextMenu()
             return
         }
 
-        dialogState.value = DialogState.None
+        restoreContextMenu()
         ioScope.launch {
             atomicRename.rename(game.file, newName, game.platformTag)
             gameListViewModel.reload()
@@ -952,13 +1193,7 @@ class MainActivity : ComponentActivity() {
         val currentIndex = tags.indexOf(currentTag)
         if (currentIndex == -1) return
 
-        val newIndex = (currentIndex + delta).let { i ->
-            when {
-                i < 0 -> tags.size - 1
-                i >= tags.size -> 0
-                else -> i
-            }
-        }
+        val newIndex = (currentIndex + delta).mod(tags.size)
 
         val newTag = tags[newIndex]
         navigating = true
@@ -969,6 +1204,68 @@ class MainActivity : ComponentActivity() {
             }
             navigating = false
         }
+    }
+
+    // -- Keyboard state helpers to reduce duplication across RenameInput/NewCollectionInput/CollectionRenameInput --
+
+    private fun DialogState.asKeyboardState(): KeyboardInputState? = this as? KeyboardInputState
+
+    private fun DialogState.withKeyboard(row: Int, col: Int): DialogState = when (this) {
+        is DialogState.RenameInput -> copy(keyRow = row, keyCol = col)
+        is DialogState.NewCollectionInput -> copy(keyRow = row, keyCol = col)
+        is DialogState.CollectionRenameInput -> copy(keyRow = row, keyCol = col)
+        is DialogState.CoreMappingEdit -> copy(keyRow = row, keyCol = col)
+        else -> this
+    }
+
+    private fun DialogState.withCursor(pos: Int): DialogState = when (this) {
+        is DialogState.RenameInput -> copy(cursorPos = pos)
+        is DialogState.NewCollectionInput -> copy(cursorPos = pos)
+        is DialogState.CollectionRenameInput -> copy(cursorPos = pos)
+        is DialogState.CoreMappingEdit -> copy(cursorPos = pos)
+        else -> this
+    }
+
+    private fun DialogState.withCaps(caps: Boolean): DialogState = when (this) {
+        is DialogState.RenameInput -> copy(caps = caps)
+        is DialogState.NewCollectionInput -> copy(caps = caps)
+        is DialogState.CollectionRenameInput -> copy(caps = caps)
+        is DialogState.CoreMappingEdit -> copy(caps = caps)
+        else -> this
+    }
+
+    private fun DialogState.withNameAndCursor(name: String, pos: Int): DialogState = when (this) {
+        is DialogState.RenameInput -> copy(currentName = name, cursorPos = pos)
+        is DialogState.NewCollectionInput -> copy(currentName = name, cursorPos = pos)
+        is DialogState.CollectionRenameInput -> copy(currentName = name, cursorPos = pos)
+        is DialogState.CoreMappingEdit -> copy(currentName = name, cursorPos = pos)
+        else -> this
+    }
+
+    /** Moves context menu selection by delta, wrapping around. */
+    private fun DialogState.withMenuDelta(delta: Int): DialogState? = when (this) {
+        is DialogState.ContextMenu -> {
+            val newIdx = (selectedOption + delta).mod(options.size)
+            copy(selectedOption = newIdx)
+        }
+        is DialogState.BulkContextMenu -> {
+            val newIdx = (selectedOption + delta).mod(options.size)
+            copy(selectedOption = newIdx)
+        }
+        else -> null
+    }
+
+    private fun DialogState.withBackspace(): DialogState? {
+        val ks = asKeyboardState() ?: return null
+        if (ks.cursorPos <= 0) return null
+        val newName = ks.currentName.removeRange(ks.cursorPos - 1, ks.cursorPos)
+        return withNameAndCursor(newName, ks.cursorPos - 1)
+    }
+
+    private fun DialogState.withInsertedChar(char: String): DialogState? {
+        val ks = asKeyboardState() ?: return null
+        val newName = ks.currentName.substring(0, ks.cursorPos) + char + ks.currentName.substring(ks.cursorPos)
+        return withNameAndCursor(newName, ks.cursorPos + 1)
     }
 
     private fun currentScreen(): Screen {

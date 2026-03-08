@@ -1,6 +1,5 @@
 package dev.cannoli.scorza.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +11,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -20,7 +18,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.scorza.R
 import dev.cannoli.scorza.ui.components.BottomBar
+import dev.cannoli.scorza.ui.components.ColorPickerOverlay
+import dev.cannoli.scorza.ui.components.HexColorInputOverlay
+import dev.cannoli.scorza.ui.components.KeyboardOverlay
 import dev.cannoli.scorza.ui.components.List
+import dev.cannoli.scorza.ui.components.ScreenBackground
 import dev.cannoli.scorza.ui.components.PillRowKeyValue
 import dev.cannoli.scorza.ui.components.PillRowText
 import dev.cannoli.scorza.ui.components.ScreenTitle
@@ -30,17 +32,91 @@ import dev.cannoli.scorza.ui.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    backgroundImagePath: String? = null,
+    backgroundTint: Int = 0,
     listFontSize: TextUnit = 22.sp,
     listLineHeight: TextUnit = 32.sp,
     listVerticalPadding: Dp = 8.dp,
+    dialogState: DialogState = DialogState.None,
     onBack: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
 
+    when (dialogState) {
+        is DialogState.ColorPicker -> {
+            ColorPickerOverlay(
+                selectedRow = dialogState.selectedRow,
+                selectedCol = dialogState.selectedCol,
+                currentColor = dialogState.currentColor
+            )
+            return
+        }
+        is DialogState.HexColorInput -> {
+            HexColorInputOverlay(
+                currentHex = dialogState.currentHex,
+                selectedIndex = dialogState.selectedIndex
+            )
+            return
+        }
+        is DialogState.CoreMappingList -> {
+            ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(screenPadding)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 4.dp, bottom = 48.dp)
+                    ) {
+                        ScreenTitle(
+                            text = stringResource(R.string.setting_core_mapping),
+                            fontSize = listFontSize,
+                            lineHeight = listLineHeight
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        List(
+                            items = dialogState.mappings,
+                            selectedIndex = dialogState.selectedIndex
+                        ) { index, (tag, core) ->
+                            PillRowKeyValue(
+                                label = tag,
+                                value = core,
+                                isSelected = dialogState.selectedIndex == index,
+                                fontSize = listFontSize,
+                                lineHeight = listLineHeight,
+                                verticalPadding = listVerticalPadding
+                            )
+                        }
+                    }
+                    BottomBar(
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        leftItems = listOf("B" to stringResource(R.string.label_back)),
+                        rightItems = listOf("A" to stringResource(R.string.label_select))
+                    )
+                }
+            }
+            return
+        }
+        is DialogState.CoreMappingEdit -> {
+            KeyboardOverlay(
+                text = dialogState.currentName,
+                cursorPos = dialogState.cursorPos,
+                keyRow = dialogState.keyRow,
+                keyCol = dialogState.keyCol,
+                caps = dialogState.caps,
+                symbols = dialogState.symbols
+            )
+            return
+        }
+        else -> {}
+    }
+
+    ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .padding(screenPadding)
     ) {
         if (state.inSubList) {
@@ -57,14 +133,27 @@ fun SettingsScreen(
                     isSelected = state.selectedIndex == index,
                     fontSize = listFontSize,
                     lineHeight = listLineHeight,
-                    verticalPadding = listVerticalPadding
+                    verticalPadding = listVerticalPadding,
+                    swatchColor = item.swatchColor
                 )
             }
 
+            val selectedItem = state.items.getOrNull(state.selectedIndex)
+            val isColorItem = selectedItem?.key?.startsWith("color_") == true
+            val leftItems = if (isColorItem) {
+                listOf("B" to stringResource(R.string.label_back))
+            } else {
+                listOf("B" to stringResource(R.string.label_back), "◀▶" to stringResource(R.string.label_change))
+            }
+            val rightItems = if (isColorItem) {
+                listOf("A" to stringResource(R.string.label_select), "\uDB81\uDC0A" to stringResource(R.string.label_save))
+            } else {
+                listOf("\uDB81\uDC0A" to stringResource(R.string.label_save))
+            }
             BottomBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
-                leftItems = listOf("B" to stringResource(R.string.label_back), "◀▶" to stringResource(R.string.label_change)),
-                rightItems = listOf("\uDB81\uDC0A" to stringResource(R.string.label_save))
+                leftItems = leftItems,
+                rightItems = rightItems
             )
         } else {
             Column(
@@ -98,5 +187,6 @@ fun SettingsScreen(
                 rightItems = listOf("A" to stringResource(R.string.label_select))
             )
         }
+    }
     }
 }
