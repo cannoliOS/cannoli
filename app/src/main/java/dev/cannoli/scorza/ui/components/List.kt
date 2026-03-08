@@ -1,14 +1,13 @@
 package dev.cannoli.scorza.ui.components
 
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -25,29 +24,31 @@ fun <T> List(
 ) {
     ListScrollEffect(listState, selectedIndex, items.size, scrollTarget, onVisibleRangeChanged)
 
-    if (itemHeight != Dp.Unspecified) {
-        BoxWithConstraints(modifier = modifier) {
-            val fullItems = (maxHeight / itemHeight).toInt()
-            val constrainedHeight = itemHeight * fullItems
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.height(constrainedHeight),
-                contentPadding = PaddingValues(bottom = 2000.dp)
-            ) {
-                itemsIndexed(items) { index, item ->
-                    itemContent(index, item)
-                }
+    val listModifier = if (itemHeight != Dp.Unspecified) {
+        modifier.layout { measurable, constraints ->
+            val itemPx = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.size > 0 }?.size
+                ?: itemHeight.roundToPx()
+            val fullItems = constraints.maxHeight / itemPx
+            val heightPx = fullItems * itemPx
+            val placeable = measurable.measure(
+                constraints.copy(maxHeight = heightPx, minHeight = 0)
+            )
+            layout(placeable.width, heightPx) {
+                placeable.place(0, 0)
             }
         }
     } else {
-        LazyColumn(
-            state = listState,
-            modifier = modifier,
-            contentPadding = PaddingValues(bottom = 2000.dp)
-        ) {
-            itemsIndexed(items) { index, item ->
-                itemContent(index, item)
-            }
+        modifier
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = listModifier,
+        contentPadding = PaddingValues(bottom = 2000.dp)
+    ) {
+        itemsIndexed(items) { index, item ->
+            itemContent(index, item)
         }
     }
 }
