@@ -60,8 +60,8 @@ fun SystemListScreen(
                     is ListItem.CollectionsFolder -> "Collections"
                     is ListItem.PlatformItem -> item.platform.displayName
                     is ListItem.CollectionItem -> item.name
-                    is ListItem.ToolsFolder -> "Tools"
-                    is ListItem.PortsFolder -> "Ports"
+                    is ListItem.ToolsFolder -> item.name
+                    is ListItem.PortsFolder -> item.name
                     is ListItem.Divider -> null
                 }
                 if (label != null) {
@@ -86,7 +86,7 @@ fun SystemListScreen(
             }
             BottomBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
-                leftItems = listOf("\uDB81\uDC25" to stringResource(R.string.label_sleep)),
+                leftItems = listOf("X" to stringResource(R.string.label_settings)),
                 rightItems = rightItems
             )
         }

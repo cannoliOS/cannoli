@@ -83,7 +83,7 @@ class GameListViewModel(
         }
     }
 
-    fun loadApkList(type: String, onReady: () -> Unit = {}) {
+    fun loadApkList(type: String, displayName: String, onReady: () -> Unit = {}) {
         breadcrumbStack.clear()
         indexStack.clear()
         viewModelScope.launch(Dispatchers.IO) {
@@ -98,7 +98,7 @@ class GameListViewModel(
             }
             _state.value = State(
                 platformTag = type,
-                breadcrumb = if (type == "tools") "Tools" else "Ports",
+                breadcrumb = displayName,
                 games = games,
                 selectedIndex = 0,
                 isLoading = false

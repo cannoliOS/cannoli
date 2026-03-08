@@ -135,6 +135,31 @@ class PlatformResolver(private val cannoliRoot: File) {
             ?: tag
     }
 
+    fun setDisplayName(tag: String, name: String) {
+        val configFile = File(cannoliRoot, "Config/platforms.ini")
+        val currentNames = ini.getSection("platforms").toMutableMap()
+        val defaultName = defaultPlatformNames[tag]
+        if (name == defaultName || name == tag) {
+            currentNames.remove(tag)
+        } else {
+            currentNames[tag] = name
+        }
+        val cores = ini.getSection("cores")
+        val sb = StringBuilder()
+        sb.appendLine("[platforms]")
+        for ((t, n) in currentNames) {
+            sb.appendLine("%-6s = %s".format(t, n))
+        }
+        sb.appendLine()
+        sb.appendLine("[cores]")
+        for ((t, c) in cores) {
+            sb.appendLine("%-6s = %s".format(t, c))
+        }
+        configFile.parentFile?.mkdirs()
+        configFile.writeText(sb.toString())
+        ini = IniParser.parse(configFile)
+    }
+
     fun getCoreName(tag: String): String? {
         return userCores[tag]
             ?: ini.get("cores", tag)

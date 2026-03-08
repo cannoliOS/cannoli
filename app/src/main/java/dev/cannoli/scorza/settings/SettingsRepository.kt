@@ -74,6 +74,14 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_SHOW_PORTS, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_PORTS, value).apply()
 
+    var toolsName: String
+        get() = prefs.getString(KEY_TOOLS_NAME, null) ?: "Tools"
+        set(value) = prefs.edit().putString(KEY_TOOLS_NAME, if (value == "Tools") null else value).apply()
+
+    var portsName: String
+        get() = prefs.getString(KEY_PORTS_NAME, null) ?: "Ports"
+        set(value) = prefs.edit().putString(KEY_PORTS_NAME, if (value == "Ports") null else value).apply()
+
     /** Background tint opacity 0–90 in steps of 10. 0 = off. */
     var backgroundTint: Int
         get() = prefs.getInt(KEY_BG_TINT, 0)
@@ -119,6 +127,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_PLATFORM_SWITCHING = "platform_switching"
         private const val KEY_SHOW_TOOLS = "show_tools"
         private const val KEY_SHOW_PORTS = "show_ports"
+        private const val KEY_TOOLS_NAME = "tools_name"
+        private const val KEY_PORTS_NAME = "ports_name"
     }
 }
 

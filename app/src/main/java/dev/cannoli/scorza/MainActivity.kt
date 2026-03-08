@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         hideSystemUI()
         if (::systemListViewModel.isInitialized) {
-            systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+            rescanSystemList()
         }
     }
 
@@ -174,7 +174,7 @@ class MainActivity : ComponentActivity() {
         )
         wireInput()
 
-        systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+        rescanSystemList()
 
         setContent {
             CannoliTheme {
@@ -484,7 +484,7 @@ class MainActivity : ComponentActivity() {
                         if (remaining.isEmpty()) {
                             kotlinx.coroutines.withContext(Dispatchers.Main) {
                                 navController?.popBackStack()
-                                systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+                                rescanSystemList()
                             }
                         } else {
                             gameListViewModel.loadCollectionsList(restoreIndex = true)
@@ -599,7 +599,7 @@ class MainActivity : ComponentActivity() {
                 DialogState.None -> when (currentScreen()) {
                     Screen.SYSTEM_LIST -> {
                         if (systemListViewModel.isMultiSelectMode()) systemListViewModel.cancelMultiSelect()
-                        else if (systemListViewModel.isReorderMode()) systemListViewModel.cancelReorder(showTools = settings.showTools, showPorts = settings.showPorts)
+                        else if (systemListViewModel.isReorderMode()) systemListViewModel.cancelReorder(showTools = settings.showTools, showPorts = settings.showPorts, toolsName = settings.toolsName, portsName = settings.portsName)
                     }
                     Screen.GAME_LIST -> {
                         if (gameListViewModel.isMultiSelectMode()) {
@@ -614,7 +614,7 @@ class MainActivity : ComponentActivity() {
                                     gameListViewModel.loadCollectionsList(restoreIndex = true)
                                 } else {
                                     navController?.popBackStack()
-                                    systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+                                    rescanSystemList()
                                 }
                             }
                         }
@@ -653,8 +653,7 @@ class MainActivity : ComponentActivity() {
                         } else if (systemListViewModel.isReorderMode()) {
                             systemListViewModel.confirmReorder()
                         } else {
-                            settingsViewModel.load()
-                            navController?.navigate(Routes.SETTINGS)
+                            onSystemListContextMenu()
                         }
                     }
                     Screen.GAME_LIST -> {
@@ -707,7 +706,7 @@ class MainActivity : ComponentActivity() {
                     Screen.SETTINGS -> {
                         if (settingsViewModel.state.value.inSubList) {
                             navController?.popBackStack()
-                            systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+                            rescanSystemList()
                         }
                     }
                 }
@@ -766,12 +765,18 @@ class MainActivity : ComponentActivity() {
                     ds.withInsertedChar(" ")?.let { dialogState.value = it }
                 }
                 is DialogState.ColorPicker -> {
-                    // Open hex keyboard
                     val currentHex = settingsViewModel.getColorHex(ds.settingKey).removePrefix("#")
                     dialogState.value = DialogState.HexColorInput(
                         settingKey = ds.settingKey,
                         currentHex = currentHex
                     )
+                }
+                DialogState.None -> when (currentScreen()) {
+                    Screen.SYSTEM_LIST -> {
+                        settingsViewModel.load()
+                        navController?.navigate(Routes.SETTINGS)
+                    }
+                    else -> {}
                 }
                 else -> {}
             }
@@ -908,9 +913,18 @@ class MainActivity : ComponentActivity() {
         val dir = if (state.type == "tools") scanner.tools else scanner.ports
         ioScope.launch {
             scanner.syncApkLaunches(dir, selected)
-            systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+            rescanSystemList()
         }
         dialogState.value = DialogState.None
+    }
+
+    private fun rescanSystemList() {
+        systemListViewModel.scan(
+            showTools = settings.showTools,
+            showPorts = settings.showPorts,
+            toolsName = settings.toolsName,
+            portsName = settings.portsName
+        )
     }
 
     private fun openColorPicker(settingKey: String) {
@@ -926,6 +940,47 @@ class MainActivity : ComponentActivity() {
             selectedRow = row,
             selectedCol = col
         )
+    }
+
+    private fun onSystemListContextMenu() {
+        val item = systemListViewModel.getSelectedItem() ?: return
+        val name = when (item) {
+            is SystemListViewModel.ListItem.PlatformItem -> item.platform.displayName
+            is SystemListViewModel.ListItem.ToolsFolder -> item.name
+            is SystemListViewModel.ListItem.PortsFolder -> item.name
+            else -> return
+        }
+        dialogState.value = DialogState.ContextMenu(
+            gameName = name,
+            options = listOf("Rename")
+        )
+    }
+
+    private fun onSystemListRename(state: DialogState.RenameInput) {
+        val newName = state.currentName.trim()
+        if (newName.isEmpty() || newName == state.gameName) {
+            dialogState.value = DialogState.None
+            return
+        }
+        val item = systemListViewModel.getSelectedItem()
+        when (item) {
+            is SystemListViewModel.ListItem.PlatformItem -> {
+                ioScope.launch {
+                    platformResolver.setDisplayName(item.platform.tag, newName)
+                    rescanSystemList()
+                }
+            }
+            is SystemListViewModel.ListItem.ToolsFolder -> {
+                settings.toolsName = newName
+                rescanSystemList()
+            }
+            is SystemListViewModel.ListItem.PortsFolder -> {
+                settings.portsName = newName
+                rescanSystemList()
+            }
+            else -> {}
+        }
+        dialogState.value = DialogState.None
     }
 
     private fun onSystemListConfirm() {
@@ -961,14 +1016,14 @@ class MainActivity : ComponentActivity() {
             }
             is SystemListViewModel.ListItem.ToolsFolder -> {
                 navigating = true
-                gameListViewModel.loadApkList("tools") {
+                gameListViewModel.loadApkList("tools", item.name) {
                     navController?.navigate(Routes.gameList("tools"))
                     navigating = false
                 }
             }
             is SystemListViewModel.ListItem.PortsFolder -> {
                 navigating = true
-                gameListViewModel.loadApkList("ports") {
+                gameListViewModel.loadApkList("ports", item.name) {
                     navController?.navigate(Routes.gameList("ports"))
                     navigating = false
                 }
@@ -1026,9 +1081,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
+        if (currentScreen() == Screen.SYSTEM_LIST) {
+            when (state.options[state.selectedOption]) {
+                "Rename" -> {
+                    dialogState.value = DialogState.RenameInput(
+                        gameName = state.gameName,
+                        currentName = state.gameName,
+                        cursorPos = state.gameName.length
+                    )
+                }
+            }
+            return
+        }
         val game = gameListViewModel.getSelectedGame() ?: return
         val glState = gameListViewModel.state.value
-        // Single-game context menu: always close after action
         pendingContextReturn = null
         when (state.options[state.selectedOption]) {
             "Rename" -> {
@@ -1059,14 +1125,14 @@ class MainActivity : ComponentActivity() {
             "Add to Favorites" -> {
                 ioScope.launch {
                     scanner.addToCollection("Favorites", game.file.absolutePath)
-                    systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+                    rescanSystemList()
                 }
                 dialogState.value = DialogState.None
             }
             "Remove from Favorites" -> {
                 ioScope.launch {
                     scanner.removeFromCollection("Favorites", game.file.absolutePath)
-                    systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+                    rescanSystemList()
                 }
                 dialogState.value = DialogState.None
             }
@@ -1095,7 +1161,7 @@ class MainActivity : ComponentActivity() {
                     toRemove.forEach { collName -> scanner.removeFromCollection(collName, path) }
                 }
                 gameListViewModel.reload()
-                systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+                rescanSystemList()
             }
         }
         restoreContextMenu()
@@ -1160,7 +1226,7 @@ class MainActivity : ComponentActivity() {
                     state.gamePaths.forEach { path ->
                         scanner.addToCollection("Favorites", path)
                     }
-                    systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+                    rescanSystemList()
                 }
                 restoreContextMenu()
             }
@@ -1230,7 +1296,7 @@ class MainActivity : ComponentActivity() {
                 scanner.addToCollection(name, path)
             }
             gameListViewModel.reload()
-            systemListViewModel.scan(showTools = settings.showTools, showPorts = settings.showPorts)
+            rescanSystemList()
         }
         dialogState.value = DialogState.CollectionCreated(collectionName = name)
     }
@@ -1249,6 +1315,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onRenameConfirm(state: DialogState.RenameInput) {
+        if (currentScreen() == Screen.SYSTEM_LIST) {
+            onSystemListRename(state)
+            return
+        }
         val game = gameListViewModel.getSelectedGame() ?: return
         val newName = state.currentName.trim()
         if (newName.isEmpty() || newName == game.displayName) {

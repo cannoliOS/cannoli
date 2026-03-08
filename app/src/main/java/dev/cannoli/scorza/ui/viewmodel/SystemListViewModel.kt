@@ -18,8 +18,8 @@ class SystemListViewModel(
         data class CollectionsFolder(val count: Int) : ListItem()
         data class PlatformItem(val platform: Platform) : ListItem()
         data class CollectionItem(val name: String, val count: Int) : ListItem()
-        data class ToolsFolder(val count: Int) : ListItem()
-        data class PortsFolder(val count: Int) : ListItem()
+        data class ToolsFolder(val name: String, val count: Int) : ListItem()
+        data class PortsFolder(val name: String, val count: Int) : ListItem()
         data class Divider(val label: String? = null) : ListItem()
     }
 
@@ -41,7 +41,7 @@ class SystemListViewModel(
     var pageSize: Int = 10
     var firstVisibleIndex: Int = 0
 
-    fun scan(showTools: Boolean = false, showPorts: Boolean = false) {
+    fun scan(showTools: Boolean = false, showPorts: Boolean = false, toolsName: String = "Tools", portsName: String = "Ports") {
         val prev = _state.value
         val prevItemCount = prev.items.size
         val prevSelectedIndex = prev.selectedIndex
@@ -69,10 +69,10 @@ class SystemListViewModel(
             val reorderableItems = mutableListOf<ListItem>()
             platforms.forEach { reorderableItems.add(ListItem.PlatformItem(it)) }
             if (showPorts && ports.isNotEmpty()) {
-                reorderableItems.add(ListItem.PortsFolder(ports.size))
+                reorderableItems.add(ListItem.PortsFolder(portsName, ports.size))
             }
             if (showTools && tools.isNotEmpty()) {
-                reorderableItems.add(ListItem.ToolsFolder(tools.size))
+                reorderableItems.add(ListItem.ToolsFolder(toolsName, tools.size))
             }
             val ordered = applyCustomOrder(reorderableItems, scanner.loadPlatformOrder())
             items.addAll(ordered)
@@ -196,10 +196,10 @@ class SystemListViewModel(
         _state.value = current.copy(reorderMode = false, reorderOriginalIndex = -1)
     }
 
-    fun cancelReorder(showTools: Boolean = false, showPorts: Boolean = false) {
+    fun cancelReorder(showTools: Boolean = false, showPorts: Boolean = false, toolsName: String = "Tools", portsName: String = "Ports") {
         val current = _state.value
         if (!current.reorderMode) return
-        scan(showTools, showPorts)
+        scan(showTools, showPorts, toolsName, portsName)
     }
 
     fun enterMultiSelect() {
