@@ -743,7 +743,7 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 gameListViewModel.enterReorderMode()
                             }
-                        } else if (!glState.isCollectionsList && glState.platformTag != "tools" && glState.platformTag != "ports") {
+                        } else if (!glState.isCollectionsList && glState.subfolderPath == null && glState.platformTag != "tools" && glState.platformTag != "ports") {
                             if (gameListViewModel.isMultiSelectMode()) {
                                 gameListViewModel.confirmMultiSelect()
                             } else {
