@@ -48,10 +48,6 @@ fun AppNavGraph(
 ) {
     val dialog by dialogState.collectAsState()
     val appSettings by settingsViewModel.appSettings.collectAsState()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-
-    val showStatusBar = currentRoute != Routes.SETTINGS
 
     val listFontSize = when (appSettings.textSize) {
         TextSize.SMALL -> 16.sp
@@ -131,17 +127,15 @@ fun AppNavGraph(
             }
         }
 
-        if (showStatusBar) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(20.dp)
-            ) {
-                StatusBar(
-                    showBatteryPercentage = appSettings.showBatteryPct,
-                    use24hTime = appSettings.use24h
-                )
-            }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(20.dp)
+        ) {
+            StatusBar(
+                showBatteryPercentage = appSettings.showBatteryPct,
+                use24hTime = appSettings.use24h
+            )
         }
     }
     }
