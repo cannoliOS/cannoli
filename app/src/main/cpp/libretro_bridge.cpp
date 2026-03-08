@@ -360,6 +360,16 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeCopyFrame(JNIEnv *env, job
     g_frame_ready = false;
 }
 
+JNIEXPORT void JNICALL
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeCopyLastFrame(JNIEnv *env, jobject, jobject buffer) {
+    if (!g_frame_buf) return;
+    void *dst = env->GetDirectBufferAddress(buffer);
+    if (!dst) return;
+    size_t bpp = (g_pixel_format == RETRO_PIXEL_FORMAT_XRGB8888) ? 4 : 2;
+    size_t size = g_frame_width * g_frame_height * bpp;
+    memcpy(dst, g_frame_buf, size);
+}
+
 JNIEXPORT jboolean JNICALL
 Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSaveState(JNIEnv *env, jobject, jstring path) {
     size_t size = core.serialize_size();

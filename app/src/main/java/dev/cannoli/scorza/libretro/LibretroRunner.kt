@@ -45,6 +45,7 @@ class LibretroRunner {
     fun getFrameHeight(): Int = nativeGetFrameHeight()
     fun hasNewFrame(): Boolean = nativeHasNewFrame()
     fun copyFrame(buffer: ByteBuffer) = nativeCopyFrame(buffer)
+    fun copyLastFrame(buffer: ByteBuffer) = nativeCopyLastFrame(buffer)
 
     fun saveState(path: String): Boolean = nativeSaveState(path)
     fun loadState(path: String): Boolean = nativeLoadState(path)
@@ -66,6 +67,7 @@ class LibretroRunner {
     private external fun nativeGetFrameHeight(): Int
     private external fun nativeHasNewFrame(): Boolean
     private external fun nativeCopyFrame(buffer: ByteBuffer)
+    private external fun nativeCopyLastFrame(buffer: ByteBuffer)
     private external fun nativeSaveState(path: String): Boolean
     private external fun nativeLoadState(path: String): Boolean
     private external fun nativeSaveSRAM(path: String): Boolean
