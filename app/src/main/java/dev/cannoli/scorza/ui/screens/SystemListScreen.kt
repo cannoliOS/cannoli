@@ -66,7 +66,7 @@ fun SystemListScreen(
                     viewModel.pageSize = count
                 },
                 modifier = Modifier
-                    .fillMaxWidth(0.65f)
+                    .fillMaxWidth()
                     .padding(bottom = 48.dp)
             ) { index, item ->
                 val label = when (item) {
