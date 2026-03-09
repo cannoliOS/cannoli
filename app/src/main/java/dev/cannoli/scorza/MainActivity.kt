@@ -460,16 +460,7 @@ class MainActivity : ComponentActivity() {
                         selectedIndex = selectedIdx
                     )
                 }
-                is DialogState.CorePicker -> {
-                    if (ds.cores.isNotEmpty()) {
-                        val chosen = ds.cores[ds.selectedIndex]
-                        val runner = if (chosen.runnerLabel == "Internal" || chosen.runnerLabel == "RetroArch") chosen.runnerLabel else null
-                        platformResolver.setCoreMapping(ds.tag, chosen.coreId, runner)
-                        val mappings = platformResolver.getDetailedMappings()
-                        val idx = mappings.indexOfFirst { it.tag == ds.tag }.coerceAtLeast(0)
-                        dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
-                    }
-                }
+                is DialogState.CorePicker -> onCorePickerConfirm(ds)
                 is DialogState.ColorList -> {
                     val entry = ds.colors[ds.selectedIndex]
                     openColorPicker(entry.key)
@@ -582,9 +573,13 @@ class MainActivity : ComponentActivity() {
                     ds.withBackspace()?.let { dialogState.value = it }
                 }
                 is DialogState.CorePicker -> {
-                    val mappings = platformResolver.getDetailedMappings()
-                    val idx = mappings.indexOfFirst { it.tag == ds.tag }.coerceAtLeast(0)
-                    dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
+                    if (ds.gamePath != null) {
+                        restoreContextMenu()
+                    } else {
+                        val mappings = platformResolver.getDetailedMappings()
+                        val idx = mappings.indexOfFirst { it.tag == ds.tag }.coerceAtLeast(0)
+                        dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
+                    }
                 }
                 is DialogState.CoreMappingList -> {
                     platformResolver.reloadCoreMappings()
@@ -688,16 +683,7 @@ class MainActivity : ComponentActivity() {
                 is DialogState.RenameInput -> onRenameConfirm(ds)
                 is DialogState.NewCollectionInput -> onNewCollectionConfirm(ds)
                 is DialogState.CollectionRenameInput -> onCollectionRenameConfirm(ds)
-                is DialogState.CorePicker -> {
-                    if (ds.cores.isNotEmpty()) {
-                        val chosen = ds.cores[ds.selectedIndex]
-                        val runner = if (chosen.runnerLabel == "Internal" || chosen.runnerLabel == "RetroArch") chosen.runnerLabel else null
-                        platformResolver.setCoreMapping(ds.tag, chosen.coreId, runner)
-                        val mappings = platformResolver.getDetailedMappings()
-                        val idx = mappings.indexOfFirst { it.tag == ds.tag }.coerceAtLeast(0)
-                        dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
-                    }
-                }
+                is DialogState.CorePicker -> onCorePickerConfirm(ds)
                 is DialogState.AppPicker -> onAppPickerConfirm(ds)
                 is DialogState.CoreMappingList -> {
                     platformResolver.saveCoreMappings()
@@ -749,11 +735,9 @@ class MainActivity : ComponentActivity() {
                                     options = listOf("Rename", "Delete")
                                 )
                             } else if (!game.isSubfolder) {
-                                val isFav = scanner.isInCollection("Favorites", game.file.absolutePath)
-                                val favOption = if (isFav) "Remove from Favorites" else "Add to Favorites"
                                 dialogState.value = DialogState.ContextMenu(
                                     gameName = game.displayName,
-                                    options = listOf(favOption, "Manage Collections", "Rename", "Delete")
+                                    options = buildGameContextOptions(game)
                                 )
                             }
                         }
@@ -1099,9 +1083,10 @@ class MainActivity : ComponentActivity() {
 
         val result = when (val target = game.launchTarget) {
             is LaunchTarget.RetroArch -> {
-                val core = platformResolver.getCoreName(game.platformTag)
+                val gameOverride = platformResolver.getGameOverride(game.file.absolutePath)
+                val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag)
                 if (core != null) {
-                    val runnerPref = platformResolver.getRunnerPreference(game.platformTag)
+                    val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
                     if (runnerPref != "RetroArch") {
                         val embeddedCorePath = findEmbeddedCore(core)
                         if (embeddedCorePath != null) {
@@ -1191,6 +1176,36 @@ class MainActivity : ComponentActivity() {
         startActivity(intent)
     }
 
+    private fun onCorePickerConfirm(ds: DialogState.CorePicker) {
+        if (ds.cores.isEmpty()) return
+        val chosen = ds.cores[ds.selectedIndex]
+        if (ds.gamePath != null) {
+            if (chosen.coreId.isEmpty()) {
+                platformResolver.setGameOverride(ds.gamePath, null, null)
+            } else {
+                val runner = if (chosen.runnerLabel == "Internal" || chosen.runnerLabel == "RetroArch") chosen.runnerLabel else null
+                platformResolver.setGameOverride(ds.gamePath, chosen.coreId, runner)
+            }
+            restoreContextMenu()
+        } else {
+            val runner = if (chosen.runnerLabel == "Internal" || chosen.runnerLabel == "RetroArch") chosen.runnerLabel else null
+            platformResolver.setCoreMapping(ds.tag, chosen.coreId, runner)
+            val mappings = platformResolver.getDetailedMappings()
+            val idx = mappings.indexOfFirst { it.tag == ds.tag }.coerceAtLeast(0)
+            dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
+        }
+    }
+
+    private fun buildGameContextOptions(game: dev.cannoli.scorza.model.Game): List<String> {
+        val isFav = scanner.isInCollection("Favorites", game.file.absolutePath)
+        val favOption = if (isFav) "Remove from Favorites" else "Add to Favorites"
+        val options = mutableListOf(favOption, "Manage Collections", "Core Override", "Rename", "Delete")
+        if (game.launchTarget !is LaunchTarget.RetroArch) {
+            options.remove("Core Override")
+        }
+        return options
+    }
+
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
         if (currentScreen() == Screen.SYSTEM_LIST) {
             when (state.options[state.selectedOption]) {
@@ -1247,6 +1262,26 @@ class MainActivity : ComponentActivity() {
                 }
                 dialogState.value = DialogState.None
             }
+            "Core Override" -> {
+                val tag = game.platformTag
+                val options = platformResolver.getCorePickerOptions(tag)
+                val defaultOption = DialogState.CorePickerOption("", "Default (Platform Setting)", "")
+                val allOptions = listOf(defaultOption) + options
+                val override = platformResolver.getGameOverride(game.file.absolutePath)
+                val selectedIdx = if (override != null) {
+                    allOptions.indexOfFirst { it.coreId == override.coreId && (it.runnerLabel == override.runner || override.runner == null) }
+                        .coerceAtLeast(0)
+                } else {
+                    0
+                }
+                dialogState.value = DialogState.CorePicker(
+                    tag = tag,
+                    platformName = game.displayName,
+                    cores = allOptions,
+                    selectedIndex = selectedIdx,
+                    gamePath = game.file.absolutePath
+                )
+            }
         }
     }
 
@@ -1283,13 +1318,11 @@ class MainActivity : ComponentActivity() {
             is ContextReturn.Single -> {
                 val game = gameListViewModel.getSelectedGame()
                 if (game != null && !game.isSubfolder) {
-                    val isFav = scanner.isInCollection("Favorites", game.file.absolutePath)
-                    val favOption = if (isFav) "Remove from Favorites" else "Add to Favorites"
                     val glState = gameListViewModel.state.value
                     val options = if (glState.isCollectionsList) {
                         listOf("Rename", "Delete")
                     } else {
-                        listOf(favOption, "Manage Collections", "Rename", "Delete")
+                        buildGameContextOptions(game)
                     }
                     dialogState.value = DialogState.ContextMenu(
                         gameName = game.displayName,

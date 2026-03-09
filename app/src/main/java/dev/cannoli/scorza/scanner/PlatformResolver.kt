@@ -8,6 +8,8 @@ import dev.cannoli.scorza.util.sortedNatural
 import org.json.JSONObject
 import java.io.File
 
+data class GameCoreOverride(val coreId: String, val runner: String?)
+
 class PlatformResolver(
     private val cannoliRoot: File,
     private val coreInfo: CoreInfoRepository? = null
@@ -87,6 +89,7 @@ class PlatformResolver(
     private var ini: IniData = IniData(emptyMap())
     private var userCores: MutableMap<String, String> = mutableMapOf()
     private var userRunners: MutableMap<String, String> = mutableMapOf()
+    private var gameOverrides: MutableMap<String, GameCoreOverride> = mutableMapOf()
     private val coresFile get() = File(cannoliRoot, "Config/cores.json")
 
     fun load() {
@@ -101,13 +104,24 @@ class PlatformResolver(
     private fun loadCoreMappings() {
         userCores.clear()
         userRunners.clear()
+        gameOverrides.clear()
         if (!coresFile.exists()) return
         try {
             val json = JSONObject(coresFile.readText())
-            val cores = json.optJSONObject("cores") ?: return
-            for (key in cores.keys()) userCores[key] = cores.getString(key)
-            val runners = json.optJSONObject("runners") ?: return
-            for (key in runners.keys()) userRunners[key] = runners.getString(key)
+            val cores = json.optJSONObject("cores")
+            if (cores != null) for (key in cores.keys()) userCores[key] = cores.getString(key)
+            val runners = json.optJSONObject("runners")
+            if (runners != null) for (key in runners.keys()) userRunners[key] = runners.getString(key)
+            val overrides = json.optJSONObject("gameOverrides")
+            if (overrides != null) {
+                for (path in overrides.keys()) {
+                    val obj = overrides.getJSONObject(path)
+                    gameOverrides[path] = GameCoreOverride(
+                        coreId = obj.getString("core"),
+                        runner = obj.optString("runner", "").ifEmpty { null }
+                    )
+                }
+            }
         } catch (_: Exception) {}
     }
 
@@ -124,6 +138,16 @@ class PlatformResolver(
             val runners = JSONObject()
             for ((tag, runner) in userRunners) runners.put(tag, runner)
             json.put("runners", runners)
+        }
+        if (gameOverrides.isNotEmpty()) {
+            val overrides = JSONObject()
+            for ((path, ov) in gameOverrides) {
+                val obj = JSONObject()
+                obj.put("core", ov.coreId)
+                if (ov.runner != null) obj.put("runner", ov.runner)
+                overrides.put(path, obj)
+            }
+            json.put("gameOverrides", overrides)
         }
         coresFile.parentFile?.mkdirs()
         coresFile.writeText(json.toString(2))
@@ -147,6 +171,17 @@ class PlatformResolver(
     }
 
     fun getRunnerPreference(tag: String): String? = userRunners[tag]
+
+    fun getGameOverride(gamePath: String): GameCoreOverride? = gameOverrides[gamePath]
+
+    fun setGameOverride(gamePath: String, coreId: String?, runner: String?) {
+        if (coreId == null) {
+            gameOverrides.remove(gamePath)
+        } else {
+            gameOverrides[gamePath] = GameCoreOverride(coreId, runner)
+        }
+        saveCoreMappings()
+    }
 
     fun getCoreDisplayName(coreId: String): String {
         return coreInfo?.getDisplayName(coreId) ?: coreId
