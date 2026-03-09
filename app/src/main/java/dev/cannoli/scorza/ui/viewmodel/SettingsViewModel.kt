@@ -259,7 +259,7 @@ class SettingsViewModel(
         }
     }
 
-    fun getColorEntries(): List<dev.cannoli.scorza.ui.screens.DialogState.ColorEntry> {
+    fun getColorEntries(): List<dev.cannoli.scorza.ui.screens.ColorEntry> {
         val names = mapOf(
             "color_text" to "Text",
             "color_highlight" to "Highlight",
@@ -269,7 +269,7 @@ class SettingsViewModel(
         return names.map { (key, label) ->
             val hex = getColorHex(key)
             val color = hexToColor(hex)
-            dev.cannoli.scorza.ui.screens.DialogState.ColorEntry(
+            dev.cannoli.scorza.ui.screens.ColorEntry(
                 key = key,
                 label = label,
                 hex = hex,

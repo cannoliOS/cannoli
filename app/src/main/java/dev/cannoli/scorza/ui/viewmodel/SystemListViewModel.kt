@@ -40,12 +40,19 @@ class SystemListViewModel(
 
     var pageSize: Int = 10
     var firstVisibleIndex: Int = 0
+    private var savedPosition: Pair<Int, Int>? = null
+
+    fun savePosition() {
+        savedPosition = _state.value.selectedIndex to firstVisibleIndex
+    }
 
     fun scan(showTools: Boolean = false, showPorts: Boolean = false, showEmpty: Boolean = false, toolsName: String = "Tools", portsName: String = "Ports") {
         val prev = _state.value
         val prevItemCount = prev.items.size
-        val prevSelectedIndex = prev.selectedIndex
-        val prevFirstVisible = firstVisibleIndex
+        val restored = savedPosition
+        savedPosition = null
+        val prevSelectedIndex = restored?.first ?: prev.selectedIndex
+        val prevFirstVisible = restored?.second ?: firstVisibleIndex
 
         viewModelScope.launch(Dispatchers.IO) {
             val platforms = scanner.scanPlatforms()
@@ -78,9 +85,9 @@ class SystemListViewModel(
             val ordered = applyCustomOrder(reorderableItems, scanner.loadPlatformOrder())
             items.addAll(ordered)
 
-            val sameSize = items.size == prevItemCount && prevItemCount > 0
+            val canRestore = (restored != null || items.size == prevItemCount) && prevItemCount > 0
             val selectableIndices = items.indices.filter { items[it] !is ListItem.Divider }
-            val (safeIndex, scrollTo) = if (sameSize) {
+            val (safeIndex, scrollTo) = if (canRestore) {
                 val idx = when {
                     selectableIndices.isEmpty() -> 0
                     prevSelectedIndex in selectableIndices -> prevSelectedIndex

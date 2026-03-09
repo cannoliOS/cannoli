@@ -43,6 +43,7 @@ import dev.cannoli.scorza.ui.components.ConfirmOverlay
 import dev.cannoli.scorza.ui.components.DialogOverlay
 import dev.cannoli.scorza.ui.components.List
 import dev.cannoli.scorza.ui.components.MessageOverlay
+import dev.cannoli.scorza.ui.components.LaunchErrorDialog
 import dev.cannoli.scorza.ui.components.MissingAppDialog
 import dev.cannoli.scorza.ui.components.MissingCoreDialog
 import dev.cannoli.scorza.ui.components.PillRow
@@ -199,7 +200,8 @@ fun GameListScreen(
 
             when (dialogState) {
                 is DialogState.MissingCore -> MissingCoreDialog(dialogState.coreName)
-                is DialogState.MissingApp -> MissingAppDialog(dialogState.packageName)
+                is DialogState.MissingApp -> MissingAppDialog(dialogState.appName)
+                is DialogState.LaunchError -> LaunchErrorDialog(dialogState.message)
                 is DialogState.DeleteConfirm -> ConfirmOverlay(
                     message = stringResource(R.string.dialog_delete_confirm, dialogState.gameName)
                 )

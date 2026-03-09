@@ -6,18 +6,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+internal var lastVisibleCount = 10
+internal var lastFirstVisibleIndex = 0
+
 @Composable
 fun ListScrollEffect(
     listState: LazyListState,
     selectedIndex: Int,
     itemCount: Int,
-    scrollTarget: Int = 0,
+    scrollTarget: Int = -1,
     onVisibleRangeChanged: ((firstVisible: Int, visibleCount: Int) -> Unit)? = null
 ) {
     LaunchedEffect(itemCount, scrollTarget) {
-        if (itemCount > 0) {
-            val target = scrollTarget.coerceIn(0, itemCount - 1)
-            listState.scrollToItem(target)
+        if (itemCount > 0 && scrollTarget >= 0) {
+            listState.scrollToItem(scrollTarget.coerceIn(0, itemCount - 1))
         }
     }
 
@@ -47,7 +49,9 @@ fun ListScrollEffect(
                 info.offset + info.size <= listState.layoutInfo.viewportEndOffset
         }
         val fullyVisibleCount = fullyVisible.size.coerceAtLeast(1)
+        lastVisibleCount = fullyVisibleCount
         val firstFullyVisible = fullyVisible.firstOrNull()?.index ?: 0
+        lastFirstVisibleIndex = firstFullyVisible
         val lastFullyVisible = fullyVisible.lastOrNull()?.index ?: 0
 
         if (index < firstFullyVisible) {

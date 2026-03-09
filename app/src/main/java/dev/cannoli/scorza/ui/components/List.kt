@@ -18,7 +18,7 @@ fun <T> List(
     modifier: Modifier = Modifier,
     itemHeight: Dp = Dp.Unspecified,
     scrollTarget: Int = 0,
-    listState: LazyListState = rememberLazyListState(),
+    listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = scrollTarget),
     onVisibleRangeChanged: ((firstVisible: Int, visibleCount: Int) -> Unit)? = null,
     itemContent: @Composable (index: Int, item: T) -> Unit
 ) {

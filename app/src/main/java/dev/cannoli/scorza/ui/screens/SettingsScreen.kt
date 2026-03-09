@@ -100,9 +100,9 @@ fun SettingsScreen(
                 listOf("B" to stringResource(R.string.label_back), "◀▶" to stringResource(R.string.label_change))
             }
             val rightItems = if (isColorItem) {
-                listOf("A" to stringResource(R.string.label_select), "\uDB81\uDC0A" to stringResource(R.string.label_save))
+                listOf("A" to stringResource(R.string.label_select))
             } else {
-                listOf("\uDB81\uDC0A" to stringResource(R.string.label_save))
+                emptyList()
             }
             BottomBar(
                 modifier = Modifier.align(Alignment.BottomCenter),

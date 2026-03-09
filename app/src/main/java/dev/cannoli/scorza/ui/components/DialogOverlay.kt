@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import dev.cannoli.scorza.R
 import dev.cannoli.scorza.ui.screens.DialogState
 import dev.cannoli.scorza.ui.screens.KeyboardInputState
-import dev.cannoli.scorza.ui.theme.GrayText
 
 @Composable
 fun DialogOverlay(
@@ -82,164 +79,6 @@ fun DialogOverlay(
             }
         }
 
-        is DialogState.CollectionPicker -> {
-            ListDialogScreen(
-                backgroundImagePath = backgroundImagePath,
-                backgroundTint = backgroundTint,
-                title = dialogState.title,
-                listFontSize = listFontSize,
-                listLineHeight = listLineHeight,
-                rightBottomItems = listOf(
-                    "X" to stringResource(R.string.label_new),
-                    "▶" to stringResource(R.string.label_confirm)
-                )
-            ) {
-                if (dialogState.collections.isEmpty()) {
-                    Text(
-                        text = "No collections",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = GrayText,
-                        modifier = Modifier.padding(start = 14.dp)
-                    )
-                } else {
-                    List(
-                        items = dialogState.collections,
-                        selectedIndex = dialogState.selectedIndex,
-                        itemHeight = itemHeight
-                    ) { index, collection ->
-                        PillRowText(
-                            label = collection,
-                            isSelected = dialogState.selectedIndex == index,
-                            fontSize = listFontSize,
-                            lineHeight = listLineHeight,
-                            verticalPadding = listVerticalPadding,
-                            checkState = index in dialogState.checkedIndices
-                        )
-                    }
-                }
-            }
-        }
-
-        is DialogState.CoreMappingList -> {
-            ListDialogScreen(
-                backgroundImagePath = backgroundImagePath,
-                backgroundTint = backgroundTint,
-                title = stringResource(R.string.setting_core_mapping),
-                listFontSize = listFontSize,
-                listLineHeight = listLineHeight,
-                fullWidth = true,
-                rightBottomItems = listOf("A" to stringResource(R.string.label_select), "▶" to stringResource(R.string.label_save))
-            ) {
-                List(
-                    items = dialogState.mappings,
-                    selectedIndex = dialogState.selectedIndex,
-                    itemHeight = itemHeight
-                ) { index, entry ->
-                    val value = if (entry.runnerLabel.isNotEmpty())
-                        "${entry.coreDisplayName} (${entry.runnerLabel})"
-                    else entry.coreDisplayName
-                    PillRowKeyValue(
-                        label = entry.platformName,
-                        value = value,
-                        isSelected = dialogState.selectedIndex == index,
-                        fontSize = listFontSize,
-                        lineHeight = listLineHeight,
-                        verticalPadding = listVerticalPadding
-                    )
-                }
-            }
-        }
-
-        is DialogState.CorePicker -> {
-            ListDialogScreen(
-                backgroundImagePath = backgroundImagePath,
-                backgroundTint = backgroundTint,
-                title = dialogState.platformName,
-                listFontSize = listFontSize,
-                listLineHeight = listLineHeight,
-                fullWidth = true,
-                rightBottomItems = listOf("A" to stringResource(R.string.label_select))
-            ) {
-                if (dialogState.cores.isEmpty()) {
-                    Text(
-                        text = "No compatible cores found",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = GrayText,
-                        modifier = Modifier.padding(start = 14.dp)
-                    )
-                } else {
-                    List(
-                        items = dialogState.cores,
-                        selectedIndex = dialogState.selectedIndex,
-                        itemHeight = itemHeight
-                    ) { index, option ->
-                        PillRowText(
-                            label = "${option.displayName} (${option.runnerLabel})",
-                            isSelected = dialogState.selectedIndex == index,
-                            fontSize = listFontSize,
-                            lineHeight = listLineHeight,
-                            verticalPadding = listVerticalPadding
-                        )
-                    }
-                }
-            }
-        }
-
-        is DialogState.AppPicker -> {
-            ListDialogScreen(
-                backgroundImagePath = backgroundImagePath,
-                backgroundTint = backgroundTint,
-                title = dialogState.title,
-                listFontSize = listFontSize,
-                listLineHeight = listLineHeight,
-                fullWidth = true,
-                rightBottomItems = listOf("\uDB81\uDC0A" to stringResource(R.string.label_confirm))
-            ) {
-                List(
-                    items = dialogState.apps,
-                    selectedIndex = dialogState.selectedIndex,
-                    itemHeight = itemHeight
-                ) { index, app ->
-                    PillRowText(
-                        label = app,
-                        isSelected = dialogState.selectedIndex == index,
-                        fontSize = listFontSize,
-                        lineHeight = listLineHeight,
-                        verticalPadding = listVerticalPadding,
-                        checkState = index in dialogState.checkedIndices
-                    )
-                }
-            }
-        }
-
-        is DialogState.ColorList -> {
-            ListDialogScreen(
-                backgroundImagePath = backgroundImagePath,
-                backgroundTint = backgroundTint,
-                title = stringResource(R.string.setting_colors),
-                listFontSize = listFontSize,
-                listLineHeight = listLineHeight,
-                fullWidth = true,
-                rightBottomItems = listOf("A" to stringResource(R.string.label_select))
-            ) {
-                List(
-                    items = dialogState.colors,
-                    selectedIndex = dialogState.selectedIndex,
-                    itemHeight = itemHeight
-                ) { index, entry ->
-                    PillRowKeyValue(
-                        label = entry.label,
-                        value = entry.hex.uppercase(),
-                        isSelected = dialogState.selectedIndex == index,
-                        fontSize = listFontSize,
-                        lineHeight = listLineHeight,
-                        verticalPadding = listVerticalPadding,
-                        swatchColor = androidx.compose.ui.graphics.Color(entry.color.toInt())
-                    )
-                }
-            }
-        }
-
         is DialogState.ColorPicker -> {
             ColorPickerOverlay(
                 selectedRow = dialogState.selectedRow,
@@ -278,7 +117,7 @@ fun DialogOverlay(
 }
 
 @Composable
-private fun ListDialogScreen(
+internal fun ListDialogScreen(
     backgroundImagePath: String?,
     backgroundTint: Int,
     title: String,
