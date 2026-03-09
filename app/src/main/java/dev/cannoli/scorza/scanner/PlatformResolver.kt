@@ -196,7 +196,7 @@ class PlatformResolver(
         if (File(romsDir, "$tag/.emu_launch").exists()) return "External"
         val override = userRunners[tag]
         if (override != null) return override
-        val coresDir = File(cannoliRoot, "Cores")
+        val coresDir = File(cannoliRoot, "Config/Cores")
         if (File(coresDir, "${coreId}_android.so").exists()) return "Internal"
         return "RetroArch"
     }
@@ -216,7 +216,7 @@ class PlatformResolver(
 
     fun getCorePickerOptions(tag: String): List<dev.cannoli.scorza.ui.screens.DialogState.CorePickerOption> {
         val cores = getCoresForTag(tag)
-        val coresDir = File(cannoliRoot, "Cores")
+        val coresDir = File(cannoliRoot, "Config/Cores")
         return cores.flatMap { core ->
             val hasInternal = File(coresDir, "${core.id}_android.so").exists()
             if (hasInternal) {

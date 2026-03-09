@@ -14,8 +14,8 @@ class FileScanner(
     private val romsDir get() = File(cannoliRoot, "Roms")
     private val artDir get() = File(cannoliRoot, "Art")
     private val collectionsDir get() = File(cannoliRoot, "Collections")
-    private val toolsDir get() = File(cannoliRoot, "Tools")
-    private val portsDir get() = File(cannoliRoot, "Ports")
+    private val toolsDir get() = File(cannoliRoot, "Config/Launch Scripts/Tools")
+    private val portsDir get() = File(cannoliRoot, "Config/Launch Scripts/Ports")
 
     private val artCache = mutableMapOf<String, Map<String, File>>()
 
@@ -224,9 +224,13 @@ class FileScanner(
             File(cannoliRoot, "BIOS"),
             File(cannoliRoot, "Saves"),
             File(cannoliRoot, "Save States"),
-            File(cannoliRoot, "Screenshots"),
-            File(cannoliRoot, "Recordings"),
+            File(cannoliRoot, "Media/Screenshots"),
+            File(cannoliRoot, "Media/Recordings"),
             File(cannoliRoot, "Config"),
+            File(cannoliRoot, "Config/Cores"),
+            File(cannoliRoot, "Config/Overrides"),
+            File(cannoliRoot, "Config/Overrides/Cores"),
+            File(cannoliRoot, "Config/Overrides/Games"),
             File(cannoliRoot, "Backup"),
             File(cannoliRoot, "Wallpapers"),
             toolsDir, portsDir
