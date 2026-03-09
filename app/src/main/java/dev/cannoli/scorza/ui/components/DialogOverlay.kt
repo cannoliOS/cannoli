@@ -269,6 +269,10 @@ fun DialogOverlay(
             )
         }
 
+        DialogState.About -> {
+            AboutOverlay()
+        }
+
         else -> {}
     }
 }

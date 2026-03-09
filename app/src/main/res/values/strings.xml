@@ -29,6 +29,7 @@
     <string name="settings_status_bar">Status Bar</string>
     <string name="settings_input">Input</string>
     <string name="settings_advanced">Advanced</string>
+    <string name="settings_about">About</string>
 
     <!-- Settings items -->
     <string name="setting_colors">Colors</string>

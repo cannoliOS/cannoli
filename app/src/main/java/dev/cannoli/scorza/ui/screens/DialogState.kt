@@ -32,6 +32,7 @@ sealed interface DialogState {
     data class CorePickerOption(val coreId: String, val displayName: String, val runnerLabel: String)
     data class CorePicker(val tag: String, val platformName: String, val cores: List<CorePickerOption>, val selectedIndex: Int = 0, val gamePath: String? = null) : DialogState
     data class AppPicker(val type: String, val title: String, val apps: List<String>, val packages: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet()) : DialogState
+    data object About : DialogState
 }
 
 val DialogState.isFullScreen: Boolean
@@ -47,6 +48,7 @@ val DialogState.isFullScreen: Boolean
         is DialogState.RenameInput,
         is DialogState.NewCollectionInput,
         is DialogState.CollectionRenameInput,
-        is DialogState.CorePicker -> true
+        is DialogState.CorePicker,
+        is DialogState.About -> true
         else -> false
     }

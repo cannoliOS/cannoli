@@ -531,7 +531,12 @@ class MainActivity : ComponentActivity() {
                     }
                     Screen.SETTINGS -> {
                         if (!settingsViewModel.state.value.inSubList) {
-                            settingsViewModel.enterCategory()
+                            val cat = settingsViewModel.state.value.categories.getOrNull(settingsViewModel.state.value.categoryIndex)
+                            if (cat?.key == "about") {
+                                dialogState.value = DialogState.About
+                            } else {
+                                settingsViewModel.enterCategory()
+                            }
                         } else {
                             val key = settingsViewModel.enterSelected()
                             if (key == "sd_root") {
@@ -639,6 +644,9 @@ class MainActivity : ComponentActivity() {
                 }
                 is DialogState.MissingCore,
                 is DialogState.MissingApp -> {
+                    dialogState.value = DialogState.None
+                }
+                DialogState.About -> {
                     dialogState.value = DialogState.None
                 }
                 DialogState.None -> when (currentScreen()) {

@@ -89,7 +89,8 @@ class SettingsViewModel(
         Category("content", R.string.settings_content),
         Category("status_bar", R.string.settings_status_bar),
         Category("input", R.string.settings_input),
-        Category("advanced", R.string.settings_advanced)
+        Category("advanced", R.string.settings_advanced),
+        Category("about", R.string.settings_about)
     )
 
     private var snapshot: Map<String, Any?> = emptyMap()

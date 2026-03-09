@@ -117,7 +117,7 @@ fun AppNavGraph(
             }
         }
 
-        val statusBarVisible = appSettings.showWifi || appSettings.showBluetooth || appSettings.showClock || appSettings.showBattery
+        val statusBarVisible = dialog !is DialogState.About && (appSettings.showWifi || appSettings.showBluetooth || appSettings.showClock || appSettings.showBattery)
         if (statusBarVisible) {
         Box(
             modifier = Modifier

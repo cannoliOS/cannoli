@@ -1,7 +1,18 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+fun gitCommitHash(): String = try {
+    val process = Runtime.getRuntime().exec(arrayOf("git", "rev-parse", "--short", "HEAD"))
+    process.inputStream.bufferedReader().readText().trim()
+} catch (_: Exception) { "unknown" }
+
+fun buildDate(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
 android {
     namespace = "dev.cannoli.scorza"
@@ -16,13 +27,20 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
+        buildConfigField("String", "BUILD_DATE", "\"${buildDate()}\"")
+        buildConfigField("String", "GIT_HASH", "\"${gitCommitHash()}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     externalNativeBuild {
