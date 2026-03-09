@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
         settingsViewModel = SettingsViewModel(settings, root)
         atomicRename = AtomicRename(root)
 
-        retroArchLauncher = RetroArchLauncher(this, settings.retroArchPackage)
+        retroArchLauncher = RetroArchLauncher(this, settings.retroArchPackage, root.absolutePath)
         emuLauncher = EmuLauncher(this)
         apkLauncher = ApkLauncher(this)
 

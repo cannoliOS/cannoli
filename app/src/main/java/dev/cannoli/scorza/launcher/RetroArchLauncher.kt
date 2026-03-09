@@ -8,12 +8,16 @@ import java.io.File
 
 class RetroArchLauncher(
     private val context: Context,
-    private val retroArchPackage: String
+    private val retroArchPackage: String,
+    private val emulationRoot: String
 ) {
     fun launch(romFile: File, coreName: String): LaunchResult {
         if (!context.isPackageInstalled(retroArchPackage)) {
             return LaunchResult.AppNotInstalled(retroArchPackage)
         }
+
+        val configFile = File(emulationRoot, "Config/retroarch.cfg")
+        val configPath = if (configFile.exists()) configFile.absolutePath else ""
 
         val intent = Intent().apply {
             component = ComponentName(
@@ -22,7 +26,7 @@ class RetroArchLauncher(
             )
             putExtra("LIBRETRO", "/data/data/$retroArchPackage/cores/${coreName}_android.so")
             putExtra("ROM", romFile.absolutePath)
-            putExtra("CONFIGFILE", "")
+            putExtra("CONFIGFILE", configPath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
