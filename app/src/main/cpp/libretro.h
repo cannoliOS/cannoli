@@ -57,6 +57,7 @@ extern "C" {
 #define RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME    18
 #define RETRO_ENVIRONMENT_GET_LANGUAGE           39
 #define RETRO_ENVIRONMENT_SET_MEMORY_MAPS        36
+#define RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2    67
 
 // Log levels
 enum retro_log_level {
@@ -75,6 +76,33 @@ struct retro_log_callback {
 struct retro_variable {
     const char *key;
     const char *value;
+};
+
+struct retro_core_option_value {
+    const char *value;
+    const char *label;
+};
+
+struct retro_core_option_v2_definition {
+    const char *key;
+    const char *desc;
+    const char *desc_categorized;
+    const char *info;
+    const char *info_categorized;
+    const char *category_key;
+    struct retro_core_option_value values[128];
+    const char *default_value;
+};
+
+struct retro_core_option_v2_category {
+    const char *key;
+    const char *desc;
+    const char *info;
+};
+
+struct retro_core_options_v2 {
+    struct retro_core_option_v2_category *categories;
+    struct retro_core_option_v2_definition *definitions;
 };
 
 struct retro_game_geometry {

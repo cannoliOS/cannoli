@@ -3,6 +3,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string>
+#include <map>
+#include <vector>
 #include <android/log.h>
 #include "libretro.h"
 
@@ -36,7 +39,7 @@ static struct {
 
 // State shared with callbacks
 static int16_t g_input_state = 0;
-static unsigned g_pixel_format = RETRO_PIXEL_FORMAT_RGB565;
+static unsigned g_pixel_format = RETRO_PIXEL_FORMAT_0RGB1555;
 
 // Frame buffer written by video callback, read by renderer
 static uint8_t *g_frame_buf = nullptr;
@@ -53,6 +56,17 @@ static jmethodID g_audio_write_method = nullptr;
 // Paths
 static char g_system_dir[512] = {0};
 static char g_save_dir[512] = {0};
+
+// Core options
+struct CoreOption {
+    std::string key;
+    std::string desc;
+    std::vector<std::string> values;
+    std::string selected;
+};
+static std::vector<CoreOption> g_core_options;
+static std::map<std::string, std::string> g_option_overrides;
+static bool g_options_dirty = false;
 
 // --- Libretro callbacks ---
 
@@ -95,11 +109,76 @@ static bool environment_cb(unsigned cmd, void *data) {
             return true;
         }
 
-        case RETRO_ENVIRONMENT_GET_VARIABLE:
+        case RETRO_ENVIRONMENT_SET_VARIABLES: {
+            g_core_options.clear();
+            auto *vars = (const struct retro_variable *)data;
+            while (vars && vars->key) {
+                CoreOption opt;
+                opt.key = vars->key;
+                const char *desc = vars->value;
+                const char *pipe = strchr(desc, ';');
+                if (pipe) {
+                    opt.desc = std::string(desc, pipe - desc);
+                    const char *p = pipe + 1;
+                    while (*p == ' ') p++;
+                    std::string valstr(p);
+                    size_t pos = 0;
+                    while ((pos = valstr.find('|')) != std::string::npos) {
+                        opt.values.push_back(valstr.substr(0, pos));
+                        valstr.erase(0, pos + 1);
+                    }
+                    if (!valstr.empty()) opt.values.push_back(valstr);
+                    if (!opt.values.empty()) opt.selected = opt.values[0];
+                } else {
+                    opt.desc = desc;
+                }
+                g_core_options.push_back(opt);
+                vars++;
+            }
+            return true;
+        }
+
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2: {
+            g_core_options.clear();
+            auto *opts = (const struct retro_core_options_v2 *)data;
+            if (opts && opts->definitions) {
+                auto *def = opts->definitions;
+                while (def->key) {
+                    CoreOption opt;
+                    opt.key = def->key;
+                    opt.desc = def->desc ? def->desc : def->key;
+                    for (int i = 0; i < 128 && def->values[i].value; i++) {
+                        opt.values.push_back(def->values[i].value);
+                    }
+                    opt.selected = def->default_value ? def->default_value :
+                                   (!opt.values.empty() ? opt.values[0] : "");
+                    g_core_options.push_back(opt);
+                    def++;
+                }
+            }
+            return true;
+        }
+
+        case RETRO_ENVIRONMENT_GET_VARIABLE: {
+            auto *var = (struct retro_variable *)data;
+            if (!var || !var->key) return false;
+            auto it = g_option_overrides.find(var->key);
+            if (it != g_option_overrides.end()) {
+                var->value = it->second.c_str();
+                return true;
+            }
+            for (auto &opt : g_core_options) {
+                if (opt.key == var->key) {
+                    var->value = opt.selected.c_str();
+                    return true;
+                }
+            }
             return false;
+        }
 
         case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
-            *(bool *)data = false;
+            *(bool *)data = g_options_dirty;
+            g_options_dirty = false;
             return true;
 
         case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
@@ -128,14 +207,46 @@ static void video_refresh_cb(const void *data, unsigned width, unsigned height, 
         g_frame_height = height;
     }
 
-    // Copy row by row since pitch may differ from width * bpp
     const uint8_t *src = (const uint8_t *)data;
     uint8_t *dst = g_frame_buf;
     size_t row_bytes = width * bpp;
-    for (unsigned y = 0; y < height; y++) {
-        memcpy(dst, src, row_bytes);
-        src += pitch;
-        dst += row_bytes;
+
+    if (g_pixel_format == RETRO_PIXEL_FORMAT_0RGB1555) {
+        // Convert 0RGB1555 to RGB565 in-place so the renderer only needs two paths
+        for (unsigned y = 0; y < height; y++) {
+            const uint16_t *src16 = (const uint16_t *)src;
+            uint16_t *dst16 = (uint16_t *)dst;
+            for (unsigned x = 0; x < width; x++) {
+                uint16_t px = src16[x];
+                unsigned r = (px >> 10) & 0x1F;
+                unsigned g = (px >> 5) & 0x1F;
+                unsigned b = px & 0x1F;
+                dst16[x] = (r << 11) | (g << 6) | b;
+            }
+            src += pitch;
+            dst += row_bytes;
+        }
+    } else if (g_pixel_format == RETRO_PIXEL_FORMAT_XRGB8888) {
+        // Convert XRGB8888 (0x00RRGGBB) to ABGR so GL_RGBA/GL_UNSIGNED_BYTE reads correctly
+        for (unsigned y = 0; y < height; y++) {
+            const uint32_t *src32 = (const uint32_t *)src;
+            uint32_t *dst32 = (uint32_t *)dst;
+            for (unsigned x = 0; x < width; x++) {
+                uint32_t px = src32[x];
+                uint32_t r = (px >> 16) & 0xFF;
+                uint32_t g = (px >> 8) & 0xFF;
+                uint32_t b = px & 0xFF;
+                dst32[x] = 0xFF000000 | (b << 16) | (g << 8) | r;
+            }
+            src += pitch;
+            dst += row_bytes;
+        }
+    } else {
+        for (unsigned y = 0; y < height; y++) {
+            memcpy(dst, src, row_bytes);
+            src += pitch;
+            dst += row_bytes;
+        }
     }
     g_frame_pitch = row_bytes;
     g_frame_ready = true;
@@ -331,7 +442,10 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetInput(JNIEnv *, jobject
 
 JNIEXPORT jint JNICALL
 Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetPixelFormat(JNIEnv *, jobject) {
-    return (jint)g_pixel_format;
+    // 0RGB1555 is converted to RGB565 in video_refresh_cb
+    unsigned effective = (g_pixel_format == RETRO_PIXEL_FORMAT_0RGB1555)
+        ? RETRO_PIXEL_FORMAT_RGB565 : g_pixel_format;
+    return (jint)effective;
 }
 
 JNIEXPORT jint JNICALL
@@ -469,6 +583,61 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeDeinit(JNIEnv *env, jobjec
 JNIEXPORT void JNICALL
 Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeReset(JNIEnv *, jobject) {
     if (core.reset) core.reset();
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreOptions(JNIEnv *env, jobject) {
+    // Returns array of strings: [key, desc, values_pipe_separated, selected, key, desc, ...]
+    jclass strClass = env->FindClass("java/lang/String");
+    int count = (int)g_core_options.size();
+    jobjectArray result = env->NewObjectArray(count * 4, strClass, nullptr);
+    for (int i = 0; i < count; i++) {
+        auto &opt = g_core_options[i];
+        std::string vals;
+        for (size_t j = 0; j < opt.values.size(); j++) {
+            if (j > 0) vals += '|';
+            vals += opt.values[j];
+        }
+        auto it = g_option_overrides.find(opt.key);
+        const std::string &sel = (it != g_option_overrides.end()) ? it->second : opt.selected;
+        env->SetObjectArrayElement(result, i * 4 + 0, env->NewStringUTF(opt.key.c_str()));
+        env->SetObjectArrayElement(result, i * 4 + 1, env->NewStringUTF(opt.desc.c_str()));
+        env->SetObjectArrayElement(result, i * 4 + 2, env->NewStringUTF(vals.c_str()));
+        env->SetObjectArrayElement(result, i * 4 + 3, env->NewStringUTF(sel.c_str()));
+    }
+    return result;
+}
+
+JNIEXPORT void JNICALL
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetCoreOption(JNIEnv *env, jobject, jstring key, jstring value) {
+    const char *k = env->GetStringUTFChars(key, nullptr);
+    const char *v = env->GetStringUTFChars(value, nullptr);
+    g_option_overrides[k] = v;
+    g_options_dirty = true;
+    env->ReleaseStringUTFChars(key, k);
+    env->ReleaseStringUTFChars(value, v);
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetSystemInfo(JNIEnv *env, jobject) {
+    struct retro_system_info info = {0};
+    core.get_system_info(&info);
+
+    jobjectArray result = env->NewObjectArray(2, env->FindClass("java/lang/String"), nullptr);
+    env->SetObjectArrayElement(result, 0, env->NewStringUTF(info.library_name ? info.library_name : ""));
+    env->SetObjectArrayElement(result, 1, env->NewStringUTF(info.library_version ? info.library_version : ""));
+    return result;
+}
+
+JNIEXPORT jfloat JNICALL
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetAspectRatio(JNIEnv *, jobject) {
+    struct retro_system_av_info av_info;
+    core.get_system_av_info(&av_info);
+    float ar = av_info.geometry.aspect_ratio;
+    if (ar <= 0.0f) {
+        ar = (float)av_info.geometry.base_width / (float)av_info.geometry.base_height;
+    }
+    return ar;
 }
 
 } // extern "C"
