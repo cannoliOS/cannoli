@@ -99,7 +99,6 @@ fun AppNavGraph(
                     listFontSize = listFontSize,
                     listLineHeight = listLineHeight,
                     listVerticalPadding = listVerticalPadding,
-                    boxArtEnabled = appSettings.boxArtEnabled,
                     scrollSpeed = appSettings.scrollSpeed,
                     dialogState = dialog
                 )

@@ -64,7 +64,6 @@ fun GameListScreen(
     listFontSize: TextUnit = 22.sp,
     listLineHeight: TextUnit = 32.sp,
     listVerticalPadding: Dp = 8.dp,
-    boxArtEnabled: Boolean = true,
     scrollSpeed: ScrollSpeed = ScrollSpeed.NORMAL,
     dialogState: DialogState = DialogState.None
 ) {
@@ -84,7 +83,7 @@ fun GameListScreen(
     }
 
     val selectedGame = state.games.getOrNull(state.selectedIndex)
-    val selectedArt: ImageBitmap? = if (boxArtEnabled && selectedGame != null && !selectedGame.isSubfolder) {
+    val selectedArt: ImageBitmap? = if (selectedGame != null && !selectedGame.isSubfolder) {
         remember(selectedGame.artFile?.absolutePath) {
             selectedGame.artFile?.let { file ->
                 try {
@@ -100,7 +99,7 @@ fun GameListScreen(
                 .fillMaxSize()
                 .padding(screenPadding)
         ) {
-            val showArt = boxArtEnabled && selectedArt != null
+            val showArt = selectedArt != null
             Row(
                 modifier = Modifier
                     .fillMaxSize()

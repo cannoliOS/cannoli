@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
 
         scanner = FileScanner(root, platformResolver)
         scanner.ensureDirectories()
+        ensureRetroArchConfig(root)
 
         systemListViewModel = SystemListViewModel(scanner)
         gameListViewModel = GameListViewModel(scanner, platformResolver)
@@ -235,6 +236,12 @@ class MainActivity : ComponentActivity() {
                         dialogState.value = ds.copy(selectedIndex = newIdx)
                     }
                 }
+                is DialogState.ColorList -> {
+                    if (ds.colors.isNotEmpty()) {
+                        val newIdx = if (ds.selectedIndex <= 0) ds.colors.lastIndex else ds.selectedIndex - 1
+                        dialogState.value = ds.copy(selectedIndex = newIdx)
+                    }
+                }
                 is DialogState.ColorPicker -> {
                     val totalRows = (COLOR_PRESETS.size + COLOR_GRID_COLS - 1) / COLOR_GRID_COLS
                     val newRow = if (ds.selectedRow <= 0) totalRows - 1 else ds.selectedRow - 1
@@ -300,6 +307,12 @@ class MainActivity : ComponentActivity() {
                 is DialogState.AppPicker -> {
                     if (ds.apps.isNotEmpty()) {
                         val newIdx = if (ds.selectedIndex >= ds.apps.lastIndex) 0 else ds.selectedIndex + 1
+                        dialogState.value = ds.copy(selectedIndex = newIdx)
+                    }
+                }
+                is DialogState.ColorList -> {
+                    if (ds.colors.isNotEmpty()) {
+                        val newIdx = if (ds.selectedIndex >= ds.colors.lastIndex) 0 else ds.selectedIndex + 1
                         dialogState.value = ds.copy(selectedIndex = newIdx)
                     }
                 }
@@ -457,13 +470,21 @@ class MainActivity : ComponentActivity() {
                         dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
                     }
                 }
+                is DialogState.ColorList -> {
+                    val entry = ds.colors[ds.selectedIndex]
+                    openColorPicker(entry.key)
+                }
                 is DialogState.ColorPicker -> {
                     val idx = ds.selectedRow * COLOR_GRID_COLS + ds.selectedCol
                     val preset = COLOR_PRESETS.getOrNull(idx)
                     if (preset != null) {
                         val hex = "#%06X".format(preset.color and 0xFFFFFF)
                         settingsViewModel.setColor(ds.settingKey, hex)
-                        dialogState.value = DialogState.None
+                        val entries = settingsViewModel.getColorEntries()
+                        dialogState.value = DialogState.ColorList(
+                            colors = entries,
+                            selectedIndex = entries.indexOfFirst { it.key == ds.settingKey }.coerceAtLeast(0)
+                        )
                     }
                 }
                 is DialogState.HexColorInput -> {
@@ -524,6 +545,10 @@ class MainActivity : ComponentActivity() {
                             val key = settingsViewModel.enterSelected()
                             if (key == "sd_root") {
                                 folderPickerLauncher.launch(null)
+                            } else if (key == "colors") {
+                                dialogState.value = DialogState.ColorList(
+                                    colors = settingsViewModel.getColorEntries()
+                                )
                             } else if (key != null && key.startsWith("color_")) {
                                 openColorPicker(key)
                             } else if (key == "core_mapping") {
@@ -568,11 +593,17 @@ class MainActivity : ComponentActivity() {
                 is DialogState.AppPicker -> {
                     dialogState.value = DialogState.None
                 }
-                is DialogState.ColorPicker -> {
+                is DialogState.ColorList -> {
                     dialogState.value = DialogState.None
                 }
+                is DialogState.ColorPicker -> {
+                    val entries = settingsViewModel.getColorEntries()
+                    dialogState.value = DialogState.ColorList(
+                        colors = entries,
+                        selectedIndex = entries.indexOfFirst { it.key == ds.settingKey }.coerceAtLeast(0)
+                    )
+                }
                 is DialogState.HexColorInput -> {
-                    // Go back to color picker
                     openColorPicker(ds.settingKey)
                 }
                 is DialogState.ContextMenu, is DialogState.BulkContextMenu -> {
@@ -1107,6 +1138,22 @@ class MainActivity : ComponentActivity() {
             }
             LaunchResult.Success -> {}
         }
+    }
+
+    private fun ensureRetroArchConfig(root: File) {
+        val configFile = File(root, "Config/retroarch.cfg")
+        if (configFile.exists()) return
+        configFile.parentFile?.mkdirs()
+        val rootPath = root.absolutePath
+        configFile.writeText(
+            """
+            savefile_directory = "$rootPath/Saves"
+            savestate_directory = "$rootPath/Save States"
+            system_directory = "$rootPath/BIOS"
+            sort_savefiles_by_content_enable = "true"
+            sort_savestates_by_content_enable = "true"
+            """.trimIndent() + "\n"
+        )
     }
 
     private fun findEmbeddedCore(coreName: String): String? {

@@ -31,6 +31,7 @@
     <string name="settings_advanced">Advanced</string>
 
     <!-- Settings items -->
+    <string name="setting_colors">Colors</string>
     <string name="setting_box_art">Box Art</string>
     <string name="setting_text_size">Text Size</string>
     <string name="setting_bg_image">Background Image</string>
@@ -54,7 +55,7 @@
     <string name="setting_color_highlight_text">Highlight Text</string>
     <string name="setting_color_accent">Accent</string>
     <string name="setting_core_mapping">Core Mapping</string>
-    <string name="setting_sd_root">SD Card Root</string>
+    <string name="setting_sd_root">Emulation Root</string>
     <string name="setting_ra_package">RetroArch Package</string>
 
     <!-- Setting values -->

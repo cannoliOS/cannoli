@@ -47,7 +47,6 @@ class SettingsViewModel(
         val backgroundImagePath: String? = null,
         val backgroundTint: Int = 0,
         val textSize: TextSize = TextSize.DEFAULT,
-        val boxArtEnabled: Boolean = true,
         val scrollSpeed: ScrollSpeed = ScrollSpeed.NORMAL,
         val colorHighlight: Color = Color.White,
         val colorText: Color = Color.White,
@@ -72,7 +71,6 @@ class SettingsViewModel(
         backgroundImagePath = settings.backgroundImagePath,
         backgroundTint = settings.backgroundTint,
         textSize = settings.textSize,
-        boxArtEnabled = settings.boxArtEnabled,
         scrollSpeed = settings.scrollSpeed,
         colorHighlight = hexToColor(settings.colorHighlight) ?: Color.White,
         colorText = hexToColor(settings.colorText) ?: Color.White,
@@ -89,7 +87,6 @@ class SettingsViewModel(
     private val allCategories = listOf(
         Category("appearance", R.string.settings_appearance),
         Category("content", R.string.settings_content),
-        Category("display", R.string.settings_display),
         Category("status_bar", R.string.settings_status_bar),
         Category("input", R.string.settings_input),
         Category("advanced", R.string.settings_advanced)
@@ -162,7 +159,6 @@ class SettingsViewModel(
             "button_layout" -> {
                 settings.buttonLayout = if (settings.buttonLayout == ButtonLayout.XBOX) ButtonLayout.NINTENDO else ButtonLayout.XBOX
             }
-            "box_art" -> settings.boxArtEnabled = !settings.boxArtEnabled
             "text_size" -> {
                 val entries = TextSize.entries
                 val cur = entries.indexOf(settings.textSize)
@@ -262,6 +258,25 @@ class SettingsViewModel(
         }
     }
 
+    fun getColorEntries(): List<dev.cannoli.scorza.ui.screens.DialogState.ColorEntry> {
+        val names = mapOf(
+            "color_text" to "Text",
+            "color_highlight" to "Highlight",
+            "color_highlight_text" to "Highlight Text",
+            "color_accent" to "Accent"
+        )
+        return names.map { (key, label) ->
+            val hex = getColorHex(key)
+            val color = hexToColor(hex)
+            dev.cannoli.scorza.ui.screens.DialogState.ColorEntry(
+                key = key,
+                label = label,
+                hex = hex,
+                color = dev.cannoli.scorza.ui.theme.colorToArgbLong(color ?: androidx.compose.ui.graphics.Color.White)
+            )
+        }
+    }
+
     fun getColorHex(key: String): String = when (key) {
         "color_highlight" -> settings.colorHighlight
         "color_text" -> settings.colorText
@@ -284,7 +299,6 @@ class SettingsViewModel(
 
     private fun captureSettings(): Map<String, Any?> = mapOf(
         "button_layout" to settings.buttonLayout,
-        "box_art" to settings.boxArtEnabled,
         "text_size" to settings.textSize,
         "scroll_speed" to settings.scrollSpeed,
         "time_format" to settings.timeFormat,
@@ -309,7 +323,6 @@ class SettingsViewModel(
 
     private fun restoreSettings(snap: Map<String, Any?>) {
         (snap["button_layout"] as? ButtonLayout)?.let { settings.buttonLayout = it }
-        (snap["box_art"] as? Boolean)?.let { settings.boxArtEnabled = it }
         (snap["text_size"] as? TextSize)?.let { settings.textSize = it }
         (snap["scroll_speed"] as? ScrollSpeed)?.let { settings.scrollSpeed = it }
         (snap["time_format"] as? TimeFormat)?.let { settings.timeFormat = it }
@@ -337,15 +350,14 @@ class SettingsViewModel(
 
     private fun buildItemsForCategory(categoryKey: String): List<SettingsItem> = when (categoryKey) {
         "appearance" -> buildList {
-            add(SettingsItem("color_text", R.string.setting_color_text, valueText = settings.colorText.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorText)))
-            add(SettingsItem("color_highlight", R.string.setting_color_highlight, valueText = settings.colorHighlight.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorHighlight)))
-            add(SettingsItem("color_highlight_text", R.string.setting_color_highlight_text, valueText = settings.colorHighlightText.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorHighlightText)))
-            add(SettingsItem("color_accent", R.string.setting_color_accent, valueText = settings.colorAccent.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorAccent)))
             add(SettingsItem("bg_image", R.string.setting_bg_image, valueText = settings.backgroundImagePath?.let { java.io.File(it).name }, valueRes = if (settings.backgroundImagePath == null) R.string.value_none else null))
             if (settings.backgroundImagePath != null) {
                 val tintVal = settings.backgroundTint
                 add(SettingsItem("bg_tint", R.string.setting_bg_tint, valueText = if (tintVal == 0) null else "$tintVal%", valueRes = if (tintVal == 0) R.string.value_off else null))
             }
+            add(SettingsItem("colors", R.string.setting_colors, isEditable = true))
+            add(SettingsItem("text_size", R.string.setting_text_size, valueText = settings.textSize.name.lowercase().replaceFirstChar { it.uppercase() }))
+            add(SettingsItem("scroll_speed", R.string.setting_scroll_speed, valueText = settings.scrollSpeed.name.lowercase().replaceFirstChar { it.uppercase() }))
         }
         "content" -> buildList {
             add(SettingsItem("show_empty", R.string.setting_show_empty, valueRes = showHide(settings.showEmpty)))
@@ -358,10 +370,11 @@ class SettingsViewModel(
                 add(SettingsItem("manage_tools", R.string.setting_manage_tools, isEditable = true))
             }
         }
-        "display" -> listOf(
-            SettingsItem("text_size", R.string.setting_text_size, valueText = settings.textSize.name.lowercase().replaceFirstChar { it.uppercase() }),
-            SettingsItem("box_art", R.string.setting_box_art, valueRes = onOff(settings.boxArtEnabled)),
-            SettingsItem("scroll_speed", R.string.setting_scroll_speed, valueText = settings.scrollSpeed.name.lowercase().replaceFirstChar { it.uppercase() })
+        "colors" -> listOf(
+            SettingsItem("color_text", R.string.setting_color_text, valueText = settings.colorText.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorText)),
+            SettingsItem("color_highlight", R.string.setting_color_highlight, valueText = settings.colorHighlight.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorHighlight)),
+            SettingsItem("color_highlight_text", R.string.setting_color_highlight_text, valueText = settings.colorHighlightText.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorHighlightText)),
+            SettingsItem("color_accent", R.string.setting_color_accent, valueText = settings.colorAccent.uppercase(), isEditable = true, swatchColor = hexToColor(settings.colorAccent))
         )
         "status_bar" -> listOf(
             SettingsItem("show_battery", R.string.setting_battery, valueRes = showHide(settings.showBattery)),

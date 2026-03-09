@@ -26,10 +26,6 @@ class SettingsRepository(context: Context) {
         get() = ButtonLayout.fromString(prefs.getString(KEY_BUTTON_LAYOUT, null))
         set(value) = prefs.edit().putString(KEY_BUTTON_LAYOUT, value.name).apply()
 
-    var boxArtEnabled: Boolean
-        get() = prefs.getBoolean(KEY_BOX_ART, true)
-        set(value) = prefs.edit().putBoolean(KEY_BOX_ART, value).apply()
-
     var textSize: TextSize
         get() = TextSize.fromString(prefs.getString(KEY_TEXT_SIZE, null))
         set(value) = prefs.edit().putString(KEY_TEXT_SIZE, value.name).apply()
@@ -126,7 +122,6 @@ class SettingsRepository(context: Context) {
         private const val KEY_SD_ROOT = "sd_root"
         private const val KEY_RA_PACKAGE = "ra_package"
         private const val KEY_BUTTON_LAYOUT = "button_layout"
-        private const val KEY_BOX_ART = "box_art"
         private const val KEY_TEXT_SIZE = "text_size"
         private const val KEY_SORT_ORDER = "sort_order"
         private const val KEY_SCROLL_SPEED = "scroll_speed"

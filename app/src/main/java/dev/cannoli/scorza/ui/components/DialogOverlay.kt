@@ -212,6 +212,34 @@ fun DialogOverlay(
             }
         }
 
+        is DialogState.ColorList -> {
+            ListDialogScreen(
+                backgroundImagePath = backgroundImagePath,
+                backgroundTint = backgroundTint,
+                title = stringResource(R.string.setting_colors),
+                listFontSize = listFontSize,
+                listLineHeight = listLineHeight,
+                fullWidth = true,
+                rightBottomItems = listOf("A" to stringResource(R.string.label_select))
+            ) {
+                List(
+                    items = dialogState.colors,
+                    selectedIndex = dialogState.selectedIndex,
+                    itemHeight = itemHeight
+                ) { index, entry ->
+                    PillRowKeyValue(
+                        label = entry.label,
+                        value = entry.hex.uppercase(),
+                        isSelected = dialogState.selectedIndex == index,
+                        fontSize = listFontSize,
+                        lineHeight = listLineHeight,
+                        verticalPadding = listVerticalPadding,
+                        swatchColor = androidx.compose.ui.graphics.Color(entry.color.toInt())
+                    )
+                }
+            }
+        }
+
         is DialogState.ColorPicker -> {
             ColorPickerOverlay(
                 selectedRow = dialogState.selectedRow,
