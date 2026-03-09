@@ -66,10 +66,7 @@ fun GameListScreen(
     listVerticalPadding: Dp = 8.dp,
     boxArtEnabled: Boolean = true,
     scrollSpeed: ScrollSpeed = ScrollSpeed.NORMAL,
-    dialogState: DialogState = DialogState.None,
-    onBack: () -> Unit,
-    onPreviousPlatform: () -> Unit,
-    onNextPlatform: () -> Unit
+    dialogState: DialogState = DialogState.None
 ) {
     val state by viewModel.state.collectAsState()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)

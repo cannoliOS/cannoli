@@ -101,10 +101,7 @@ fun AppNavGraph(
                     listVerticalPadding = listVerticalPadding,
                     boxArtEnabled = appSettings.boxArtEnabled,
                     scrollSpeed = appSettings.scrollSpeed,
-                    dialogState = dialog,
-                    onBack = { },
-                    onPreviousPlatform = { },
-                    onNextPlatform = { }
+                    dialogState = dialog
                 )
             }
 
@@ -116,8 +113,7 @@ fun AppNavGraph(
                     listFontSize = listFontSize,
                     listLineHeight = listLineHeight,
                     listVerticalPadding = listVerticalPadding,
-                    dialogState = dialog,
-                    onBack = { }
+                    dialogState = dialog
                 )
             }
         }

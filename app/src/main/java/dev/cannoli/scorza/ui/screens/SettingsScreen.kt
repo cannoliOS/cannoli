@@ -36,8 +36,7 @@ fun SettingsScreen(
     listFontSize: TextUnit = 22.sp,
     listLineHeight: TextUnit = 32.sp,
     listVerticalPadding: Dp = 8.dp,
-    dialogState: DialogState = DialogState.None,
-    onBack: () -> Unit
+    dialogState: DialogState = DialogState.None
 ) {
     val state by viewModel.state.collectAsState()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
@@ -94,7 +93,8 @@ fun SettingsScreen(
 
             val selectedItem = state.items.getOrNull(state.selectedIndex)
             val isColorItem = selectedItem?.key?.startsWith("color_") == true
-            val leftItems = if (isColorItem) {
+            val isEditableItem = selectedItem?.isEditable == true
+            val leftItems = if (isEditableItem) {
                 listOf("B" to stringResource(R.string.label_back))
             } else {
                 listOf("B" to stringResource(R.string.label_back), "◀▶" to stringResource(R.string.label_change))

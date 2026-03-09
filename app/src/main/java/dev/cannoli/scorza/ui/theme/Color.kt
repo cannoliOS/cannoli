@@ -64,8 +64,3 @@ fun colorToArgbLong(color: Color): Long {
     val argb = color.value.shr(32).toLong()
     return argb or (0xFFL shl 24)
 }
-
-fun presetNameForColor(color: Color): String? {
-    val argb = colorToArgbLong(color)
-    return COLOR_PRESETS.firstOrNull { it.color == argb }?.name
-}

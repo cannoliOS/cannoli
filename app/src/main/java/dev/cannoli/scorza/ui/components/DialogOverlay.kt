@@ -128,7 +128,7 @@ fun DialogOverlay(
                 listFontSize = listFontSize,
                 listLineHeight = listLineHeight,
                 fullWidth = true,
-                rightBottomItems = listOf("A" to stringResource(R.string.label_select))
+                rightBottomItems = listOf("A" to stringResource(R.string.label_select), "▶" to stringResource(R.string.label_save))
             ) {
                 List(
                     items = dialogState.mappings,

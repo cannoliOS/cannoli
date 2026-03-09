@@ -437,7 +437,9 @@ class MainActivity : ComponentActivity() {
                     val entry = ds.mappings[ds.selectedIndex]
                     val options = platformResolver.getCorePickerOptions(entry.tag)
                     val currentCore = platformResolver.getCoreMapping(entry.tag)
-                    val selectedIdx = options.indexOfFirst { it.coreId == currentCore }.coerceAtLeast(0)
+                    val currentRunner = entry.runnerLabel
+                    val selectedIdx = options.indexOfFirst { it.coreId == currentCore && it.runnerLabel == currentRunner }
+                        .coerceAtLeast(options.indexOfFirst { it.coreId == currentCore }.coerceAtLeast(0))
                     dialogState.value = DialogState.CorePicker(
                         tag = entry.tag,
                         platformName = entry.platformName,
@@ -448,7 +450,8 @@ class MainActivity : ComponentActivity() {
                 is DialogState.CorePicker -> {
                     if (ds.cores.isNotEmpty()) {
                         val chosen = ds.cores[ds.selectedIndex]
-                        platformResolver.setCoreMapping(ds.tag, chosen.coreId)
+                        val runner = if (chosen.runnerLabel == "Internal" || chosen.runnerLabel == "RetroArch") chosen.runnerLabel else null
+                        platformResolver.setCoreMapping(ds.tag, chosen.coreId, runner)
                         val mappings = platformResolver.getDetailedMappings()
                         val idx = mappings.indexOfFirst { it.tag == ds.tag }.coerceAtLeast(0)
                         dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
@@ -559,7 +562,7 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
                 }
                 is DialogState.CoreMappingList -> {
-                    platformResolver.saveCoreMappings()
+                    platformResolver.reloadCoreMappings()
                     dialogState.value = DialogState.None
                 }
                 is DialogState.AppPicker -> {
@@ -657,7 +660,8 @@ class MainActivity : ComponentActivity() {
                 is DialogState.CorePicker -> {
                     if (ds.cores.isNotEmpty()) {
                         val chosen = ds.cores[ds.selectedIndex]
-                        platformResolver.setCoreMapping(ds.tag, chosen.coreId)
+                        val runner = if (chosen.runnerLabel == "Internal" || chosen.runnerLabel == "RetroArch") chosen.runnerLabel else null
+                        platformResolver.setCoreMapping(ds.tag, chosen.coreId, runner)
                         val mappings = platformResolver.getDetailedMappings()
                         val idx = mappings.indexOfFirst { it.tag == ds.tag }.coerceAtLeast(0)
                         dialogState.value = DialogState.CoreMappingList(mappings = mappings, selectedIndex = idx)
@@ -1066,10 +1070,13 @@ class MainActivity : ComponentActivity() {
             is LaunchTarget.RetroArch -> {
                 val core = platformResolver.getCoreName(game.platformTag)
                 if (core != null) {
-                    val embeddedCorePath = findEmbeddedCore(core)
-                    if (embeddedCorePath != null) {
-                        launchEmbedded(game, embeddedCorePath)
-                        return
+                    val runnerPref = platformResolver.getRunnerPreference(game.platformTag)
+                    if (runnerPref != "RetroArch") {
+                        val embeddedCorePath = findEmbeddedCore(core)
+                        if (embeddedCorePath != null) {
+                            launchEmbedded(game, embeddedCorePath)
+                            return
+                        }
                     }
                     retroArchLauncher.launch(game.file, core)
                 } else {

@@ -86,6 +86,7 @@ class PlatformResolver(
 
     private var ini: IniData = IniData(emptyMap())
     private var userCores: MutableMap<String, String> = mutableMapOf()
+    private var userRunners: MutableMap<String, String> = mutableMapOf()
     private val coresFile get() = File(cannoliRoot, "Config/cores.json")
 
     fun load() {
@@ -99,19 +100,30 @@ class PlatformResolver(
 
     private fun loadCoreMappings() {
         userCores.clear()
+        userRunners.clear()
         if (!coresFile.exists()) return
         try {
             val json = JSONObject(coresFile.readText())
-            for (key in json.keys()) {
-                userCores[key] = json.getString(key)
-            }
+            val cores = json.optJSONObject("cores") ?: return
+            for (key in cores.keys()) userCores[key] = cores.getString(key)
+            val runners = json.optJSONObject("runners") ?: return
+            for (key in runners.keys()) userRunners[key] = runners.getString(key)
         } catch (_: Exception) {}
+    }
+
+    fun reloadCoreMappings() {
+        loadCoreMappings()
     }
 
     fun saveCoreMappings() {
         val json = JSONObject()
-        for ((tag, core) in userCores) {
-            json.put(tag, core)
+        val cores = JSONObject()
+        for ((tag, core) in userCores) cores.put(tag, core)
+        json.put("cores", cores)
+        if (userRunners.isNotEmpty()) {
+            val runners = JSONObject()
+            for ((tag, runner) in userRunners) runners.put(tag, runner)
+            json.put("runners", runners)
         }
         coresFile.parentFile?.mkdirs()
         coresFile.writeText(json.toString(2))
@@ -121,13 +133,20 @@ class PlatformResolver(
         return userCores[tag] ?: defaultCores[tag] ?: ""
     }
 
-    fun setCoreMapping(tag: String, core: String) {
+    fun setCoreMapping(tag: String, core: String, runner: String? = null) {
         if (core.isBlank() || core == defaultCores[tag]) {
             userCores.remove(tag)
         } else {
             userCores[tag] = core
         }
+        if (runner != null) {
+            userRunners[tag] = runner
+        } else {
+            userRunners.remove(tag)
+        }
     }
+
+    fun getRunnerPreference(tag: String): String? = userRunners[tag]
 
     fun getCoreDisplayName(coreId: String): String {
         return coreInfo?.getDisplayName(coreId) ?: coreId
@@ -140,6 +159,8 @@ class PlatformResolver(
     fun getRunnerLabel(tag: String, coreId: String): String {
         val romsDir = File(cannoliRoot, "Roms")
         if (File(romsDir, "$tag/.emu_launch").exists()) return "External"
+        val override = userRunners[tag]
+        if (override != null) return override
         val coresDir = File(cannoliRoot, "Cores")
         if (File(coresDir, "${coreId}_android.so").exists()) return "Internal"
         return "RetroArch"
