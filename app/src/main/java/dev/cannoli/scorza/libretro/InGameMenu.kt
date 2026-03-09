@@ -54,9 +54,24 @@ object InGameMenu {
 }
 
 object IGMSettings {
-    const val CONTROLS = 0
+    const val FRONTEND = 0
+    const val EMULATOR = 1
+    const val CONTROLS = 2
+    const val SHORTCUTS = 3
+    const val SAVE_SETTINGS = 4
 
-    val OPTIONS = listOf("Controls")
+    val CATEGORIES = listOf("Frontend", "Emulator", "Controls", "Shortcuts", "Save Settings")
+}
+
+enum class ShortcutAction(val label: String) {
+    SAVE_STATE("Save State"),
+    LOAD_STATE("Load State"),
+    RESET_GAME("Reset Game"),
+    SAVE_AND_QUIT("Save and Quit"),
+    CYCLE_SCALING("Cycle Scaling"),
+    CYCLE_EFFECT("Cycle Effect"),
+    TOGGLE_FF("Toggle Fast Forward"),
+    HOLD_FF("Hold Fast Forward")
 }
 
 private val fontSize = 22.sp

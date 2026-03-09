@@ -24,20 +24,19 @@ import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 fun LibretroScreen(
     glSurfaceView: GLSurfaceView,
     gameTitle: String,
-    menuVisible: Boolean,
-    menuSelectedIndex: Int,
+    screen: IGMScreen?,
     selectedSlot: SaveSlotManager.Slot,
     slotThumbnail: Bitmap?,
     slotExists: Boolean,
     slotOccupied: List<Boolean>,
     undoLabel: String?,
-    onMenuAction: (Int) -> Unit,
-    settingsVisible: Boolean,
-    settingsSelectedIndex: Int,
-    controlsVisible: Boolean,
-    controlsSelectedIndex: Int,
-    controlsListeningIndex: Int,
+    settingsItems: List<IGMSettingsItem>,
+    coreInfo: String,
     input: LibretroInput,
+    debugHud: Boolean,
+    renderer: LibretroRenderer,
+    runner: LibretroRunner,
+    audioSampleRate: Int,
     showWifi: Boolean,
     showBluetooth: Boolean,
     showClock: Boolean,
@@ -45,7 +44,7 @@ fun LibretroScreen(
     use24h: Boolean,
     osdMessage: String?
 ) {
-    val overlayVisible = menuVisible || settingsVisible || controlsVisible
+    val overlayVisible = screen != null
     val statusBarEnabled = showWifi || showBluetooth || showClock || showBattery
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -54,25 +53,44 @@ fun LibretroScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        when {
-            controlsVisible -> ControlsScreen(
-                input = input,
-                selectedIndex = controlsSelectedIndex,
-                listeningIndex = controlsListeningIndex
-            )
-            settingsVisible -> IGMSettingsScreen(
-                selectedIndex = settingsSelectedIndex
-            )
-            menuVisible -> InGameMenu(
+        when (screen) {
+            is IGMScreen.Menu -> InGameMenu(
                 gameTitle = gameTitle,
-                selectedIndex = menuSelectedIndex,
+                selectedIndex = screen.selectedIndex,
                 selectedSlot = selectedSlot,
                 slotThumbnail = slotThumbnail,
                 slotExists = slotExists,
                 slotOccupied = slotOccupied,
                 undoLabel = undoLabel,
-                onAction = onMenuAction
+                onAction = {}
             )
+            is IGMScreen.Controls -> ControlsScreen(
+                input = input,
+                selectedIndex = screen.selectedIndex,
+                listeningIndex = screen.listeningIndex
+            )
+            is IGMScreen.Settings, is IGMScreen.Frontend, is IGMScreen.Emulator,
+            is IGMScreen.Shortcuts, is IGMScreen.SaveSettings -> IGMSettingsScreen(
+                items = settingsItems,
+                selectedIndex = screen.selectedIndex,
+                coreInfo = coreInfo
+            )
+            null -> {}
+        }
+
+        if (debugHud && !overlayVisible) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+            ) {
+                DebugHud(
+                    renderer = renderer,
+                    runner = runner,
+                    coreName = coreInfo,
+                    audioSampleRate = audioSampleRate
+                )
+            }
         }
 
         if (osdMessage != null) {
