@@ -144,6 +144,16 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN &&
+            intent.categories?.contains(Intent.CATEGORY_HOME) == true &&
+            ::inputHandler.isInitialized
+        ) {
+            inputHandler.onStart()
+        }
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (::inputHandler.isInitialized && inputHandler.handleKeyEvent(event)) {
             return true
@@ -1150,7 +1160,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun findEmbeddedCore(coreName: String): String? {
-        val coresDir = java.io.File(settings.sdCardRoot, "Cores")
+        val coresDir = java.io.File(settings.sdCardRoot, "Config/Cores")
         val coreFile = java.io.File(coresDir, "${coreName}_android.so")
         return if (coreFile.exists()) coreFile.absolutePath else null
     }
@@ -1169,6 +1179,8 @@ class MainActivity : ComponentActivity() {
             val stateDir = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName")
             stateDir.mkdirs()
             putExtra("state_path", java.io.File(stateDir, "$romName.state").absolutePath)
+            putExtra("platform_tag", game.platformTag)
+            putExtra("cannoli_root", cannoliRoot.absolutePath)
             putExtra("system_dir", java.io.File(cannoliRoot, "BIOS").absolutePath)
             putExtra("save_dir", saveDir.absolutePath)
             putExtra("color_highlight", settings.colorHighlight)
