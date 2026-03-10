@@ -74,7 +74,7 @@
     <string name="dialog_delete_confirm">Delete \"%1$s\"?</string>
     <string name="dialog_add_to_collection">Add to Collection</string>
     <string name="dialog_new_collection">New Collection</string>
-    <string name="dialog_missing_core">%1$s is not installed.\nAdd the core to Config/Cores or install RetroArch.</string>
+    <string name="dialog_missing_core">%1$s is not available.\nNo bundled or RetroArch core found.</string>
     <string name="dialog_missing_app">%1$s is not installed.</string>
     <string name="dialog_launch_error">%1$s</string>
     <string name="dialog_title_missing_core">Missing core</string>

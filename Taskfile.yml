@@ -1,0 +1,51 @@
+version: '3'
+
+vars:
+  BUILDBOT: https://buildbot.libretro.com/nightly/android/latest
+  CORES_DIR: app/src/main/jniLibs
+
+tasks:
+  cores:
+    desc: Fetch bundled libretro cores for arm64-v8a and armeabi-v7a
+    vars:
+      CORES:
+        - fceumm
+        - nestopia
+        - snes9x
+        - gambatte
+        - mgba
+        - genesis_plus_gx
+        - pcsx_rearmed
+        - swanstation
+        - mupen64plus_next_gles3
+        - stella
+        - prosystem
+        - handy
+        - mednafen_ngp
+        - mednafen_pce_fast
+        - mednafen_wswan
+        - mednafen_vb
+        - pokemini
+    cmds:
+      - mkdir -p {{.CORES_DIR}}/arm64-v8a {{.CORES_DIR}}/armeabi-v7a
+      - for:
+          var: CORES
+        cmd: |
+          for arch in arm64-v8a armeabi-v7a; do
+            zip="{{.ITEM}}_libretro_android.so.zip"
+            dest="{{.CORES_DIR}}/${arch}"
+            if [ -f "${dest}/{{.ITEM}}_libretro_android.so" ]; then
+              echo "SKIP ${arch}/{{.ITEM}}"
+              continue
+            fi
+            echo "FETCH ${arch}/{{.ITEM}}"
+            curl -sfL "{{.BUILDBOT}}/${arch}/${zip}" -o "/tmp/${zip}" && \
+              unzip -o "/tmp/${zip}" -d "${dest}" && \
+              rm "/tmp/${zip}" || \
+              echo "FAIL ${arch}/{{.ITEM}}"
+          done
+
+  cores:clean:
+    desc: Remove all downloaded cores
+    cmds:
+      - rm -rf {{.CORES_DIR}}

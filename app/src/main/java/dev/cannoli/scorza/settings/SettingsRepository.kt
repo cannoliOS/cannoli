@@ -2,118 +2,160 @@ package dev.cannoli.scorza.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONObject
+import java.io.File
 
 class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("cannoli_settings", Context.MODE_PRIVATE)
 
+    private var json = JSONObject()
+    private var settingsFile: File? = null
+
     init {
         if (prefs.getString(KEY_RA_PACKAGE, null) == "com.retroarch") {
             prefs.edit().putString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE).apply()
         }
+        loadFromDisk()
+        migrateFromPrefs()
+    }
+
+    private fun loadFromDisk() {
+        val file = File(sdCardRoot, "Config/settings.json")
+        settingsFile = file
+        if (file.exists()) {
+            try { json = JSONObject(file.readText()) } catch (_: Exception) {}
+        }
+    }
+
+    private fun save() {
+        settingsFile?.let { file ->
+            file.parentFile?.mkdirs()
+            file.writeText(json.toString(2))
+        }
+    }
+
+    private fun migrateFromPrefs() {
+        if (json.length() > 0) return
+        val keys = prefs.all.keys - KEY_SD_ROOT
+        if (keys.isEmpty()) return
+        for (key in keys) {
+            when (val v = prefs.all[key]) {
+                is String -> json.put(key, v)
+                is Boolean -> json.put(key, v)
+                is Int -> json.put(key, v)
+            }
+        }
+        save()
+        val editor = prefs.edit()
+        for (key in keys) editor.remove(key)
+        editor.apply()
     }
 
     var sdCardRoot: String
         get() = prefs.getString(KEY_SD_ROOT, DEFAULT_ROOT) ?: DEFAULT_ROOT
-        set(value) = prefs.edit().putString(KEY_SD_ROOT, value).apply()
+        set(value) {
+            prefs.edit().putString(KEY_SD_ROOT, value).apply()
+            settingsFile = File(value, "Config/settings.json")
+            loadFromDisk()
+        }
 
     var retroArchPackage: String
-        get() = prefs.getString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE) ?: DEFAULT_RA_PACKAGE
-        set(value) = prefs.edit().putString(KEY_RA_PACKAGE, value).apply()
+        get() = json.optString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE)
+        set(value) { json.put(KEY_RA_PACKAGE, value); save() }
 
     var buttonLayout: ButtonLayout
-        get() = ButtonLayout.fromString(prefs.getString(KEY_BUTTON_LAYOUT, null))
-        set(value) = prefs.edit().putString(KEY_BUTTON_LAYOUT, value.name).apply()
+        get() = ButtonLayout.fromString(json.optString(KEY_BUTTON_LAYOUT, null))
+        set(value) { json.put(KEY_BUTTON_LAYOUT, value.name); save() }
 
     var textSize: TextSize
-        get() = TextSize.fromString(prefs.getString(KEY_TEXT_SIZE, null))
-        set(value) = prefs.edit().putString(KEY_TEXT_SIZE, value.name).apply()
+        get() = TextSize.fromString(json.optString(KEY_TEXT_SIZE, null))
+        set(value) { json.put(KEY_TEXT_SIZE, value.name); save() }
 
     var gameSortOrder: SortOrder
-        get() = SortOrder.fromString(prefs.getString(KEY_SORT_ORDER, null))
-        set(value) = prefs.edit().putString(KEY_SORT_ORDER, value.name).apply()
+        get() = SortOrder.fromString(json.optString(KEY_SORT_ORDER, null))
+        set(value) { json.put(KEY_SORT_ORDER, value.name); save() }
 
     var scrollSpeed: ScrollSpeed
-        get() = ScrollSpeed.fromString(prefs.getString(KEY_SCROLL_SPEED, null))
-        set(value) = prefs.edit().putString(KEY_SCROLL_SPEED, value.name).apply()
+        get() = ScrollSpeed.fromString(json.optString(KEY_SCROLL_SPEED, null))
+        set(value) { json.put(KEY_SCROLL_SPEED, value.name); save() }
 
     var showCoreTag: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_CORE_TAG, false)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_CORE_TAG, value).apply()
+        get() = json.optBoolean(KEY_SHOW_CORE_TAG, false)
+        set(value) { json.put(KEY_SHOW_CORE_TAG, value); save() }
 
     var timeFormat: TimeFormat
-        get() = TimeFormat.fromString(prefs.getString(KEY_TIME_FORMAT, null))
-        set(value) = prefs.edit().putString(KEY_TIME_FORMAT, value.name).apply()
+        get() = TimeFormat.fromString(json.optString(KEY_TIME_FORMAT, null))
+        set(value) { json.put(KEY_TIME_FORMAT, value.name); save() }
 
     var backgroundImagePath: String?
-        get() = prefs.getString(KEY_BG_IMAGE, null)
-        set(value) = prefs.edit().putString(KEY_BG_IMAGE, value).apply()
+        get() = json.optString(KEY_BG_IMAGE, "").ifEmpty { null }
+        set(value) { if (value != null) json.put(KEY_BG_IMAGE, value) else json.remove(KEY_BG_IMAGE); save() }
 
     var swapStartSelect: Boolean
-        get() = prefs.getBoolean(KEY_SWAP_START_SELECT, false)
-        set(value) = prefs.edit().putBoolean(KEY_SWAP_START_SELECT, value).apply()
+        get() = json.optBoolean(KEY_SWAP_START_SELECT, false)
+        set(value) { json.put(KEY_SWAP_START_SELECT, value); save() }
 
     var platformSwitching: Boolean
-        get() = prefs.getBoolean(KEY_PLATFORM_SWITCHING, false)
-        set(value) = prefs.edit().putBoolean(KEY_PLATFORM_SWITCHING, value).apply()
+        get() = json.optBoolean(KEY_PLATFORM_SWITCHING, false)
+        set(value) { json.put(KEY_PLATFORM_SWITCHING, value); save() }
 
     var showWifi: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_WIFI, true)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_WIFI, value).apply()
+        get() = json.optBoolean(KEY_SHOW_WIFI, true)
+        set(value) { json.put(KEY_SHOW_WIFI, value); save() }
 
     var showBluetooth: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_BLUETOOTH, true)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_BLUETOOTH, value).apply()
+        get() = json.optBoolean(KEY_SHOW_BLUETOOTH, true)
+        set(value) { json.put(KEY_SHOW_BLUETOOTH, value); save() }
 
     var showClock: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_CLOCK, true)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_CLOCK, value).apply()
+        get() = json.optBoolean(KEY_SHOW_CLOCK, true)
+        set(value) { json.put(KEY_SHOW_CLOCK, value); save() }
 
     var showBattery: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_BATTERY, true)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_BATTERY, value).apply()
+        get() = json.optBoolean(KEY_SHOW_BATTERY, true)
+        set(value) { json.put(KEY_SHOW_BATTERY, value); save() }
 
     var showEmpty: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_EMPTY, false)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_EMPTY, value).apply()
+        get() = json.optBoolean(KEY_SHOW_EMPTY, false)
+        set(value) { json.put(KEY_SHOW_EMPTY, value); save() }
 
     var showTools: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_TOOLS, false)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_TOOLS, value).apply()
+        get() = json.optBoolean(KEY_SHOW_TOOLS, false)
+        set(value) { json.put(KEY_SHOW_TOOLS, value); save() }
 
     var showPorts: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_PORTS, false)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_PORTS, value).apply()
+        get() = json.optBoolean(KEY_SHOW_PORTS, false)
+        set(value) { json.put(KEY_SHOW_PORTS, value); save() }
 
     var toolsName: String
-        get() = prefs.getString(KEY_TOOLS_NAME, null) ?: "Tools"
-        set(value) = prefs.edit().putString(KEY_TOOLS_NAME, if (value == "Tools") null else value).apply()
+        get() = json.optString(KEY_TOOLS_NAME, "Tools").ifEmpty { "Tools" }
+        set(value) { if (value == "Tools") json.remove(KEY_TOOLS_NAME) else json.put(KEY_TOOLS_NAME, value); save() }
 
     var portsName: String
-        get() = prefs.getString(KEY_PORTS_NAME, null) ?: "Ports"
-        set(value) = prefs.edit().putString(KEY_PORTS_NAME, if (value == "Ports") null else value).apply()
+        get() = json.optString(KEY_PORTS_NAME, "Ports").ifEmpty { "Ports" }
+        set(value) { if (value == "Ports") json.remove(KEY_PORTS_NAME) else json.put(KEY_PORTS_NAME, value); save() }
 
-    /** Background tint opacity 0–90 in steps of 10. 0 = off. */
     var backgroundTint: Int
-        get() = prefs.getInt(KEY_BG_TINT, 0)
-        set(value) = prefs.edit().putInt(KEY_BG_TINT, value.coerceIn(0, 90)).apply()
+        get() = json.optInt(KEY_BG_TINT, 0)
+        set(value) { json.put(KEY_BG_TINT, value.coerceIn(0, 90)); save() }
 
     var colorHighlight: String
-        get() = prefs.getString(KEY_COLOR_HIGHLIGHT, "#FFFFFF") ?: "#FFFFFF"
-        set(value) = prefs.edit().putString(KEY_COLOR_HIGHLIGHT, value).apply()
+        get() = json.optString(KEY_COLOR_HIGHLIGHT, "#FFFFFF")
+        set(value) { json.put(KEY_COLOR_HIGHLIGHT, value); save() }
 
     var colorText: String
-        get() = prefs.getString(KEY_COLOR_TEXT, "#FFFFFF") ?: "#FFFFFF"
-        set(value) = prefs.edit().putString(KEY_COLOR_TEXT, value).apply()
+        get() = json.optString(KEY_COLOR_TEXT, "#FFFFFF")
+        set(value) { json.put(KEY_COLOR_TEXT, value); save() }
 
     var colorHighlightText: String
-        get() = prefs.getString(KEY_COLOR_HIGHLIGHT_TEXT, "#000000") ?: "#000000"
-        set(value) = prefs.edit().putString(KEY_COLOR_HIGHLIGHT_TEXT, value).apply()
+        get() = json.optString(KEY_COLOR_HIGHLIGHT_TEXT, "#000000")
+        set(value) { json.put(KEY_COLOR_HIGHLIGHT_TEXT, value); save() }
 
     var colorAccent: String
-        get() = prefs.getString(KEY_COLOR_ACCENT, "#FFFFFF") ?: "#FFFFFF"
-        set(value) = prefs.edit().putString(KEY_COLOR_ACCENT, value).apply()
+        get() = json.optString(KEY_COLOR_ACCENT, "#FFFFFF")
+        set(value) { json.put(KEY_COLOR_ACCENT, value); save() }
 
     companion object {
         const val DEFAULT_ROOT = "/storage/emulated/0/Cannoli/"
@@ -127,7 +169,6 @@ class SettingsRepository(context: Context) {
         private const val KEY_SCROLL_SPEED = "scroll_speed"
         private const val KEY_SHOW_CORE_TAG = "show_core_tag"
         private const val KEY_TIME_FORMAT = "time_format"
-        private const val KEY_BATTERY_PCT = "battery_percentage"
         private const val KEY_BG_IMAGE = "bg_image"
         private const val KEY_SWAP_START_SELECT = "swap_start_select"
         private const val KEY_BG_TINT = "bg_tint"

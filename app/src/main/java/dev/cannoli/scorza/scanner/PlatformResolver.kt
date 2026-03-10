@@ -15,7 +15,8 @@ data class GameCoreOverride(val coreId: String = "", val runner: String? = null,
 class PlatformResolver(
     private val cannoliRoot: File,
     private val assets: AssetManager,
-    private val coreInfo: CoreInfoRepository? = null
+    private val coreInfo: CoreInfoRepository? = null,
+    private val nativeLibDir: String? = null
 ) {
 
     private var defaultCores = mapOf<String, String>()
@@ -198,8 +199,7 @@ class PlatformResolver(
         if (File(romsDir, "$tag/.emu_launch").exists()) return "External"
         val override = userRunners[tag]
         if (override != null) return override
-        val coresDir = File(cannoliRoot, "Config/Cores")
-        if (File(coresDir, "${coreId}_android.so").exists()) return "Internal"
+        if (nativeLibDir != null && File(nativeLibDir, "${coreId}_android.so").exists()) return "Internal"
         return "RetroArch"
     }
 
@@ -228,7 +228,6 @@ class PlatformResolver(
     }
 
     fun getCorePickerOptions(tag: String, pm: PackageManager? = null): List<dev.cannoli.scorza.ui.screens.CorePickerOption> {
-        val coresDir = File(cannoliRoot, "Config/Cores")
         val options = mutableListOf<dev.cannoli.scorza.ui.screens.CorePickerOption>()
 
         val coreIds = mutableListOf<String>()
@@ -237,7 +236,7 @@ class PlatformResolver(
 
         for (coreId in coreIds) {
             val displayName = getCoreDisplayName(coreId)
-            val hasInternal = File(coresDir, "${coreId}_android.so").exists()
+            val hasInternal = nativeLibDir != null && File(nativeLibDir, "${coreId}_android.so").exists()
             if (hasInternal) {
                 options.add(dev.cannoli.scorza.ui.screens.CorePickerOption(
                     coreId = coreId, displayName = displayName, runnerLabel = "Internal"

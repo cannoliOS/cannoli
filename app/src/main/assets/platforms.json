@@ -31,7 +31,10 @@
   },
   "N64": {
     "name": "Nintendo 64",
-    "core": "mupen64plus_next_libretro"
+    "core": "mupen64plus_next_gles3_libretro",
+    "retroarch": [
+      "mupen64plus_next_libretro"
+    ]
   },
   "NDS": {
     "name": "Nintendo DS",
@@ -97,7 +100,10 @@
   },
   "LYNX": {
     "name": "Atari Lynx",
-    "core": "mednafen_lynx_libretro"
+    "core": "handy_libretro",
+    "retroarch": [
+      "mednafen_lynx_libretro"
+    ]
   },
   "JAGUAR": {
     "name": "Atari Jaguar",
@@ -117,7 +123,10 @@
   },
   "PCE": {
     "name": "PC Engine",
-    "core": "mednafen_pce_libretro"
+    "core": "mednafen_pce_fast_libretro",
+    "retroarch": [
+      "mednafen_pce_libretro"
+    ]
   },
   "PCFX": {
     "name": "PC-FX",
@@ -175,7 +184,10 @@
   },
   "SUPERGRAFX": {
     "name": "PC Engine SuperGrafx",
-    "core": "mednafen_pce_libretro"
+    "core": "mednafen_pce_fast_libretro",
+    "retroarch": [
+      "mednafen_pce_libretro"
+    ]
   },
   
   "DOS": {

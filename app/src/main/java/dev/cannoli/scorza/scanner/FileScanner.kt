@@ -313,7 +313,6 @@ class FileScanner(
             File(cannoliRoot, "Media/Screenshots"),
             File(cannoliRoot, "Media/Recordings"),
             File(cannoliRoot, "Config"),
-            File(cannoliRoot, "Config/Cores"),
             File(cannoliRoot, "Config/Overrides"),
             File(cannoliRoot, "Config/Overrides/Cores"),
             File(cannoliRoot, "Config/Overrides/Games"),

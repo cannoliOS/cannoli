@@ -1,7 +1,10 @@
 package dev.cannoli.scorza.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,15 +12,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -58,7 +64,7 @@ fun PillRow(
         Box(
             modifier = Modifier
                 .padding(vertical = 2.dp)
-                .padding(start = pillInternalH, top = verticalPadding, bottom = verticalPadding)
+                .padding(horizontal = pillInternalH, vertical = verticalPadding)
         ) {
             content()
         }
@@ -133,69 +139,64 @@ fun PillRowKeyValue(
         fontSize = (fontSize.value * 0.72f).sp
     )
 
-    if (isSelected) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 2.dp)
-                .clip(RoundedCornerShape(50))
-                .background(colors.highlight)
-                .padding(horizontal = pillInternalH, vertical = verticalPadding),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                style = textStyle,
-                color = colors.highlightText,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-            if (swatchColor != null) {
-                Box(
-                    modifier = Modifier
-                        .size((fontSize.value * 0.7f).dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(swatchColor)
-                        .border(1.dp, colors.highlightText.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+    val scrollState = rememberScrollState()
+    LaunchedEffect(isSelected) {
+        scrollState.scrollTo(0)
+        if (isSelected) {
+            delay(600)
+            while (true) {
+                val max = scrollState.maxValue
+                if (max <= 0) break
+                val duration = (max * 4).coerceIn(500, 8000)
+                scrollState.animateScrollTo(
+                    max,
+                    animationSpec = tween(durationMillis = duration, easing = LinearEasing)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                delay(800)
+                scrollState.animateScrollTo(
+                    0,
+                    animationSpec = tween(durationMillis = duration, easing = LinearEasing)
+                )
+                delay(800)
             }
-            Text(
-                text = value,
-                style = valueStyle,
-                color = colors.highlightText.copy(alpha = 0.5f),
-                maxLines = 1
-            )
         }
-    } else {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 2.dp)
-                .padding(start = pillInternalH, top = verticalPadding, bottom = verticalPadding, end = pillInternalH),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                style = textStyle,
-                color = colors.text,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
+    }
+
+    val labelColor = if (isSelected) colors.highlightText else colors.text
+    val valueColor = if (isSelected) colors.highlightText.copy(alpha = 0.5f) else GrayText
+    val borderColor = if (isSelected) colors.highlightText.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.3f)
+
+    PillRow(isSelected = isSelected, verticalPadding = verticalPadding) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(scrollState),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = textStyle,
+                    color = labelColor,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
             if (swatchColor != null) {
                 Box(
                     modifier = Modifier
                         .size((fontSize.value * 0.7f).dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(swatchColor)
-                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                        .border(1.dp, borderColor, RoundedCornerShape(4.dp))
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Text(
                 text = value,
                 style = valueStyle,
-                color = GrayText,
+                color = valueColor,
                 maxLines = 1
             )
         }

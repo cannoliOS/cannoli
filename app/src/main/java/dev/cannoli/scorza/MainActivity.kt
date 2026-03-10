@@ -271,11 +271,32 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    private fun extractBundledCores(): String {
+        val coresDir = java.io.File(filesDir, "cores")
+        coresDir.mkdirs()
+        val versionFile = java.io.File(coresDir, ".version")
+        val currentVersion = java.io.File(applicationInfo.sourceDir).lastModified().toString()
+        if (versionFile.exists() && versionFile.readText() == currentVersion) return coresDir.absolutePath
+        val apkZip = java.util.zip.ZipFile(applicationInfo.sourceDir)
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+        val prefix = "lib/$abi/"
+        for (entry in apkZip.entries()) {
+            if (!entry.name.startsWith(prefix) || !entry.name.endsWith("_libretro_android.so")) continue
+            val name = entry.name.removePrefix(prefix)
+            val dst = java.io.File(coresDir, name)
+            apkZip.getInputStream(entry).use { inp -> dst.outputStream().use { inp.copyTo(it) } }
+        }
+        apkZip.close()
+        versionFile.writeText(currentVersion)
+        return coresDir.absolutePath
+    }
+
     private fun initializeApp() {
         val root = File(settings.sdCardRoot)
+        val bundledCoresDir = extractBundledCores()
         val coreInfo = dev.cannoli.scorza.scanner.CoreInfoRepository(assets)
         coreInfo.load()
-        platformResolver = PlatformResolver(root, assets, coreInfo)
+        platformResolver = PlatformResolver(root, assets, coreInfo, bundledCoresDir)
         platformResolver.load()
 
         scanner = FileScanner(root, platformResolver)
@@ -1288,8 +1309,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun findEmbeddedCore(coreName: String): String? {
-        val coresDir = java.io.File(settings.sdCardRoot, "Config/Cores")
-        val coreFile = java.io.File(coresDir, "${coreName}_android.so")
+        val soName = "${coreName}_android.so"
+        val coreFile = java.io.File(filesDir, "cores/$soName")
         return if (coreFile.exists()) coreFile.absolutePath else null
     }
 
@@ -1366,6 +1387,7 @@ class MainActivity : ComponentActivity() {
             putExtra("show_clock", settings.showClock)
             putExtra("show_battery", settings.showBattery)
             putExtra("use_24h", settings.timeFormat == dev.cannoli.scorza.settings.TimeFormat.TWENTY_FOUR_HOUR)
+            putExtra("swap_start_select", settings.swapStartSelect)
             if (resumeSlot >= 0) putExtra("resume_slot", resumeSlot)
         }
         startActivity(intent)
