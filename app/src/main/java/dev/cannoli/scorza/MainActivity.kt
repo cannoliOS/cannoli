@@ -1229,19 +1229,28 @@ class MainActivity : ComponentActivity() {
 
         val result = when (val target = game.launchTarget) {
             is LaunchTarget.RetroArch -> {
-                val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag)
-                if (core != null) {
-                    val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
-                    if (runnerPref != "RetroArch") {
-                        val embeddedCorePath = findEmbeddedCore(core)
-                        if (embeddedCorePath != null) {
-                            launchEmbedded(game.copy(file = launchFile), embeddedCorePath)
-                            return
-                        }
+                val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
+                if (runnerPref == "App") {
+                    val app = platformResolver.getAppPackage(game.platformTag)
+                    if (app != null) {
+                        apkLauncher.launchWithRom(app, launchFile)
+                    } else {
+                        LaunchResult.CoreNotInstalled("unknown")
                     }
-                    retroArchLauncher.launch(launchFile, core)
                 } else {
-                    LaunchResult.CoreNotInstalled("unknown")
+                    val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag)
+                    if (core != null) {
+                        if (runnerPref != "RetroArch") {
+                            val embeddedCorePath = findEmbeddedCore(core)
+                            if (embeddedCorePath != null) {
+                                launchEmbedded(game.copy(file = launchFile), embeddedCorePath)
+                                return
+                            }
+                        }
+                        retroArchLauncher.launch(launchFile, core)
+                    } else {
+                        LaunchResult.CoreNotInstalled("unknown")
+                    }
                 }
             }
             is LaunchTarget.EmuLaunch -> {

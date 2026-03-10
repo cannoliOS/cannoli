@@ -150,6 +150,7 @@ class PlatformResolver(
         } else {
             userRunners.remove(tag)
         }
+        userApps.remove(tag)
     }
 
     fun getRunnerPreference(tag: String): String? = userRunners[tag]
@@ -172,13 +173,14 @@ class PlatformResolver(
     fun getAppOptions(tag: String): List<String> = defaultApps[tag] ?: emptyList()
 
     fun setAppMapping(tag: String, appPackage: String?) {
-        if (appPackage == null || appPackage == defaultApps[tag]?.firstOrNull()) {
+        if (appPackage == null) {
             userApps.remove(tag)
+            userRunners.remove(tag)
         } else {
             userApps[tag] = appPackage
+            userRunners[tag] = "App"
         }
         userCores.remove(tag)
-        userRunners.remove(tag)
     }
 
     fun setGameAppOverride(gamePath: String, appPackage: String?) {

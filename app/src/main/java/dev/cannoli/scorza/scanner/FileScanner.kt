@@ -52,8 +52,8 @@ class FileScanner(
         fun resolveTarget(isSubfolder: Boolean): LaunchTarget = when {
             isSubfolder -> LaunchTarget.RetroArch
             emuLaunch != null -> emuLaunch
-            appPackage != null -> LaunchTarget.ApkLaunch(appPackage)
             coreName != null -> LaunchTarget.RetroArch
+            appPackage != null -> LaunchTarget.ApkLaunch(appPackage)
             else -> LaunchTarget.RetroArch
         }
 
@@ -200,8 +200,8 @@ class FileScanner(
 
                 val target = when {
                     emuLaunch != null -> emuLaunch
-                    appPackage != null -> LaunchTarget.ApkLaunch(appPackage)
                     coreName != null -> LaunchTarget.RetroArch
+                    appPackage != null -> LaunchTarget.ApkLaunch(appPackage)
                     else -> LaunchTarget.RetroArch
                 }
 
