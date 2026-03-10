@@ -45,7 +45,7 @@
     <string name="setting_swap_start_select">Swap Start / Select</string>
     <string name="setting_platform_switching">L1 / R1 Platform Switch</string>
     <string name="setting_show_empty">Empty Platforms</string>
-    <string name="setting_scroll_speed">Scroll Speed</string>
+    <string name="setting_scroll_speed">Marquee Speed</string>
     <string name="setting_show_tools">Tools</string>
     <string name="setting_show_ports">Ports</string>
     <string name="setting_manage_tools">Manage Tools</string>
@@ -73,8 +73,12 @@
     <string name="dialog_delete_confirm">Delete \"%1$s\"?</string>
     <string name="dialog_add_to_collection">Add to Collection</string>
     <string name="dialog_new_collection">New Collection</string>
-    <string name="dialog_missing_core">Core not installed: %1$s</string>
-    <string name="dialog_missing_app">App not installed: %1$s</string>
+    <string name="dialog_missing_core">%1$s is not installed.\nAdd the core to Config/Cores or install RetroArch.</string>
+    <string name="dialog_missing_app">%1$s is not installed.</string>
+    <string name="dialog_launch_error">%1$s</string>
+    <string name="dialog_title_missing_core">Missing core</string>
+    <string name="dialog_title_missing_app">Missing app</string>
+    <string name="dialog_title_launch_error">Launch failed</string>
     <string name="dialog_rename_success">Renamed successfully</string>
     <string name="dialog_rename_failed">Rename failed: %1$s</string>
 
