@@ -284,7 +284,6 @@ class LibretroActivity : ComponentActivity() {
             if (holdChord != null && !pressedKeys.containsAll(holdChord)) {
                 holdingFf = false
                 setFastForward(false)
-                showOsd("Fast Forward Off")
             }
         }
 
@@ -339,10 +338,10 @@ class LibretroActivity : ComponentActivity() {
                 }
                 ShortcutAction.TOGGLE_FF -> {
                     setFastForward(!fastForwarding)
-                    showOsd(if (fastForwarding) "Fast Forward On" else "Fast Forward Off")
                 }
                 ShortcutAction.HOLD_FF -> {
-                    if (!holdingFf) { holdingFf = true; setFastForward(true); showOsd("Fast Forward On") }
+                    if (holdingFf) continue
+                    holdingFf = true; setFastForward(true)
                 }
             }
             pressedKeys.clear()
