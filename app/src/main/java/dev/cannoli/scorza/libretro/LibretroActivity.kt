@@ -53,6 +53,7 @@ class LibretroActivity : ComponentActivity() {
     private var maxFfSpeed by mutableIntStateOf(4)
 
     private var coreOptions by mutableStateOf(emptyList<LibretroRunner.CoreOption>())
+    private var coreCategories by mutableStateOf(emptyList<LibretroRunner.CoreOptionCategory>())
     private var shortcuts by mutableStateOf(mapOf<ShortcutAction, Set<Int>>())
     private val shortcutChordKeys = mutableSetOf<Int>()
     private var coreInfoText by mutableStateOf("")
@@ -153,6 +154,7 @@ class LibretroActivity : ComponentActivity() {
         val (coreName, coreVersion) = runner.getSystemInfo()
         coreInfoText = if (coreVersion.isNotEmpty()) "$coreName $coreVersion" else coreName
         coreOptions = runner.getCoreOptions()
+        coreCategories = runner.getCoreCategories()
 
         val coreBaseName = File(corePath).nameWithoutExtension
         val gameBaseName = if (romPath.isNotEmpty()) File(romPath).nameWithoutExtension else ""
@@ -245,6 +247,7 @@ class LibretroActivity : ComponentActivity() {
             is IGMScreen.Settings -> handleCategoryInput(screen, keyCode)
             is IGMScreen.Frontend -> handleFrontendInput(screen, keyCode)
             is IGMScreen.Emulator -> handleEmulatorInput(screen, keyCode)
+            is IGMScreen.EmulatorCategory -> handleEmulatorCategoryInput(screen, keyCode)
             is IGMScreen.Controls -> handleControlsInput(screen, keyCode)
             is IGMScreen.Shortcuts -> handleShortcutsInput(screen, keyCode)
             is IGMScreen.SaveSettings -> handleSaveSettingsInput(screen, keyCode)
@@ -456,7 +459,11 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 when (screen.selectedIndex) {
                     IGMSettings.FRONTEND -> push(IGMScreen.Frontend())
-                    IGMSettings.EMULATOR -> push(IGMScreen.Emulator())
+                    IGMSettings.EMULATOR -> {
+                        coreOptions = runner.getCoreOptions()
+                        coreCategories = runner.getCoreCategories()
+                        push(IGMScreen.Emulator())
+                    }
                     IGMSettings.CONTROLS -> push(IGMScreen.Controls())
                     IGMSettings.SHORTCUTS -> push(IGMScreen.Shortcuts())
                     IGMSettings.SAVE_SETTINGS -> push(IGMScreen.SaveSettings())
@@ -537,9 +544,49 @@ class LibretroActivity : ComponentActivity() {
 
     // --- Emulator ---
 
+    private fun emulatorMenuItems(): List<String> {
+        if (coreOptions.isEmpty()) return listOf("No options available")
+        val usedCategories = coreCategories.filter { cat -> coreOptions.any { it.category == cat.key } }
+        if (usedCategories.isEmpty()) return emptyList()
+        val items = usedCategories.map { it.desc }.toMutableList()
+        val uncategorized = coreOptions.filter { it.category.isEmpty() }
+        if (uncategorized.isNotEmpty()) items.add("Other")
+        return items
+    }
+
+    private fun emulatorHasCategories(): Boolean =
+        coreCategories.isNotEmpty() && coreOptions.any { it.category.isNotEmpty() }
+
     private fun handleEmulatorInput(screen: IGMScreen.Emulator, keyCode: Int): Boolean {
+        if (screen.showDescription) {
+            return if (keyCode == KeyEvent.KEYCODE_BUTTON_B || keyCode == KeyEvent.KEYCODE_BACK ||
+                keyCode == KeyEvent.KEYCODE_BUTTON_A || keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER) {
+                replaceTop(screen.copy(showDescription = false)); true
+            } else true
+        }
         if (coreOptions.isEmpty()) {
             return if (keyCode == KeyEvent.KEYCODE_BUTTON_B || keyCode == KeyEvent.KEYCODE_BACK) { pop(); true } else true
+        }
+        if (emulatorHasCategories()) {
+            val items = emulatorMenuItems()
+            val count = items.size
+            return when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
+                }
+                KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    val usedCategories = coreCategories.filter { cat -> coreOptions.any { it.category == cat.key } }
+                    val catKey = usedCategories.getOrNull(screen.selectedIndex)?.key ?: ""
+                    push(IGMScreen.EmulatorCategory(categoryKey = catKey))
+                    true
+                }
+                KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+                else -> true
+            }
         }
         val count = coreOptions.size
         return when (keyCode) {
@@ -549,22 +596,56 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
             }
-            KeyEvent.KEYCODE_DPAD_LEFT -> { cycleEmulatorValue(screen.selectedIndex, -1); true }
-            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_BUTTON_A,
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                cycleEmulatorValue(screen.selectedIndex, 1); true
+            KeyEvent.KEYCODE_DPAD_LEFT -> { cycleEmulatorValue(coreOptions, screen.selectedIndex, -1); true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleEmulatorValue(coreOptions, screen.selectedIndex, 1); true }
+            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                val info = coreOptions.getOrNull(screen.selectedIndex)?.info
+                if (!info.isNullOrEmpty()) replaceTop(screen.copy(showDescription = true))
+                true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
             else -> true
         }
     }
 
-    private fun cycleEmulatorValue(index: Int, direction: Int) {
-        val opt = coreOptions.getOrNull(index) ?: return
+    private fun handleEmulatorCategoryInput(screen: IGMScreen.EmulatorCategory, keyCode: Int): Boolean {
+        if (screen.showDescription) {
+            return if (keyCode == KeyEvent.KEYCODE_BUTTON_B || keyCode == KeyEvent.KEYCODE_BACK ||
+                keyCode == KeyEvent.KEYCODE_BUTTON_A || keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER) {
+                replaceTop(screen.copy(showDescription = false)); true
+            } else true
+        }
+        val filtered = coreOptions.filter { it.category == screen.categoryKey }
+        if (filtered.isEmpty()) {
+            return if (keyCode == KeyEvent.KEYCODE_BUTTON_B || keyCode == KeyEvent.KEYCODE_BACK) { pop(); true } else true
+        }
+        val count = filtered.size
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { cycleEmulatorValue(filtered, screen.selectedIndex, -1); true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleEmulatorValue(filtered, screen.selectedIndex, 1); true }
+            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                val info = filtered.getOrNull(screen.selectedIndex)?.info
+                if (!info.isNullOrEmpty()) replaceTop(screen.copy(showDescription = true))
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            else -> true
+        }
+    }
+
+    private fun cycleEmulatorValue(options: List<LibretroRunner.CoreOption>, index: Int, direction: Int) {
+        val opt = options.getOrNull(index) ?: return
         if (opt.values.isEmpty()) return
-        val curIdx = opt.values.indexOf(opt.selected).coerceAtLeast(0)
+        val curIdx = opt.values.indexOfFirst { it.value == opt.selected }.coerceAtLeast(0)
         val newVal = opt.values[(curIdx + direction + opt.values.size) % opt.values.size]
-        runner.setCoreOption(opt.key, newVal)
+        runner.setCoreOption(opt.key, newVal.value)
         coreOptions = runner.getCoreOptions()
     }
 
@@ -668,7 +749,7 @@ class LibretroActivity : ComponentActivity() {
 
     // --- Settings item builders ---
 
-    private fun buildSettingsItems(): List<IGMSettingsItem> = when (currentScreen) {
+    private fun buildSettingsItems(): List<IGMSettingsItem> = when (val screen = currentScreen) {
         is IGMScreen.Settings -> IGMSettings.CATEGORIES.map { IGMSettingsItem(it) }
         is IGMScreen.Frontend -> listOf(
             IGMSettingsItem("Screen Scaling", scalingLabel()),
@@ -678,8 +759,27 @@ class LibretroActivity : ComponentActivity() {
             IGMSettingsItem("Max FF Speed", "${maxFfSpeed}x")
         )
         is IGMScreen.Emulator -> {
-            if (coreOptions.isEmpty()) listOf(IGMSettingsItem("No options available"))
-            else coreOptions.map { IGMSettingsItem(it.desc, it.selected) }
+            if (emulatorHasCategories()) {
+                val usedCategories = coreCategories.filter { cat -> coreOptions.any { it.category == cat.key } }
+                val items = usedCategories.map { IGMSettingsItem(it.desc, hint = it.info.ifEmpty { null }) }.toMutableList()
+                val uncategorized = coreOptions.filter { it.category.isEmpty() }
+                if (uncategorized.isNotEmpty()) items.add(IGMSettingsItem("Other"))
+                items
+            } else if (coreOptions.isEmpty()) {
+                listOf(IGMSettingsItem("No options available"))
+            } else {
+                coreOptions.map { opt ->
+                    val label = opt.values.find { it.value == opt.selected }?.label ?: opt.selected
+                    IGMSettingsItem(opt.desc, label, hint = opt.info.ifEmpty { null })
+                }
+            }
+        }
+        is IGMScreen.EmulatorCategory -> {
+            val filtered = coreOptions.filter { it.category == screen.categoryKey }
+            filtered.map { opt ->
+                val label = opt.values.find { it.value == opt.selected }?.label ?: opt.selected
+                IGMSettingsItem(opt.desc, label, hint = opt.info.ifEmpty { null })
+            }
         }
         is IGMScreen.Shortcuts -> ShortcutAction.entries.map { action ->
             val chord = shortcuts[action]

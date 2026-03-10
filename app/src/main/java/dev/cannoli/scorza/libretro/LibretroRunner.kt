@@ -63,20 +63,47 @@ class LibretroRunner {
 
     fun getAspectRatio(): Float = nativeGetAspectRatio()
 
-    data class CoreOption(val key: String, val desc: String, val values: List<String>, val selected: String)
+    data class CoreOptionValue(val value: String, val label: String)
+    data class CoreOption(
+        val key: String,
+        val desc: String,
+        val values: List<CoreOptionValue>,
+        val selected: String,
+        val category: String,
+        val info: String
+    )
+    data class CoreOptionCategory(val key: String, val desc: String, val info: String)
 
     fun getCoreOptions(): List<CoreOption> {
         val arr = nativeGetCoreOptions()
         val result = mutableListOf<CoreOption>()
         var i = 0
-        while (i + 3 < arr.size) {
+        while (i + 6 < arr.size) {
+            val rawValues = arr[i + 2].split('|').filter { it.isNotEmpty() }
+            val rawLabels = arr[i + 5].split('|')
+            val values = rawValues.mapIndexed { idx, v ->
+                CoreOptionValue(v, rawLabels.getOrElse(idx) { v })
+            }
             result.add(CoreOption(
                 key = arr[i],
                 desc = arr[i + 1],
-                values = arr[i + 2].split('|').filter { it.isNotEmpty() },
-                selected = arr[i + 3]
+                values = values,
+                selected = arr[i + 3],
+                category = arr[i + 4],
+                info = arr[i + 6]
             ))
-            i += 4
+            i += 7
+        }
+        return result
+    }
+
+    fun getCoreCategories(): List<CoreOptionCategory> {
+        val arr = nativeGetCoreCategories()
+        val result = mutableListOf<CoreOptionCategory>()
+        var i = 0
+        while (i + 2 < arr.size) {
+            result.add(CoreOptionCategory(arr[i], arr[i + 1], arr[i + 2]))
+            i += 3
         }
         return result
     }
@@ -110,6 +137,7 @@ class LibretroRunner {
     private external fun nativeGetSystemInfo(): Array<String>
     private external fun nativeGetAspectRatio(): Float
     private external fun nativeGetCoreOptions(): Array<String>
+    private external fun nativeGetCoreCategories(): Array<String>
     private external fun nativeSetCoreOption(key: String, value: String)
     private external fun nativeGetDiskCount(): Int
     private external fun nativeGetDiskIndex(): Int

@@ -58,13 +58,25 @@ static char g_system_dir[512] = {0};
 static char g_save_dir[512] = {0};
 
 // Core options
+struct CoreOptionValue {
+    std::string value;
+    std::string label;
+};
 struct CoreOption {
     std::string key;
     std::string desc;
-    std::vector<std::string> values;
+    std::string info;
+    std::string category;
+    std::vector<CoreOptionValue> values;
     std::string selected;
 };
+struct CoreCategory {
+    std::string key;
+    std::string desc;
+    std::string info;
+};
 static std::vector<CoreOption> g_core_options;
+static std::vector<CoreCategory> g_core_categories;
 static std::map<std::string, std::string> g_option_overrides;
 static bool g_options_dirty = false;
 
@@ -91,8 +103,22 @@ static void core_log(enum retro_log_level level, const char *fmt, ...) {
 
 static bool environment_cb(unsigned cmd, void *data) {
     switch (cmd) {
+        case RETRO_ENVIRONMENT_GET_OVERSCAN:
+            *(bool *)data = true;
+            return true;
+
         case RETRO_ENVIRONMENT_GET_CAN_DUPE:
             *(bool *)data = true;
+            return true;
+
+        case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
+            return true;
+
+        case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS:
+            return true;
+
+        case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION:
+            *(unsigned *)data = 2;
             return true;
 
         case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
@@ -116,6 +142,7 @@ static bool environment_cb(unsigned cmd, void *data) {
 
         case RETRO_ENVIRONMENT_SET_VARIABLES: {
             g_core_options.clear();
+            g_core_categories.clear();
             auto *vars = (const struct retro_variable *)data;
             while (vars && vars->key) {
                 CoreOption opt;
@@ -129,11 +156,12 @@ static bool environment_cb(unsigned cmd, void *data) {
                     std::string valstr(p);
                     size_t pos = 0;
                     while ((pos = valstr.find('|')) != std::string::npos) {
-                        opt.values.push_back(valstr.substr(0, pos));
+                        std::string v = valstr.substr(0, pos);
+                        opt.values.push_back({v, v});
                         valstr.erase(0, pos + 1);
                     }
-                    if (!valstr.empty()) opt.values.push_back(valstr);
-                    if (!opt.values.empty()) opt.selected = opt.values[0];
+                    if (!valstr.empty()) opt.values.push_back({valstr, valstr});
+                    if (!opt.values.empty()) opt.selected = opt.values[0].value;
                 } else {
                     opt.desc = desc;
                 }
@@ -145,24 +173,57 @@ static bool environment_cb(unsigned cmd, void *data) {
 
         case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2: {
             g_core_options.clear();
+            g_core_categories.clear();
             auto *opts = (const struct retro_core_options_v2 *)data;
-            if (opts && opts->definitions) {
-                auto *def = opts->definitions;
-                while (def->key) {
-                    CoreOption opt;
-                    opt.key = def->key;
-                    opt.desc = def->desc ? def->desc : def->key;
-                    for (int i = 0; i < 128 && def->values[i].value; i++) {
-                        opt.values.push_back(def->values[i].value);
+            if (opts) {
+                if (opts->categories) {
+                    auto *cat = opts->categories;
+                    while (cat->key) {
+                        g_core_categories.push_back({
+                            cat->key,
+                            cat->desc ? cat->desc : cat->key,
+                            cat->info ? cat->info : ""
+                        });
+                        cat++;
                     }
-                    opt.selected = def->default_value ? def->default_value :
-                                   (!opt.values.empty() ? opt.values[0] : "");
-                    g_core_options.push_back(opt);
-                    def++;
+                }
+                if (opts->definitions) {
+                    auto *def = opts->definitions;
+                    while (def->key) {
+                        CoreOption opt;
+                        opt.key = def->key;
+                        opt.desc = (def->desc_categorized && def->desc_categorized[0])
+                                   ? def->desc_categorized : (def->desc ? def->desc : def->key);
+                        const char *info_src = (def->info_categorized && def->info_categorized[0])
+                                   ? def->info_categorized : def->info;
+                        opt.info = info_src ? info_src : "";
+                        opt.category = def->category_key ? def->category_key : "";
+                        for (int i = 0; i < 128 && def->values[i].value; i++) {
+                            const char *label = def->values[i].label;
+                            std::string lbl = (label && label[0]) ? label : def->values[i].value;
+                            opt.values.push_back({def->values[i].value, lbl});
+                        }
+                        opt.selected = def->default_value ? def->default_value :
+                                       (!opt.values.empty() ? opt.values[0].value : "");
+                        g_core_options.push_back(opt);
+                        def++;
+                    }
                 }
             }
             return true;
         }
+
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL: {
+            auto *intl = (const struct retro_core_options_v2_intl *)data;
+            if (intl && intl->us) {
+                // Reuse the v2 handler by faking the environment call
+                environment_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, (void *)intl->us);
+            }
+            return true;
+        }
+
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK:
+            return false;
 
         case RETRO_ENVIRONMENT_GET_VARIABLE: {
             auto *var = (struct retro_variable *)data;
@@ -619,23 +680,40 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeReset(JNIEnv *, jobject) {
 
 JNIEXPORT jobjectArray JNICALL
 Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreOptions(JNIEnv *env, jobject) {
-    // Returns array of strings: [key, desc, values_pipe_separated, selected, key, desc, ...]
     jclass strClass = env->FindClass("java/lang/String");
     int count = (int)g_core_options.size();
-    jobjectArray result = env->NewObjectArray(count * 4, strClass, nullptr);
+    jobjectArray result = env->NewObjectArray(count * 7, strClass, nullptr);
     for (int i = 0; i < count; i++) {
         auto &opt = g_core_options[i];
         std::string vals;
+        std::string labels;
         for (size_t j = 0; j < opt.values.size(); j++) {
-            if (j > 0) vals += '|';
-            vals += opt.values[j];
+            if (j > 0) { vals += '|'; labels += '|'; }
+            vals += opt.values[j].value;
+            labels += opt.values[j].label;
         }
         auto it = g_option_overrides.find(opt.key);
         const std::string &sel = (it != g_option_overrides.end()) ? it->second : opt.selected;
-        env->SetObjectArrayElement(result, i * 4 + 0, env->NewStringUTF(opt.key.c_str()));
-        env->SetObjectArrayElement(result, i * 4 + 1, env->NewStringUTF(opt.desc.c_str()));
-        env->SetObjectArrayElement(result, i * 4 + 2, env->NewStringUTF(vals.c_str()));
-        env->SetObjectArrayElement(result, i * 4 + 3, env->NewStringUTF(sel.c_str()));
+        env->SetObjectArrayElement(result, i * 7 + 0, env->NewStringUTF(opt.key.c_str()));
+        env->SetObjectArrayElement(result, i * 7 + 1, env->NewStringUTF(opt.desc.c_str()));
+        env->SetObjectArrayElement(result, i * 7 + 2, env->NewStringUTF(vals.c_str()));
+        env->SetObjectArrayElement(result, i * 7 + 3, env->NewStringUTF(sel.c_str()));
+        env->SetObjectArrayElement(result, i * 7 + 4, env->NewStringUTF(opt.category.c_str()));
+        env->SetObjectArrayElement(result, i * 7 + 5, env->NewStringUTF(labels.c_str()));
+        env->SetObjectArrayElement(result, i * 7 + 6, env->NewStringUTF(opt.info.c_str()));
+    }
+    return result;
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetCoreCategories(JNIEnv *env, jobject) {
+    jclass strClass = env->FindClass("java/lang/String");
+    int count = (int)g_core_categories.size();
+    jobjectArray result = env->NewObjectArray(count * 3, strClass, nullptr);
+    for (int i = 0; i < count; i++) {
+        env->SetObjectArrayElement(result, i * 3 + 0, env->NewStringUTF(g_core_categories[i].key.c_str()));
+        env->SetObjectArrayElement(result, i * 3 + 1, env->NewStringUTF(g_core_categories[i].desc.c_str()));
+        env->SetObjectArrayElement(result, i * 3 + 2, env->NewStringUTF(g_core_categories[i].info.c_str()));
     }
     return result;
 }

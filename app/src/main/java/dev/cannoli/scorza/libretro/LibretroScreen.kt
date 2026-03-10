@@ -46,7 +46,12 @@ fun LibretroScreen(
     osdMessage: String?
 ) {
     val overlayVisible = screen != null
-    val statusBarEnabled = showWifi || showBluetooth || showClock || showBattery
+    val showDescription = when (screen) {
+        is IGMScreen.Emulator -> screen.showDescription
+        is IGMScreen.EmulatorCategory -> screen.showDescription
+        else -> false
+    }
+    val statusBarEnabled = (showWifi || showBluetooth || showClock || showBattery) && !showDescription
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -72,11 +77,26 @@ fun LibretroScreen(
                 listeningIndex = screen.listeningIndex
             )
             is IGMScreen.Settings, is IGMScreen.Frontend, is IGMScreen.Emulator,
-            is IGMScreen.Shortcuts, is IGMScreen.SaveSettings -> IGMSettingsScreen(
-                items = settingsItems,
-                selectedIndex = screen.selectedIndex,
-                coreInfo = coreInfo
-            )
+            is IGMScreen.EmulatorCategory, is IGMScreen.Shortcuts,
+            is IGMScreen.SaveSettings -> {
+                val description = if (showDescription) {
+                    settingsItems.getOrNull(screen.selectedIndex)?.hint
+                } else null
+                val isOptionList = screen is IGMScreen.EmulatorCategory ||
+                    (screen is IGMScreen.Emulator && settingsItems.all { it.value != null })
+                val bottomBarRight = if (isOptionList) {
+                    listOf("A" to "INFO", "←→" to "CHANGE")
+                } else {
+                    listOf("←→" to "CHANGE", "A" to "SELECT")
+                }
+                IGMSettingsScreen(
+                    items = settingsItems,
+                    selectedIndex = screen.selectedIndex,
+                    coreInfo = coreInfo,
+                    description = description,
+                    bottomBarRight = bottomBarRight
+                )
+            }
             null -> {}
         }
 

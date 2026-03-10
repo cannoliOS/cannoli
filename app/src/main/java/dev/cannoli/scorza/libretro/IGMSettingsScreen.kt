@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.scorza.ui.components.BottomBar
@@ -30,14 +31,17 @@ private val verticalPadding = 8.dp
 
 data class IGMSettingsItem(
     val label: String,
-    val value: String? = null
+    val value: String? = null,
+    val hint: String? = null
 )
 
 @Composable
 fun IGMSettingsScreen(
     items: kotlin.collections.List<IGMSettingsItem>,
     selectedIndex: Int,
-    coreInfo: String
+    coreInfo: String,
+    description: String? = null,
+    bottomBarRight: kotlin.collections.List<Pair<String, String>> = listOf("←→" to "CHANGE", "A" to "SELECT")
 ) {
     val itemHeight = pillItemHeight(lineHeight, verticalPadding)
     val colors = LocalCannoliColors.current
@@ -48,55 +52,78 @@ fun IGMSettingsScreen(
                 .fillMaxSize()
                 .padding(screenPadding)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 48.dp)
-            ) {
-                ScreenTitle(
-                    text = "Settings",
-                    fontSize = fontSize,
-                    lineHeight = lineHeight
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                List(
-                    items = items,
-                    selectedIndex = selectedIndex,
-                    itemHeight = itemHeight
-                ) { index, item ->
-                    if (item.value != null) {
-                        PillRowKeyValue(
-                            label = item.label,
-                            value = item.value,
-                            isSelected = index == selectedIndex,
-                            fontSize = fontSize,
-                            lineHeight = lineHeight,
-                            verticalPadding = verticalPadding
-                        )
-                    } else {
-                        PillRowText(
-                            label = item.label,
-                            isSelected = index == selectedIndex,
-                            fontSize = fontSize,
-                            lineHeight = lineHeight,
-                            verticalPadding = verticalPadding
-                        )
+            if (description != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    ScreenTitle(
+                        text = items.getOrNull(selectedIndex)?.label ?: "",
+                        fontSize = fontSize,
+                        lineHeight = lineHeight
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 16.sp,
+                            lineHeight = 22.sp,
+                            color = colors.text.copy(alpha = 0.8f),
+                            textAlign = TextAlign.Center
+                        ),
+                        modifier = Modifier.fillMaxWidth(0.85f)
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 48.dp)
+                ) {
+                    ScreenTitle(
+                        text = "Settings",
+                        fontSize = fontSize,
+                        lineHeight = lineHeight
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    List(
+                        items = items,
+                        selectedIndex = selectedIndex,
+                        itemHeight = itemHeight
+                    ) { index, item ->
+                        if (item.value != null) {
+                            PillRowKeyValue(
+                                label = item.label,
+                                value = item.value,
+                                isSelected = index == selectedIndex,
+                                fontSize = fontSize,
+                                lineHeight = lineHeight,
+                                verticalPadding = verticalPadding
+                            )
+                        } else {
+                            PillRowText(
+                                label = item.label,
+                                isSelected = index == selectedIndex,
+                                fontSize = fontSize,
+                                lineHeight = lineHeight,
+                                verticalPadding = verticalPadding
+                            )
+                        }
                     }
                 }
-            }
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 48.dp)
-            ) {
                 if (coreInfo.isNotEmpty()) {
                     Text(
                         text = coreInfo,
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 14.sp,
                             color = colors.text.copy(alpha = 0.4f)
-                        )
+                        ),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 44.dp)
                     )
                 }
             }
@@ -104,7 +131,7 @@ fun IGMSettingsScreen(
             BottomBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
                 leftItems = listOf("B" to "BACK"),
-                rightItems = listOf("←→" to "CHANGE", "A" to "SELECT")
+                rightItems = if (description != null) emptyList() else bottomBarRight
             )
         }
     }
