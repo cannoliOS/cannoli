@@ -122,9 +122,9 @@ fun LibretroScreen(
                 selectedIndex = screen.selectedIndex,
                 listeningIndex = screen.listeningIndex
             )
-            is IGMScreen.Settings, is IGMScreen.Frontend, is IGMScreen.Emulator,
-            is IGMScreen.EmulatorCategory, is IGMScreen.Shortcuts,
-            is IGMScreen.SavePrompt -> {
+            is IGMScreen.Settings, is IGMScreen.Frontend, is IGMScreen.CrtSettings,
+            is IGMScreen.Emulator, is IGMScreen.EmulatorCategory,
+            is IGMScreen.Shortcuts, is IGMScreen.SavePrompt -> {
                 val description = if (showDescription) {
                     settingsItems.getOrNull(screen.selectedIndex)?.hint
                 } else null
@@ -133,12 +133,14 @@ fun LibretroScreen(
                 val bottomBarRight = when {
                     isOptionList -> listOf("A" to "INFO", "←→" to "CHANGE")
                     screen is IGMScreen.Shortcuts -> listOf("X" to "CLEAR", "A" to "SET")
-                    screen is IGMScreen.Frontend -> listOf("←→" to "CHANGE")
+                    screen is IGMScreen.Frontend -> listOf("A" to "SELECT", "←→" to "CHANGE")
+                    screen is IGMScreen.CrtSettings -> listOf("←→" to "CHANGE")
                     else -> listOf("A" to "SELECT")
                 }
                 val title = when (screen) {
                     is IGMScreen.Settings -> "Settings"
                     is IGMScreen.Frontend -> "Frontend"
+                    is IGMScreen.CrtSettings -> "CRT Settings"
                     is IGMScreen.Emulator -> "Emulator"
                     is IGMScreen.EmulatorCategory -> screen.categoryTitle.ifEmpty { "Emulator" }
                     is IGMScreen.Shortcuts -> "Shortcuts"

@@ -200,6 +200,14 @@ class LibretroActivity : ComponentActivity() {
             it.sharpness = sharpness
             it.screenEffect = screenEffect
             it.debugHud = debugHud
+            it.crtCurvature = crtCurvature
+            it.crtScanline = crtScanline
+            it.crtMaskDark = crtMaskDark
+            it.crtVignette = crtVignette
+            it.crtGlow = crtGlow
+            it.crtSweep = crtSweep
+            it.crtBrightness = crtBrightness
+            it.crtNoise = crtNoise
         }
 
         val glView = GLSurfaceView(this).apply {
@@ -273,6 +281,7 @@ class LibretroActivity : ComponentActivity() {
             is IGMScreen.Menu -> handleMenuInput(screen, keyCode)
             is IGMScreen.Settings -> handleCategoryInput(screen, keyCode)
             is IGMScreen.Frontend -> handleFrontendInput(screen, keyCode)
+            is IGMScreen.CrtSettings -> handleCrtSettingsInput(screen, keyCode)
             is IGMScreen.Emulator -> handleEmulatorInput(screen, keyCode)
             is IGMScreen.EmulatorCategory -> handleEmulatorCategoryInput(screen, keyCode)
             is IGMScreen.Controls -> handleControlsInput(screen, keyCode)
@@ -568,17 +577,23 @@ class LibretroActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> { cycleFrontendValue(screen.selectedIndex, -1); true }
             KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleFrontendValue(screen.selectedIndex, 1); true }
+            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (screenEffect == ScreenEffect.CRT && screen.selectedIndex == 3) {
+                    push(IGMScreen.CrtSettings())
+                }
+                true
+            }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
             else -> true
         }
     }
 
-    private fun frontendItemCount() = if (screenEffect == ScreenEffect.CRT) 13 else 5
+    private fun frontendItemCount() = if (screenEffect == ScreenEffect.CRT) 6 else 5
 
     private fun cycleFrontendValue(index: Int, direction: Int) {
-        val crt = screenEffect == ScreenEffect.CRT
-        val debugIdx = if (crt) 11 else 3
-        val ffIdx = if (crt) 12 else 4
+        val crtSettingsIdx = if (screenEffect == ScreenEffect.CRT) 3 else -1
+        val debugIdx = if (screenEffect == ScreenEffect.CRT) 4 else 3
+        val ffIdx = if (screenEffect == ScreenEffect.CRT) 5 else 4
         when (index) {
             0 -> {
                 val modes = ScalingMode.entries
@@ -586,27 +601,47 @@ class LibretroActivity : ComponentActivity() {
                 renderer.scalingMode = scalingMode
             }
             1 -> {
-                val effects = ScreenEffect.entries
-                screenEffect = effects[(screenEffect.ordinal + direction + effects.size) % effects.size]
-                renderer.screenEffect = screenEffect
-            }
-            2 -> {
                 val vals = Sharpness.entries
                 sharpness = vals[(sharpness.ordinal + direction + vals.size) % vals.size]
                 renderer.sharpness = sharpness
             }
-            3 -> if (crt) { crtCurvature = cycleFloat(crtCurvature, direction, 0f, 2f, 0.1f); renderer.crtCurvature = crtCurvature }
-                 else { debugHud = !debugHud; renderer.debugHud = debugHud }
-            4 -> if (crt) { crtScanline = cycleFloat(crtScanline, direction, 0f, 1f, 0.05f); renderer.crtScanline = crtScanline }
-                 else { cycleFfSpeed(direction) }
-            5 -> if (crt) { crtMaskDark = cycleFloat(crtMaskDark, direction, 0f, 0.5f, 0.05f); renderer.crtMaskDark = crtMaskDark }
-            6 -> if (crt) { crtVignette = cycleFloat(crtVignette, direction, 0f, 2f, 0.05f); renderer.crtVignette = crtVignette }
-            7 -> if (crt) { crtGlow = cycleFloat(crtGlow, direction, 0f, 1f, 0.05f); renderer.crtGlow = crtGlow }
-            8 -> if (crt) { crtSweep = cycleFloat(crtSweep, direction, 0f, 1f, 0.05f); renderer.crtSweep = crtSweep }
-            9 -> if (crt) { crtBrightness = cycleFloat(crtBrightness, direction, 0.5f, 1.5f, 0.05f); renderer.crtBrightness = crtBrightness }
-            10 -> if (crt) { crtNoise = cycleFloat(crtNoise, direction, 0f, 1f, 0.05f); renderer.crtNoise = crtNoise }
+            2 -> {
+                val effects = ScreenEffect.entries
+                screenEffect = effects[(screenEffect.ordinal + direction + effects.size) % effects.size]
+                renderer.screenEffect = screenEffect
+            }
+            crtSettingsIdx -> {}
             debugIdx -> { debugHud = !debugHud; renderer.debugHud = debugHud }
             ffIdx -> { cycleFfSpeed(direction) }
+        }
+    }
+
+    private fun handleCrtSettingsInput(screen: IGMScreen.CrtSettings, keyCode: Int): Boolean {
+        val count = 8
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { cycleCrtValue(screen.selectedIndex, -1); true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleCrtValue(screen.selectedIndex, 1); true }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            else -> true
+        }
+    }
+
+    private fun cycleCrtValue(index: Int, direction: Int) {
+        when (index) {
+            0 -> { crtCurvature = cycleFloat(crtCurvature, direction, 0f, 2f, 0.1f); renderer.crtCurvature = crtCurvature }
+            1 -> { crtScanline = cycleFloat(crtScanline, direction, 0f, 1f, 0.05f); renderer.crtScanline = crtScanline }
+            2 -> { crtMaskDark = cycleFloat(crtMaskDark, direction, 0f, 0.5f, 0.05f); renderer.crtMaskDark = crtMaskDark }
+            3 -> { crtVignette = cycleFloat(crtVignette, direction, 0f, 2f, 0.05f); renderer.crtVignette = crtVignette }
+            4 -> { crtGlow = cycleFloat(crtGlow, direction, 0f, 1f, 0.05f); renderer.crtGlow = crtGlow }
+            5 -> { crtSweep = cycleFloat(crtSweep, direction, 0f, 1f, 0.05f); renderer.crtSweep = crtSweep }
+            6 -> { crtBrightness = cycleFloat(crtBrightness, direction, 0.5f, 1.5f, 0.05f); renderer.crtBrightness = crtBrightness }
+            7 -> { crtNoise = cycleFloat(crtNoise, direction, 0f, 1f, 0.05f); renderer.crtNoise = crtNoise }
         }
     }
 
@@ -858,21 +893,24 @@ class LibretroActivity : ComponentActivity() {
         is IGMScreen.Settings -> IGMSettings.CATEGORIES.map { IGMSettingsItem(it) }
         is IGMScreen.Frontend -> buildList {
             add(IGMSettingsItem("Screen Scaling", scalingLabel()))
-            add(IGMSettingsItem("Screen Effect", effectLabel()))
             add(IGMSettingsItem("Screen Sharpness", sharpnessLabel()))
+            add(IGMSettingsItem("Screen Effect", effectLabel()))
             if (screenEffect == ScreenEffect.CRT) {
-                add(IGMSettingsItem("  Curvature", "%.1f".format(crtCurvature)))
-                add(IGMSettingsItem("  Scanlines", "%d%%".format((crtScanline * 100).toInt())))
-                add(IGMSettingsItem("  Mask", "%d%%".format((crtMaskDark * 100).toInt())))
-                add(IGMSettingsItem("  Vignette", "%d%%".format((crtVignette * 100).toInt())))
-                add(IGMSettingsItem("  Glow", "%d%%".format((crtGlow * 100).toInt())))
-                add(IGMSettingsItem("  Sweep", "%d%%".format((crtSweep * 100).toInt())))
-                add(IGMSettingsItem("  Brightness", "%d%%".format((crtBrightness * 100).toInt())))
-                add(IGMSettingsItem("  Noise", "%d%%".format((crtNoise * 100).toInt())))
+                add(IGMSettingsItem("CRT Settings"))
             }
             add(IGMSettingsItem("Debug HUD", if (debugHud) "On" else "Off"))
             add(IGMSettingsItem("Max FF Speed", "${maxFfSpeed}x"))
         }
+        is IGMScreen.CrtSettings -> listOf(
+            IGMSettingsItem("Curvature", "%.1f".format(crtCurvature)),
+            IGMSettingsItem("Scanlines", "%d%%".format((crtScanline * 100).toInt())),
+            IGMSettingsItem("Mask", "%d%%".format((crtMaskDark * 100).toInt())),
+            IGMSettingsItem("Vignette", "%d%%".format((crtVignette * 100).toInt())),
+            IGMSettingsItem("Glow", "%d%%".format((crtGlow * 100).toInt())),
+            IGMSettingsItem("Sweep", "%d%%".format((crtSweep * 100).toInt())),
+            IGMSettingsItem("Brightness", "%d%%".format((crtBrightness * 100).toInt())),
+            IGMSettingsItem("Noise", "%d%%".format((crtNoise * 100).toInt()))
+        )
         is IGMScreen.Emulator -> {
             if (emulatorHasCategories()) {
                 val usedCategories = coreCategories.filter { cat -> coreOptions.any { it.category == cat.key } }
@@ -928,6 +966,14 @@ class LibretroActivity : ComponentActivity() {
             sharpness = sharpness,
             debugHud = debugHud,
             maxFfSpeed = maxFfSpeed,
+            crtCurvature = crtCurvature,
+            crtScanline = crtScanline,
+            crtMaskDark = crtMaskDark,
+            crtVignette = crtVignette,
+            crtGlow = crtGlow,
+            crtSweep = crtSweep,
+            crtBrightness = crtBrightness,
+            crtNoise = crtNoise,
             controls = controlMap,
             shortcuts = shortcuts,
             coreOptions = optionMap
@@ -950,6 +996,14 @@ class LibretroActivity : ComponentActivity() {
         sharpness = settings.sharpness
         debugHud = settings.debugHud
         maxFfSpeed = settings.maxFfSpeed
+        crtCurvature = settings.crtCurvature
+        crtScanline = settings.crtScanline
+        crtMaskDark = settings.crtMaskDark
+        crtVignette = settings.crtVignette
+        crtGlow = settings.crtGlow
+        crtSweep = settings.crtSweep
+        crtBrightness = settings.crtBrightness
+        crtNoise = settings.crtNoise
         shortcuts = settings.shortcuts
 
         for ((key, keyCode) in settings.controls) {

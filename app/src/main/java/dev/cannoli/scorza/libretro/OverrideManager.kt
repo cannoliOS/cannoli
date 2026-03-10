@@ -21,6 +21,14 @@ class OverrideManager(
         var sharpness: Sharpness = Sharpness.SHARP,
         var debugHud: Boolean = false,
         var maxFfSpeed: Int = 4,
+        var crtCurvature: Float = 1.7f,
+        var crtScanline: Float = 0.75f,
+        var crtMaskDark: Float = 0.3f,
+        var crtVignette: Float = 0.85f,
+        var crtGlow: Float = 0.25f,
+        var crtSweep: Float = 1.0f,
+        var crtBrightness: Float = 1.0f,
+        var crtNoise: Float = 0.15f,
         var controls: Map<String, Int> = emptyMap(),
         var shortcuts: Map<ShortcutAction, Set<Int>> = emptyMap(),
         var coreOptions: Map<String, String> = emptyMap()
@@ -58,6 +66,14 @@ class OverrideManager(
             s["sharpness"]?.let { settings.sharpness = enumSafe(it, settings.sharpness) }
             s["debug_hud"]?.let { settings.debugHud = it == "true" }
             s["max_ff_speed"]?.let { v -> v.toIntOrNull()?.let { settings.maxFfSpeed = it } }
+            s["crt_curvature"]?.toFloatOrNull()?.let { settings.crtCurvature = it }
+            s["crt_scanline"]?.toFloatOrNull()?.let { settings.crtScanline = it }
+            s["crt_mask_dark"]?.toFloatOrNull()?.let { settings.crtMaskDark = it }
+            s["crt_vignette"]?.toFloatOrNull()?.let { settings.crtVignette = it }
+            s["crt_glow"]?.toFloatOrNull()?.let { settings.crtGlow = it }
+            s["crt_sweep"]?.toFloatOrNull()?.let { settings.crtSweep = it }
+            s["crt_brightness"]?.toFloatOrNull()?.let { settings.crtBrightness = it }
+            s["crt_noise"]?.toFloatOrNull()?.let { settings.crtNoise = it }
         }
 
         ini.getSection("controls").let { s ->
@@ -102,7 +118,15 @@ class OverrideManager(
             "effect" to settings.screenEffect.name,
             "sharpness" to settings.sharpness.name,
             "debug_hud" to settings.debugHud.toString(),
-            "max_ff_speed" to settings.maxFfSpeed.toString()
+            "max_ff_speed" to settings.maxFfSpeed.toString(),
+            "crt_curvature" to settings.crtCurvature.toString(),
+            "crt_scanline" to settings.crtScanline.toString(),
+            "crt_mask_dark" to settings.crtMaskDark.toString(),
+            "crt_vignette" to settings.crtVignette.toString(),
+            "crt_glow" to settings.crtGlow.toString(),
+            "crt_sweep" to settings.crtSweep.toString(),
+            "crt_brightness" to settings.crtBrightness.toString(),
+            "crt_noise" to settings.crtNoise.toString()
         )
 
         if (settings.controls.isNotEmpty()) {
