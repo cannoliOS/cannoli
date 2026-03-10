@@ -52,6 +52,15 @@ class LibretroActivity : ComponentActivity() {
     private var debugHud by mutableStateOf(false)
     private var maxFfSpeed by mutableIntStateOf(4)
 
+    private var crtCurvature by mutableStateOf(1.7f)
+    private var crtScanline by mutableStateOf(0.75f)
+    private var crtMaskDark by mutableStateOf(0.3f)
+    private var crtVignette by mutableStateOf(0.85f)
+    private var crtGlow by mutableStateOf(0.25f)
+    private var crtSweep by mutableStateOf(1.0f)
+    private var crtBrightness by mutableStateOf(1.0f)
+    private var crtNoise by mutableStateOf(0.15f)
+
     private var coreOptions by mutableStateOf(emptyList<LibretroRunner.CoreOption>())
     private var coreCategories by mutableStateOf(emptyList<LibretroRunner.CoreOptionCategory>())
     private var shortcuts by mutableStateOf(mapOf<ShortcutAction, Set<Int>>())
@@ -549,7 +558,7 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun handleFrontendInput(screen: IGMScreen.Frontend, keyCode: Int): Boolean {
-        val count = 5
+        val count = frontendItemCount()
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
@@ -564,7 +573,12 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
+    private fun frontendItemCount() = if (screenEffect == ScreenEffect.CRT) 13 else 5
+
     private fun cycleFrontendValue(index: Int, direction: Int) {
+        val crt = screenEffect == ScreenEffect.CRT
+        val debugIdx = if (crt) 11 else 3
+        val ffIdx = if (crt) 12 else 4
         when (index) {
             0 -> {
                 val modes = ScalingMode.entries
@@ -581,16 +595,30 @@ class LibretroActivity : ComponentActivity() {
                 sharpness = vals[(sharpness.ordinal + direction + vals.size) % vals.size]
                 renderer.sharpness = sharpness
             }
-            3 -> {
-                debugHud = !debugHud
-                renderer.debugHud = debugHud
-            }
-            4 -> {
-                val idx = FF_SPEEDS.indexOf(maxFfSpeed).coerceAtLeast(0)
-                maxFfSpeed = FF_SPEEDS[(idx + direction + FF_SPEEDS.size) % FF_SPEEDS.size]
-                if (fastForwarding) renderer.fastForwardFrames = maxFfSpeed
-            }
+            3 -> if (crt) { crtCurvature = cycleFloat(crtCurvature, direction, 0f, 2f, 0.1f); renderer.crtCurvature = crtCurvature }
+                 else { debugHud = !debugHud; renderer.debugHud = debugHud }
+            4 -> if (crt) { crtScanline = cycleFloat(crtScanline, direction, 0f, 1f, 0.05f); renderer.crtScanline = crtScanline }
+                 else { cycleFfSpeed(direction) }
+            5 -> if (crt) { crtMaskDark = cycleFloat(crtMaskDark, direction, 0f, 0.5f, 0.05f); renderer.crtMaskDark = crtMaskDark }
+            6 -> if (crt) { crtVignette = cycleFloat(crtVignette, direction, 0f, 2f, 0.05f); renderer.crtVignette = crtVignette }
+            7 -> if (crt) { crtGlow = cycleFloat(crtGlow, direction, 0f, 1f, 0.05f); renderer.crtGlow = crtGlow }
+            8 -> if (crt) { crtSweep = cycleFloat(crtSweep, direction, 0f, 1f, 0.05f); renderer.crtSweep = crtSweep }
+            9 -> if (crt) { crtBrightness = cycleFloat(crtBrightness, direction, 0.5f, 1.5f, 0.05f); renderer.crtBrightness = crtBrightness }
+            10 -> if (crt) { crtNoise = cycleFloat(crtNoise, direction, 0f, 1f, 0.05f); renderer.crtNoise = crtNoise }
+            debugIdx -> { debugHud = !debugHud; renderer.debugHud = debugHud }
+            ffIdx -> { cycleFfSpeed(direction) }
         }
+    }
+
+    private fun cycleFloat(current: Float, direction: Int, min: Float, max: Float, step: Float): Float {
+        val next = current + direction * step
+        return (Math.round(next / step) * step).coerceIn(min, max)
+    }
+
+    private fun cycleFfSpeed(direction: Int) {
+        val idx = FF_SPEEDS.indexOf(maxFfSpeed).coerceAtLeast(0)
+        maxFfSpeed = FF_SPEEDS[(idx + direction + FF_SPEEDS.size) % FF_SPEEDS.size]
+        if (fastForwarding) renderer.fastForwardFrames = maxFfSpeed
     }
 
     // --- Emulator ---
@@ -828,13 +856,23 @@ class LibretroActivity : ComponentActivity() {
 
     private fun buildSettingsItems(): List<IGMSettingsItem> = when (val screen = currentScreen) {
         is IGMScreen.Settings -> IGMSettings.CATEGORIES.map { IGMSettingsItem(it) }
-        is IGMScreen.Frontend -> listOf(
-            IGMSettingsItem("Screen Scaling", scalingLabel()),
-            IGMSettingsItem("Screen Effect", effectLabel()),
-            IGMSettingsItem("Screen Sharpness", sharpnessLabel()),
-            IGMSettingsItem("Debug HUD", if (debugHud) "On" else "Off"),
-            IGMSettingsItem("Max FF Speed", "${maxFfSpeed}x")
-        )
+        is IGMScreen.Frontend -> buildList {
+            add(IGMSettingsItem("Screen Scaling", scalingLabel()))
+            add(IGMSettingsItem("Screen Effect", effectLabel()))
+            add(IGMSettingsItem("Screen Sharpness", sharpnessLabel()))
+            if (screenEffect == ScreenEffect.CRT) {
+                add(IGMSettingsItem("  Curvature", "%.1f".format(crtCurvature)))
+                add(IGMSettingsItem("  Scanlines", "%d%%".format((crtScanline * 100).toInt())))
+                add(IGMSettingsItem("  Mask", "%d%%".format((crtMaskDark * 100).toInt())))
+                add(IGMSettingsItem("  Vignette", "%d%%".format((crtVignette * 100).toInt())))
+                add(IGMSettingsItem("  Glow", "%d%%".format((crtGlow * 100).toInt())))
+                add(IGMSettingsItem("  Sweep", "%d%%".format((crtSweep * 100).toInt())))
+                add(IGMSettingsItem("  Brightness", "%d%%".format((crtBrightness * 100).toInt())))
+                add(IGMSettingsItem("  Noise", "%d%%".format((crtNoise * 100).toInt())))
+            }
+            add(IGMSettingsItem("Debug HUD", if (debugHud) "On" else "Off"))
+            add(IGMSettingsItem("Max FF Speed", "${maxFfSpeed}x"))
+        }
         is IGMScreen.Emulator -> {
             if (emulatorHasCategories()) {
                 val usedCategories = coreCategories.filter { cat -> coreOptions.any { it.category == cat.key } }
