@@ -58,7 +58,8 @@ fun AppNavGraph(
     gameListViewModel: GameListViewModel,
     settingsViewModel: SettingsViewModel,
     dialogState: StateFlow<DialogState>,
-    onVisibleRangeChanged: (firstVisible: Int, visibleCount: Int, isViewportFull: Boolean) -> Unit = { _, _, _ -> }
+    onVisibleRangeChanged: (firstVisible: Int, visibleCount: Int, isViewportFull: Boolean) -> Unit = { _, _, _ -> },
+    resumableGames: Set<String> = emptySet()
 ) {
     val dialog by dialogState.collectAsState()
     val appSettings by settingsViewModel.appSettings.collectAsState()
@@ -98,17 +99,20 @@ fun AppNavGraph(
                 dialogState = dialog,
                 onVisibleRangeChanged = onVisibleRangeChanged
             )
-            is LauncherScreen.GameList -> GameListScreen(
-                viewModel = gameListViewModel,
-                backgroundImagePath = appSettings.backgroundImagePath,
-                backgroundTint = appSettings.backgroundTint,
-                listFontSize = listFontSize,
-                listLineHeight = listLineHeight,
-                listVerticalPadding = listVerticalPadding,
-                scrollSpeed = appSettings.scrollSpeed,
-                dialogState = dialog,
-                onVisibleRangeChanged = onVisibleRangeChanged
-            )
+            is LauncherScreen.GameList -> {
+                GameListScreen(
+                    viewModel = gameListViewModel,
+                    backgroundImagePath = appSettings.backgroundImagePath,
+                    backgroundTint = appSettings.backgroundTint,
+                    listFontSize = listFontSize,
+                    listLineHeight = listLineHeight,
+                    listVerticalPadding = listVerticalPadding,
+                    scrollSpeed = appSettings.scrollSpeed,
+                    dialogState = dialog,
+                    onVisibleRangeChanged = onVisibleRangeChanged,
+                    resumableGames = resumableGames
+                )
+            }
             is LauncherScreen.Settings -> SettingsScreen(
                 viewModel = settingsViewModel,
                 backgroundImagePath = appSettings.backgroundImagePath,

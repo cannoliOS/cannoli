@@ -20,7 +20,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import dev.cannoli.scorza.input.InputHandler
 import dev.cannoli.scorza.launcher.ApkLauncher
 import dev.cannoli.scorza.launcher.EmuLauncher
@@ -77,6 +80,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var atomicRename: AtomicRename
 
     private val screenStack = mutableStateListOf<LauncherScreen>(LauncherScreen.SystemList)
+    private var resumableGames by mutableStateOf(emptySet<String>())
     private val dialogState = MutableStateFlow<DialogState>(DialogState.None)
     private val ioScope = CoroutineScope(Dispatchers.IO)
     @Volatile private var navigating = false
@@ -307,7 +311,8 @@ class MainActivity : ComponentActivity() {
                         onVisibleRangeChanged = { first, count, full ->
                             currentFirstVisible = first
                             if (full) currentPageSize = count
-                        }
+                        },
+                        resumableGames = resumableGames
                     )
                 }
             }
@@ -926,6 +931,19 @@ class MainActivity : ComponentActivity() {
                         settingsViewModel.load()
                         screenStack.add(LauncherScreen.Settings)
                     }
+                    LauncherScreen.GameList -> {
+                        val game = gameListViewModel.getSelectedGame()
+                        if (game != null && !game.isSubfolder && !gameListViewModel.state.value.isCollectionsList) {
+                            val corePath = getEmbeddedCorePath(game)
+                            if (corePath != null) {
+                                val slot = findMostRecentSlot(game)
+                                if (slot != null) {
+                                    val launchFile = if (game.discFiles != null) createTempM3u(game) else game.file
+                                    launchEmbedded(game.copy(file = launchFile), corePath, slot)
+                                }
+                            }
+                        }
+                    }
                     is LauncherScreen.CollectionPicker -> {
                         dialogState.value = DialogState.NewCollectionInput(gamePaths = screen.gamePaths)
                     }
@@ -1116,6 +1134,7 @@ class MainActivity : ComponentActivity() {
             is SystemListViewModel.ListItem.FavoritesItem -> {
                 navigating = true
                 gameListViewModel.loadCollection("Favorites") {
+                    scanResumableGames()
                     screenStack.add(LauncherScreen.GameList)
                     navigating = false
                 }
@@ -1130,6 +1149,7 @@ class MainActivity : ComponentActivity() {
             is SystemListViewModel.ListItem.PlatformItem -> {
                 navigating = true
                 gameListViewModel.loadPlatform(item.platform.tag) {
+                    scanResumableGames()
                     screenStack.add(LauncherScreen.GameList)
                     navigating = false
                 }
@@ -1137,6 +1157,7 @@ class MainActivity : ComponentActivity() {
             is SystemListViewModel.ListItem.CollectionItem -> {
                 navigating = true
                 gameListViewModel.loadCollection(item.name) {
+                    scanResumableGames()
                     screenStack.add(LauncherScreen.GameList)
                     navigating = false
                 }
@@ -1272,7 +1293,52 @@ class MainActivity : ComponentActivity() {
         return if (coreFile.exists()) coreFile.absolutePath else null
     }
 
-    private fun launchEmbedded(game: dev.cannoli.scorza.model.Game, corePath: String) {
+    private fun scanResumableGames() {
+        val games = gameListViewModel.state.value.games
+        val cannoliRoot = java.io.File(settings.sdCardRoot)
+        val result = mutableSetOf<String>()
+        for (game in games) {
+            if (game.isSubfolder) continue
+            if (getEmbeddedCorePath(game) == null) continue
+            val romName = game.file.nameWithoutExtension
+            val stateDir = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName")
+            if (stateDir.exists() && stateDir.listFiles()?.any { it.extension == "state" || it.name.contains(".state.") } == true) {
+                result.add(game.file.absolutePath)
+            }
+        }
+        resumableGames = result
+    }
+
+    private fun getEmbeddedCorePath(game: dev.cannoli.scorza.model.Game): String? {
+        val gameOverride = platformResolver.getGameOverride(game.file.absolutePath)
+        if (gameOverride?.appPackage != null) return null
+        val target = game.launchTarget
+        if (target is LaunchTarget.Embedded) return target.corePath
+        if (target !is LaunchTarget.RetroArch) return null
+        val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag) ?: return null
+        val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
+        if (runnerPref == "RetroArch") return null
+        return findEmbeddedCore(core)
+    }
+
+    private fun findMostRecentSlot(game: dev.cannoli.scorza.model.Game): Int? {
+        val cannoliRoot = java.io.File(settings.sdCardRoot)
+        val romName = game.file.nameWithoutExtension
+        val stateBase = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName/$romName.state")
+        val slotManager = dev.cannoli.scorza.libretro.SaveSlotManager(stateBase.absolutePath)
+        var bestSlot = -1
+        var bestTime = 0L
+        for (slot in slotManager.slots) {
+            val f = java.io.File(slotManager.statePath(slot))
+            if (f.exists() && f.lastModified() > bestTime) {
+                bestTime = f.lastModified()
+                bestSlot = slot.index
+            }
+        }
+        return if (bestSlot >= 0) bestSlot else null
+    }
+
+    private fun launchEmbedded(game: dev.cannoli.scorza.model.Game, corePath: String, resumeSlot: Int = -1) {
         val cannoliRoot = java.io.File(settings.sdCardRoot)
         val romName = game.file.nameWithoutExtension
         val saveDir = java.io.File(cannoliRoot, "Saves/${game.platformTag}")
@@ -1300,6 +1366,7 @@ class MainActivity : ComponentActivity() {
             putExtra("show_clock", settings.showClock)
             putExtra("show_battery", settings.showBattery)
             putExtra("use_24h", settings.timeFormat == dev.cannoli.scorza.settings.TimeFormat.TWENTY_FOUR_HOUR)
+            if (resumeSlot >= 0) putExtra("resume_slot", resumeSlot)
         }
         startActivity(intent)
     }
@@ -1637,6 +1704,7 @@ class MainActivity : ComponentActivity() {
         val newTag = tags[newIndex]
         navigating = true
         gameListViewModel.loadPlatform(newTag) {
+            scanResumableGames()
             navigating = false
         }
     }

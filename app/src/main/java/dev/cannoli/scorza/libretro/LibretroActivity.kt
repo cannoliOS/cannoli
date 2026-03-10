@@ -171,6 +171,15 @@ class LibretroActivity : ComponentActivity() {
 
         if (sramPath.isNotEmpty() && File(sramPath).exists()) runner.loadSRAM(sramPath)
 
+        val resumeSlot = intent.getIntExtra("resume_slot", -1)
+        if (resumeSlot >= 0) {
+            val slot = slotManager.slots.getOrNull(resumeSlot)
+            if (slot != null && slotManager.stateExists(slot)) {
+                slotManager.loadState(runner, slot)
+                selectedSlotIndex = resumeSlot
+            }
+        }
+
         audioSampleRate = avInfo.sampleRate
         audio = LibretroAudio(avInfo.sampleRate)
         runner.setAudioCallback(audio!!)

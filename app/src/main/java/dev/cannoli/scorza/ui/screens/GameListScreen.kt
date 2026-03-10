@@ -67,10 +67,13 @@ fun GameListScreen(
     listVerticalPadding: Dp = 8.dp,
     scrollSpeed: ScrollSpeed = ScrollSpeed.NORMAL,
     dialogState: DialogState = DialogState.None,
-    onVisibleRangeChanged: (Int, Int, Boolean) -> Unit = { _, _, _ -> }
+    onVisibleRangeChanged: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
+    resumableGames: Set<String> = emptySet()
 ) {
     val state by viewModel.state.collectAsState()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
+    val selectedGame = state.games.getOrNull(state.selectedIndex)
+    val hasResumeState = selectedGame != null && !selectedGame.isSubfolder && resumableGames.contains(selectedGame.file.absolutePath)
 
     if (dialogState.isFullScreen) {
         DialogOverlay(
@@ -84,7 +87,6 @@ fun GameListScreen(
         return
     }
 
-    val selectedGame = state.games.getOrNull(state.selectedIndex)
     val selectedArt: ImageBitmap? = if (selectedGame != null && !selectedGame.isSubfolder) {
         remember(selectedGame.artFile?.absolutePath) {
             selectedGame.artFile?.let { file ->
@@ -190,6 +192,8 @@ fun GameListScreen(
                 emptyList()
             } else if (state.multiSelectMode) {
                 listOf("A" to actionLabel, "▶" to stringResource(R.string.label_confirm))
+            } else if (hasResumeState) {
+                listOf("X" to "RESUME", "A" to actionLabel)
             } else {
                 listOf("A" to actionLabel)
             }
