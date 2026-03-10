@@ -10,7 +10,7 @@ import javax.microedition.khronos.opengles.GL10
 
 enum class ScalingMode { CORE_REPORTED, INTEGER, FULLSCREEN }
 enum class Sharpness { SHARP, CRISP, SOFT }
-enum class ScreenEffect { NONE, SCANLINE, GRID }
+enum class ScreenEffect { NONE, SCANLINE, GRID, CRT }
 
 class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Renderer {
 
@@ -43,6 +43,7 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
     private var programNone = 0
     private var programScanline = 0
     private var programGrid = 0
+    private var programCrt = 0
     private var activeProgramId = 0
     private var frameBuffer: ByteBuffer? = null
     private var lastWidth = 0
@@ -101,6 +102,47 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         }
     """.trimIndent()
 
+    private val fragmentCrt = """
+        precision mediump float;
+        varying vec2 vTexCoord;
+        uniform sampler2D uTexture;
+        uniform vec2 uSourceSize;
+        uniform vec2 uOutputSize;
+
+        vec2 barrel(vec2 uv, float amt) {
+            vec2 cc = uv - 0.5;
+            float dist = dot(cc, cc);
+            return uv + cc * dist * amt;
+        }
+
+        void main() {
+            vec2 uv = barrel(vTexCoord, 0.22);
+
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                return;
+            }
+
+            vec4 color = texture2D(uTexture, uv);
+
+            float scanline = sin(uv.y * uSourceSize.y * 3.14159) * 0.5 + 0.5;
+            scanline = mix(1.0, scanline, 0.18);
+            color.rgb *= scanline;
+
+            float px = fract(uv.x * uSourceSize.x);
+            vec3 mask;
+            if (px < 0.333) mask = vec3(1.0, 0.7, 0.7);
+            else if (px < 0.666) mask = vec3(0.7, 1.0, 0.7);
+            else mask = vec3(0.7, 0.7, 1.0);
+            color.rgb *= mix(vec3(1.0), mask, 0.15);
+
+            float vignette = 1.0 - dot(uv - 0.5, uv - 0.5) * 0.6;
+            color.rgb *= vignette;
+
+            gl_FragColor = color;
+        }
+    """.trimIndent()
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         fpsTimestamp = System.nanoTime()
@@ -116,6 +158,7 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         programNone = createProgram(vertexShaderCode, fragmentNone)
         programScanline = createProgram(vertexShaderCode, fragmentScanline)
         programGrid = createProgram(vertexShaderCode, fragmentGrid)
+        programCrt = createProgram(vertexShaderCode, fragmentCrt)
         activeProgramId = programNone
 
         val texIds = IntArray(1)
@@ -199,6 +242,7 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
                 ScreenEffect.NONE -> programNone
                 ScreenEffect.SCANLINE -> programScanline
                 ScreenEffect.GRID -> programGrid
+                ScreenEffect.CRT -> programCrt
             }
         }
 

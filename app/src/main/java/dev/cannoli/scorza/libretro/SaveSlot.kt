@@ -28,6 +28,11 @@ class SaveSlotManager(private val stateBasePath: String) {
 
     fun stateExists(slot: Slot): Boolean = File(statePath(slot)).exists()
 
+    fun deleteState(slot: Slot) {
+        File(statePath(slot)).delete()
+        File(thumbnailPath(slot)).delete()
+    }
+
     fun loadThumbnail(slot: Slot): Bitmap? {
         val f = File(thumbnailPath(slot))
         if (!f.exists()) return null

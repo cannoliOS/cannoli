@@ -3,7 +3,7 @@ package dev.cannoli.scorza.libretro
 sealed class IGMScreen {
     abstract val selectedIndex: Int
 
-    data class Menu(override val selectedIndex: Int = 0) : IGMScreen()
+    data class Menu(override val selectedIndex: Int = 0, val confirmDeleteSlot: Boolean = false) : IGMScreen()
     data class Settings(override val selectedIndex: Int = 0) : IGMScreen()
     data class Frontend(override val selectedIndex: Int = 0) : IGMScreen()
     data class Emulator(override val selectedIndex: Int = 0, val showDescription: Boolean = false) : IGMScreen()

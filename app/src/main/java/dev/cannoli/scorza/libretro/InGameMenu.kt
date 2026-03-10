@@ -176,9 +176,11 @@ fun InGameMenu(
                 }
             }
 
+            val canDeleteSlot = showThumbnail && selectedSlot.index != 0 && slotExists
             val leftItems = buildList {
                 add("B" to "BACK")
                 if (undoLabel != null) add("X" to undoLabel.uppercase())
+                if (canDeleteSlot) add("Y" to "DELETE")
             }
             val rightItems = when {
                 showThumbnail -> listOf("◀▶" to "SLOT", "A" to "SELECT")
@@ -196,10 +198,11 @@ fun InGameMenu(
 }
 
 @Composable
-private fun PolaroidFrame(
+internal fun PolaroidFrame(
     thumbnail: Bitmap?,
     selectedSlotIndex: Int,
-    slotOccupied: List<Boolean>
+    slotOccupied: List<Boolean>,
+    showIndicators: Boolean = true
 ) {
     val accent = LocalCannoliColors.current.accent
     val aspectRatio = if (thumbnail != null) {
@@ -213,7 +216,7 @@ private fun PolaroidFrame(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(Color.White)
-            .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp)
+            .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = if (showIndicators) 12.dp else 8.dp)
     ) {
         Box(
             modifier = Modifier
@@ -240,6 +243,7 @@ private fun PolaroidFrame(
             }
         }
 
+        if (showIndicators) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Row(
@@ -285,6 +289,7 @@ private fun PolaroidFrame(
                         )
                 )
             }
+        }
         }
     }
 }

@@ -152,10 +152,10 @@ class LibretroActivity : ComponentActivity() {
 
         slotManager = SaveSlotManager(stateBasePath)
         input = LibretroInput()
+        if (intent.getBooleanExtra("swap_start_select", false)) input.swapStartSelect()
 
         runner = LibretroRunner()
-        val internalCore = copyCoreToCacheIfNeeded(corePath)
-        if (internalCore == null || !runner.loadCore(internalCore)) { finish(); return }
+        if (!runner.loadCore(corePath)) { finish(); return }
         runner.init(systemDir, saveDir)
         val avInfo = runner.loadGame(romPath) ?: run { runner.deinit(); finish(); return }
 
@@ -388,6 +388,23 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun handleMenuInput(screen: IGMScreen.Menu, keyCode: Int): Boolean {
+        if (screen.confirmDeleteSlot) {
+            return when (keyCode) {
+                KeyEvent.KEYCODE_BUTTON_X -> {
+                    slotManager.deleteState(currentSlot)
+                    refreshSlotInfo()
+                    showOsd("Deleted ${currentSlot.label}")
+                    replaceTop(screen.copy(confirmDeleteSlot = false))
+                    true
+                }
+                KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
+                    replaceTop(screen.copy(confirmDeleteSlot = false))
+                    true
+                }
+                else -> true
+            }
+        }
+
         val menu = menuOptions()
         val options = menu.options
         val onSlotRow = screen.selectedIndex == menu.saveStateIndex || screen.selectedIndex == menu.loadStateIndex
@@ -423,6 +440,12 @@ class LibretroActivity : ComponentActivity() {
                 handleMenuAction(menu, screen.selectedIndex); true
             }
             KeyEvent.KEYCODE_BUTTON_X -> { if (undoType != null) performUndo(); true }
+            KeyEvent.KEYCODE_BUTTON_Y -> {
+                if (onSlotRow && currentSlot.index != 0 && slotExists) {
+                    replaceTop(screen.copy(confirmDeleteSlot = true))
+                }
+                true
+            }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { closeAll(); true }
             else -> true
         }
@@ -516,6 +539,7 @@ class LibretroActivity : ComponentActivity() {
         ScreenEffect.NONE -> "None"
         ScreenEffect.SCANLINE -> "Scanline"
         ScreenEffect.GRID -> "Grid"
+        ScreenEffect.CRT -> "CRT"
     }
 
     private fun sharpnessLabel() = when (sharpness) {
@@ -960,15 +984,6 @@ class LibretroActivity : ComponentActivity() {
     override fun onResume() { super.onResume(); glSurfaceView?.onResume(); goFullscreen() }
     override fun onDestroy() { super.onDestroy(); cleanup() }
 
-    private fun copyCoreToCacheIfNeeded(externalPath: String): String? {
-        val src = File(externalPath)
-        if (!src.exists()) return null
-        val dst = File(cacheDir, src.name)
-        if (!dst.exists() || dst.length() != src.length()) {
-            src.inputStream().use { inp -> dst.outputStream().use { inp.copyTo(it) } }
-        }
-        return dst.absolutePath
-    }
 
     private fun goFullscreen() {
         WindowCompat.setDecorFitsSystemWindows(window, false)

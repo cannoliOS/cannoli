@@ -23,7 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.cannoli.scorza.ui.components.BottomBar
 import dev.cannoli.scorza.ui.components.StatusBar
+import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 
 @Composable
@@ -67,17 +69,54 @@ fun LibretroScreen(
         )
 
         when (screen) {
-            is IGMScreen.Menu -> InGameMenu(
-                gameTitle = gameTitle,
-                menuOptions = menuOptions,
-                selectedIndex = screen.selectedIndex,
-                selectedSlot = selectedSlot,
-                slotThumbnail = slotThumbnail,
-                slotExists = slotExists,
-                slotOccupied = slotOccupied,
-                undoLabel = undoLabel,
-                onAction = {}
-            )
+            is IGMScreen.Menu -> {
+                InGameMenu(
+                    gameTitle = gameTitle,
+                    menuOptions = menuOptions,
+                    selectedIndex = screen.selectedIndex,
+                    selectedSlot = selectedSlot,
+                    slotThumbnail = slotThumbnail,
+                    slotExists = slotExists,
+                    slotOccupied = slotOccupied,
+                    undoLabel = undoLabel,
+                    onAction = {}
+                )
+                if (screen.confirmDeleteSlot) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Text(
+                                text = "Delete ${selectedSlot.label}?",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.5f)) {
+                                PolaroidFrame(
+                                    thumbnail = slotThumbnail,
+                                    selectedSlotIndex = selectedSlot.index,
+                                    slotOccupied = slotOccupied,
+                                    showIndicators = false
+                                )
+                            }
+                        }
+                        BottomBar(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(screenPadding),
+                            leftItems = listOf("B" to "CANCEL"),
+                            rightItems = listOf("X" to "DELETE")
+                        )
+                    }
+                }
+            }
             is IGMScreen.Controls -> ControlsScreen(
                 input = input,
                 selectedIndex = screen.selectedIndex,
