@@ -138,9 +138,9 @@ class SaveSlotManager(private val stateBasePath: String) {
 
         if (pixelFormat == LibretroRunner.PIXEL_FORMAT_XRGB8888) {
             for (i in pixels.indices) {
-                val b = buf.get().toInt() and 0xFF
-                val g = buf.get().toInt() and 0xFF
                 val r = buf.get().toInt() and 0xFF
+                val g = buf.get().toInt() and 0xFF
+                val b = buf.get().toInt() and 0xFF
                 buf.get()
                 pixels[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
             }
