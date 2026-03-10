@@ -45,7 +45,7 @@ sealed class LauncherScreen {
     data object GameList : LauncherScreen()
     data object Settings : LauncherScreen()
     data class CoreMapping(val mappings: List<CoreMappingEntry>, val selectedIndex: Int = 0, val scrollTarget: Int = 0) : LauncherScreen()
-    data class CorePicker(val tag: String, val platformName: String, val cores: List<CorePickerOption>, val selectedIndex: Int = 0, val gamePath: String? = null, val scrollTarget: Int = 0) : LauncherScreen()
+    data class CorePicker(val tag: String, val platformName: String, val cores: List<CorePickerOption>, val selectedIndex: Int = 0, val gamePath: String? = null, val scrollTarget: Int = 0, val activeIndex: Int = 0) : LauncherScreen()
     data class ColorList(val colors: List<ColorEntry>, val selectedIndex: Int = 0, val scrollTarget: Int = 0) : LauncherScreen()
     data class CollectionPicker(val gamePaths: List<String>, val title: String, val collections: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet(), val scrollTarget: Int = 0) : LauncherScreen()
     data class AppPicker(val type: String, val title: String, val apps: List<String>, val packages: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet(), val scrollTarget: Int = 0) : LauncherScreen()
@@ -175,13 +175,26 @@ fun AppNavGraph(
                             scrollTarget = currentScreen.scrollTarget,
                             onVisibleRangeChanged = onVisibleRangeChanged
                         ) { index, option ->
-                            PillRowText(
-                                label = "${option.displayName} (${option.runnerLabel})",
-                                isSelected = currentScreen.selectedIndex == index,
-                                fontSize = listFontSize,
-                                lineHeight = listLineHeight,
-                                verticalPadding = listVerticalPadding
-                            )
+                            val label = if (option.runnerLabel.isEmpty()) option.displayName
+                                else "${option.displayName} (${option.runnerLabel})"
+                            if (index == currentScreen.activeIndex) {
+                                PillRowKeyValue(
+                                    label = label,
+                                    value = "Current",
+                                    isSelected = currentScreen.selectedIndex == index,
+                                    fontSize = listFontSize,
+                                    lineHeight = listLineHeight,
+                                    verticalPadding = listVerticalPadding
+                                )
+                            } else {
+                                PillRowText(
+                                    label = label,
+                                    isSelected = currentScreen.selectedIndex == index,
+                                    fontSize = listFontSize,
+                                    lineHeight = listLineHeight,
+                                    verticalPadding = listVerticalPadding
+                                )
+                            }
                         }
                     }
                 }

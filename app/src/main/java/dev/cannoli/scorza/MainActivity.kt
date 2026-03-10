@@ -669,7 +669,8 @@ class MainActivity : ComponentActivity() {
                             tag = entry.tag,
                             platformName = entry.platformName,
                             cores = options,
-                            selectedIndex = selectedIdx
+                            selectedIndex = selectedIdx,
+                            activeIndex = selectedIdx
                         ))
                     }
                     is LauncherScreen.CorePicker -> onCorePickerConfirm(screen)
@@ -1401,7 +1402,10 @@ class MainActivity : ComponentActivity() {
             "Emulator Override" -> {
                 val tag = game.platformTag
                 val options = platformResolver.getCorePickerOptions(tag, packageManager)
-                val defaultOption = CorePickerOption("", "Default (Platform Setting)", "")
+                val platformCoreId = platformResolver.getCoreMapping(tag)
+                val platformCoreName = options.firstOrNull { it.coreId == platformCoreId }?.displayName ?: platformCoreId
+                val defaultLabel = if (platformCoreName.isNotEmpty()) "Platform Setting ($platformCoreName)" else "Platform Setting"
+                val defaultOption = CorePickerOption("", defaultLabel, "")
                 val allOptions = listOf(defaultOption) + options
                 val override = platformResolver.getGameOverride(game.file.absolutePath)
                 val selectedIdx = if (override?.appPackage != null) {
@@ -1418,7 +1422,8 @@ class MainActivity : ComponentActivity() {
                     platformName = game.displayName,
                     cores = allOptions,
                     selectedIndex = selectedIdx,
-                    gamePath = game.file.absolutePath
+                    gamePath = game.file.absolutePath,
+                    activeIndex = selectedIdx
                 ))
             }
         }
