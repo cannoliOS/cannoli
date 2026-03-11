@@ -211,9 +211,11 @@ class GameListViewModel(
     fun enterMultiSelect() {
         val current = _state.value
         if (current.reorderMode || current.multiSelectMode) return
+        val game = current.games.getOrNull(current.selectedIndex)
+        val initial = if (game != null && !game.isSubfolder) setOf(current.selectedIndex) else emptySet()
         _state.value = current.copy(
             multiSelectMode = true,
-            checkedIndices = setOf(current.selectedIndex)
+            checkedIndices = initial
         )
     }
 
@@ -223,6 +225,8 @@ class GameListViewModel(
         val current = _state.value
         if (!current.multiSelectMode) return
         val idx = current.selectedIndex
+        val game = current.games.getOrNull(idx) ?: return
+        if (game.isSubfolder) return
         val newChecked = if (idx in current.checkedIndices) {
             current.checkedIndices - idx
         } else {
