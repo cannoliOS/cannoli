@@ -19,6 +19,7 @@ class FileScanner(
 
     private val artCache = mutableMapOf<String, Map<String, File>>()
     private val discRegex = Regex("""\s*\((Disc|Disk)\s*\d+\)|\s*\(CD\d+\)""", RegexOption.IGNORE_CASE)
+    private val tagRegex = Regex("""\s*(\([^)]*\)|\[[^\]]*\])""")
 
     fun scanPlatforms(): List<Platform> {
         if (!romsDir.exists()) return emptyList()
@@ -139,11 +140,29 @@ class FileScanner(
             it.file.absolutePath !in discFileSet && it.file.absolutePath !in coveredByM3u
         }
 
-        return (filtered + grouped)
-            .sortedWith(compareBy<Game> { !it.isSubfolder }.thenBy(dev.cannoli.scorza.util.NaturalSort) { it.displayName })
+        return stripTags(
+            (filtered + grouped)
+                .sortedWith(compareBy<Game> { !it.isSubfolder }.thenBy(dev.cannoli.scorza.util.NaturalSort) { it.displayName })
+        )
     }
 
     private data class DirLaunch(val file: File, val discFiles: List<File>? = null)
+
+    private fun stripTags(games: List<Game>): List<Game> {
+        val stripped = games.map { g ->
+            if (g.isSubfolder) g to g.displayName
+            else g to tagRegex.replace(g.displayName, "").trim()
+        }
+        val baseCounts = mutableMapOf<String, Int>()
+        for ((_, base) in stripped) {
+            baseCounts[base] = (baseCounts[base] ?: 0) + 1
+        }
+        return stripped.map { (game, base) ->
+            if (game.isSubfolder || base.isEmpty()) game
+            else if (baseCounts[base]!! > 1) game
+            else game.copy(displayName = base)
+        }
+    }
 
     private fun findDirLaunchFile(dir: File): DirLaunch? {
         File(dir, "${dir.name}.m3u").takeIf { it.exists() }?.let { return DirLaunch(it) }
