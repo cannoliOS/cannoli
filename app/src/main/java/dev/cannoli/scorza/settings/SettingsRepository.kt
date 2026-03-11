@@ -53,6 +53,10 @@ class SettingsRepository(context: Context) {
         editor.apply()
     }
 
+    var setupCompleted: Boolean
+        get() = prefs.getBoolean(KEY_SETUP_COMPLETED, false)
+        set(value) { prefs.edit().putBoolean(KEY_SETUP_COMPLETED, value).apply() }
+
     var sdCardRoot: String
         get() = prefs.getString(KEY_SD_ROOT, DEFAULT_ROOT) ?: DEFAULT_ROOT
         set(value) {
@@ -161,6 +165,7 @@ class SettingsRepository(context: Context) {
         const val DEFAULT_ROOT = "/storage/emulated/0/Cannoli/"
         const val DEFAULT_RA_PACKAGE = "com.retroarch.aarch64"
 
+        private const val KEY_SETUP_COMPLETED = "setup_completed"
         private const val KEY_SD_ROOT = "sd_root"
         private const val KEY_RA_PACKAGE = "ra_package"
         private const val KEY_BUTTON_LAYOUT = "button_layout"
