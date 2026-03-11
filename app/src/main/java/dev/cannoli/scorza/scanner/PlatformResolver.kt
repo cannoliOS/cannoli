@@ -168,6 +168,8 @@ class PlatformResolver(
 
     fun isKnownTag(tag: String): Boolean = tag in defaultPlatformNames
 
+    fun getAllTags(): Set<String> = defaultPlatformNames.keys
+
     fun getAppPackage(tag: String): String? = userApps[tag] ?: defaultApps[tag]?.firstOrNull()
 
     fun getAppOptions(tag: String): List<String> = defaultApps[tag] ?: emptyList()

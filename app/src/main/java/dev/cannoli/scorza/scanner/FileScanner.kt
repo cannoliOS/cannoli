@@ -320,6 +320,13 @@ class FileScanner(
             File(cannoliRoot, "Wallpapers"),
             toolsDir, portsDir
         ).forEach { it.mkdirs() }
+
+        for (tag in platformResolver.getAllTags()) {
+            File(romsDir, tag).mkdirs()
+            File(artDir, tag).mkdirs()
+            File(cannoliRoot, "Saves/$tag").mkdirs()
+            File(cannoliRoot, "Save States/$tag").mkdirs()
+        }
     }
 
     private fun scanApkLaunchesWithNames(dir: File): List<Pair<String, LaunchTarget.ApkLaunch>> {
