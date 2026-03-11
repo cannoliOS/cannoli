@@ -22,7 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.res.painterResource
+
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
-import dev.cannoli.scorza.R
+
 import dev.cannoli.scorza.ui.theme.GrayText
 import dev.cannoli.scorza.ui.theme.MPlus1Code
 
@@ -48,14 +48,6 @@ fun KitchenOverlay(url: String, pin: String) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(R.drawable.cannoli_nobg),
-                contentDescription = null,
-                modifier = Modifier.size(80.dp)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             Text(
                 text = "Nonna's Kitchen",
                 style = TextStyle(

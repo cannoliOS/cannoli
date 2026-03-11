@@ -53,7 +53,7 @@ import java.util.TimerTask
 
 private const val ICON_BLUETOOTH = "\uDB80\uDCAF"   // 󰂯 nf-md-bluetooth
 private const val ICON_WIFI = "\uDB81\uDDA9"         // 󰖩 nf-md-wifi
-private const val ICON_KITCHEN = "\uDB86\uDDA3"      // 󱦣 nf-md-silverware_spoon
+private const val ICON_KITCHEN = "\uDB81\uDC8B"      // 󰒋 nf-md-server
 
 @Composable
 fun StatusBar(
