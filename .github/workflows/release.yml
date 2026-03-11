@@ -3,6 +3,9 @@ name: Build Release
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: Version number (e.g. 1.0.0)
+        required: true
       branch:
         description: Branch to build from
         required: true
@@ -54,10 +57,9 @@ jobs:
       - name: Get version info
         id: version
         run: |
-          VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
           SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "tag=v${VERSION_NAME}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "apk_name=cannoli-${VERSION_NAME}-${SHORT_SHA}.apk" >> "$GITHUB_OUTPUT"
+          echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "apk_name=cannoli-${{ inputs.version }}-${SHORT_SHA}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Rename APK
         run: |
