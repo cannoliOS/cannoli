@@ -18,6 +18,14 @@ on:
         type: boolean
         default: true
 
+env:
+  BUILDBOT: https://buildbot.libretro.com/nightly/android/latest
+  CORES: >-
+    atari800 bluemsx dosbox_pure fceumm freeintv gambatte genesis_plus_gx
+    handy mednafen_ngp mednafen_pce_fast mednafen_pcfx mednafen_vb
+    mednafen_wswan mgba mupen64plus_next_gles3 nestopia pcsx_rearmed
+    picodrive pokemini prosystem snes9x stella swanstation vecx virtualjaguar
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,6 +36,20 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
+
+      - name: Download libretro cores
+        run: |
+          for arch in arm64-v8a armeabi-v7a; do
+            dir="app/src/main/jniLibs/${arch}"
+            mkdir -p "$dir"
+            for core in $CORES; do
+              name="${core}_libretro_android.so"
+              echo "Downloading ${arch}/${name}"
+              curl -sL "${BUILDBOT}/${arch}/${name}.zip" -o /tmp/core.zip
+              unzip -o -q /tmp/core.zip -d "$dir"
+              rm /tmp/core.zip
+            done
+          done
 
       - uses: actions/setup-java@v4
         with:
