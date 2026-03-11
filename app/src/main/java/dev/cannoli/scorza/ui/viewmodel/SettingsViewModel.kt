@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 
 class SettingsViewModel(
     private val settings: SettingsRepository,
-    private val cannoliRoot: java.io.File? = null
+    private val cannoliRoot: java.io.File? = null,
+    private val onKitchenToggle: (() -> Unit)? = null,
+    private val isKitchenRunning: (() -> Boolean)? = null
 ) : ViewModel() {
 
     data class SettingsItem(
@@ -89,6 +91,7 @@ class SettingsViewModel(
         Category("content", R.string.settings_content),
         Category("status_bar", R.string.settings_status_bar),
         Category("input", R.string.settings_input),
+        Category("kitchen", R.string.settings_kitchen),
         Category("advanced", R.string.settings_advanced),
         Category("about", R.string.settings_about)
     )
@@ -204,6 +207,7 @@ class SettingsViewModel(
             "show_battery" -> settings.showBattery = !settings.showBattery
             "show_tools" -> settings.showTools = !settings.showTools
             "show_ports" -> settings.showPorts = !settings.showPorts
+            "kitchen_toggle" -> onKitchenToggle?.invoke()
         }
 
         val catKey = current.activeCategory ?: return
@@ -350,6 +354,8 @@ class SettingsViewModel(
         (snap["ra_package"] as? String)?.let { settings.retroArchPackage = it }
     }
 
+    private val kitchenRunning: Boolean get() = isKitchenRunning?.invoke() ?: false
+
     private fun onOff(value: Boolean) = if (value) R.string.value_on else R.string.value_off
     private fun showHide(value: Boolean) = if (value) R.string.value_show else R.string.value_hide
 
@@ -391,6 +397,9 @@ class SettingsViewModel(
             SettingsItem("button_layout", R.string.setting_button_layout, valueText = settings.buttonLayout.name.lowercase().replaceFirstChar { it.uppercase() }),
             SettingsItem("swap_start_select", R.string.setting_swap_start_select, valueRes = onOff(settings.swapStartSelect)),
             SettingsItem("platform_switching", R.string.setting_platform_switching, valueRes = onOff(settings.platformSwitching))
+        )
+        "kitchen" -> listOf(
+            SettingsItem("kitchen_toggle", R.string.setting_kitchen_toggle, valueRes = onOff(kitchenRunning))
         )
         "advanced" -> listOf(
             SettingsItem("core_mapping", R.string.setting_core_mapping, isEditable = true),

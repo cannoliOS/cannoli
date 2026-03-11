@@ -30,6 +30,7 @@ sealed interface DialogState {
     data class ColorPicker(val settingKey: String, val currentColor: Long, val selectedRow: Int = 0, val selectedCol: Int = 0) : DialogState
     data class HexColorInput(val settingKey: String, val currentHex: String = "", val selectedIndex: Int = 0) : DialogState
     data object About : DialogState
+    data class Kitchen(val url: String, val pin: String) : DialogState
 }
 
 val DialogState.isFullScreen: Boolean
@@ -41,6 +42,7 @@ val DialogState.isFullScreen: Boolean
         is DialogState.RenameInput,
         is DialogState.NewCollectionInput,
         is DialogState.CollectionRenameInput,
-        is DialogState.About -> true
+        is DialogState.About,
+        is DialogState.Kitchen -> true
         else -> false
     }

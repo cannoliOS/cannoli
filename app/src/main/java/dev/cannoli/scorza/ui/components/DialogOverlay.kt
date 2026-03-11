@@ -112,6 +112,10 @@ fun DialogOverlay(
             AboutOverlay()
         }
 
+        is DialogState.Kitchen -> {
+            KitchenOverlay(url = dialogState.url, pin = dialogState.pin)
+        }
+
         else -> {}
     }
 }
