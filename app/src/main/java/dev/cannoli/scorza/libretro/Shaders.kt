@@ -21,32 +21,24 @@ object Shaders {
         }
     """.trimIndent()
 
-    val scanline = """
+    // lcd3x by Gigaherz — public domain
+    // https://github.com/libretro/glsl-shaders/blob/master/handheld/shaders/lcd3x.glsl
+    val lcd = """
         precision mediump float;
         varying vec2 vTexCoord;
         uniform sampler2D uTexture;
         uniform vec2 uSourceSize;
         uniform vec2 uOutputSize;
+        const float brighten_scanlines = 16.0;
+        const float brighten_lcd = 4.0;
+        const vec3 offsets = vec3(3.141592654) * vec3(0.5, 0.5 - 2.0/3.0, 0.5 - 4.0/3.0);
         void main() {
-            vec4 color = texture2D(uTexture, vTexCoord);
-            float line = mod(floor(vTexCoord.y * uSourceSize.y), 2.0);
-            float dim = 1.0 - line * 0.25;
-            gl_FragColor = vec4(color.rgb * dim, color.a);
-        }
-    """.trimIndent()
-
-    val grid = """
-        precision mediump float;
-        varying vec2 vTexCoord;
-        uniform sampler2D uTexture;
-        uniform vec2 uSourceSize;
-        uniform vec2 uOutputSize;
-        void main() {
-            vec4 color = texture2D(uTexture, vTexCoord);
-            float lineX = mod(floor(vTexCoord.x * uSourceSize.x), 2.0);
-            float lineY = mod(floor(vTexCoord.y * uSourceSize.y), 2.0);
-            float dim = 1.0 - max(lineX, lineY) * 0.2;
-            gl_FragColor = vec4(color.rgb * dim, color.a);
+            vec2 omega = vec2(3.141592654) * 2.0 * uSourceSize;
+            vec3 res = texture2D(uTexture, vTexCoord).rgb;
+            vec2 angle = vTexCoord * omega;
+            float yfactor = (brighten_scanlines + sin(angle.y)) / (brighten_scanlines + 1.0);
+            vec3 xfactors = (brighten_lcd + sin(angle.x + offsets)) / (brighten_lcd + 1.0);
+            gl_FragColor = vec4(res * yfactor * xfactors, 1.0);
         }
     """.trimIndent()
 

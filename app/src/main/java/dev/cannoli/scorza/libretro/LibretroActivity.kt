@@ -555,8 +555,8 @@ class LibretroActivity : ComponentActivity() {
 
     private fun effectLabel() = when (screenEffect) {
         ScreenEffect.NONE -> "None"
-        ScreenEffect.SCANLINE -> "Scanline"
-        ScreenEffect.GRID -> "Grid"
+
+        ScreenEffect.LCD -> "LCD"
         ScreenEffect.CRT -> "CRT"
     }
 

@@ -10,7 +10,7 @@ import javax.microedition.khronos.opengles.GL10
 
 enum class ScalingMode { CORE_REPORTED, INTEGER, FULLSCREEN }
 enum class Sharpness { SHARP, CRISP, SOFT }
-enum class ScreenEffect { NONE, SCANLINE, GRID, CRT }
+enum class ScreenEffect { NONE, LCD, CRT }
 
 class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Renderer {
 
@@ -51,8 +51,8 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
 
     private var textureId = 0
     private var programNone = 0
-    private var programScanline = 0
-    private var programGrid = 0
+
+    private var programLcd = 0
     private var programKawase = 0
     private var programCrt = 0
     private var activeProgramId = 0
@@ -92,8 +92,8 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
             .order(ByteOrder.nativeOrder()).asFloatBuffer().put(fboTexCoords).also { it.position(0) }
 
         programNone = createProgram(Shaders.vertex, Shaders.passthrough)
-        programScanline = createProgram(Shaders.vertex, Shaders.scanline)
-        programGrid = createProgram(Shaders.vertex, Shaders.grid)
+
+        programLcd = createProgram(Shaders.vertex, Shaders.lcd)
         programKawase = createProgram(Shaders.vertex, Shaders.kawaseBlur)
         programCrt = createProgram(Shaders.vertex, Shaders.crtComposite)
         activeProgramId = programNone
@@ -197,8 +197,8 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
             shaderDirty = false
             activeProgramId = when (screenEffect) {
                 ScreenEffect.NONE -> programNone
-                ScreenEffect.SCANLINE -> programScanline
-                ScreenEffect.GRID -> programGrid
+
+                ScreenEffect.LCD -> programLcd
                 ScreenEffect.CRT -> programCrt
             }
         }
