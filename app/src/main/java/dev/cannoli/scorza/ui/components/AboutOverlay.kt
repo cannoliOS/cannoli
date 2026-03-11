@@ -43,7 +43,7 @@ fun AboutOverlay() {
             )
 
             Text(
-                text = "Scorza",
+                text = "Cannoli",
                 style = TextStyle(
                     fontFamily = MPlus1Code,
                     fontWeight = FontWeight.Bold,
