@@ -400,6 +400,12 @@ class MainActivity : ComponentActivity() {
         )
         wireInput()
 
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                inputHandler.onBack()
+            }
+        })
+
         rescanSystemList()
 
         setContent {
