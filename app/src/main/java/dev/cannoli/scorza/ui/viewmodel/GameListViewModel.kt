@@ -211,7 +211,7 @@ class GameListViewModel(
     fun toggleFavorite(onDone: () -> Unit = {}) {
         val current = _state.value
         val game = current.games.getOrNull(current.selectedIndex) ?: return
-        if (game.isSubfolder || current.isCollectionsList) return
+        if (game.isSubfolder || current.isCollectionsList || current.platformTag in listOf("tools", "ports")) return
         val path = game.file.absolutePath
         val isFav = game.displayName.startsWith("★")
         val oldIndex = current.selectedIndex
