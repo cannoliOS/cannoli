@@ -1589,7 +1589,7 @@ class MainActivity : ComponentActivity() {
         }
         val game = gameListViewModel.getSelectedGame() ?: return
         val glState = gameListViewModel.state.value
-        pendingContextReturn = null
+        pendingContextReturn = ContextReturn.Single(state.gameName, state.options)
         when (state.options[state.selectedOption]) {
             "Rename" -> {
                 if (glState.isCollectionsList) {
