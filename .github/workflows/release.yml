@@ -72,8 +72,8 @@ jobs:
           cd /tmp/kitchen
           bun install --frozen-lockfile
           bun run build
-          rm -rf app/src/main/assets/kitchen
-          cp -r /tmp/kitchen/dist app/src/main/assets/kitchen
+          mkdir -p app/src/main/assets/kitchen
+          cp -r /tmp/kitchen/dist/* app/src/main/assets/kitchen/
 
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
