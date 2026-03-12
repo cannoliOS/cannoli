@@ -64,6 +64,19 @@ jobs:
         with:
           ndk-version: r27c
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Kitchen frontend
+        run: |
+          git clone https://github.com/cannoliOS/kitchen.git /tmp/kitchen
+          cd /tmp/kitchen
+          npm ci
+          npm run build
+          rm -rf app/src/main/assets/kitchen
+          cp -r /tmp/kitchen/dist app/src/main/assets/kitchen
+
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
 
