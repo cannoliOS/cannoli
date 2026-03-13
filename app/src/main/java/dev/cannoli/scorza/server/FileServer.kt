@@ -7,6 +7,8 @@ import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URLDecoder
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
 class FileServer(
@@ -16,6 +18,7 @@ class FileServer(
 ) {
     private var serverSocket: ServerSocket? = null
     @Volatile private var running = false
+    private var threadPool: ExecutorService? = null
     var pin: String = ""
         private set
 
@@ -23,13 +26,14 @@ class FileServer(
         if (running) return
         pin = generatePin()
         running = true
+        threadPool = Executors.newFixedThreadPool(4)
         thread(isDaemon = true, name = "FileServer") {
             val socket = ServerSocket(port)
             serverSocket = socket
             while (running) {
                 try {
                     val client = socket.accept()
-                    thread(isDaemon = true) { handleClient(client) }
+                    threadPool?.execute { handleClient(client) }
                 } catch (_: Exception) {
                     if (!running) break
                 }
@@ -41,6 +45,8 @@ class FileServer(
         running = false
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
+        threadPool?.shutdownNow()
+        threadPool = null
     }
 
     val isRunning: Boolean get() = running
@@ -779,7 +785,20 @@ class FileServer(
     }
 
     private fun escapeJson(s: String): String {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+        val sb = StringBuilder(s.length)
+        for (c in s) {
+            when (c) {
+                '\\' -> sb.append("\\\\")
+                '"' -> sb.append("\\\"")
+                '\n' -> sb.append("\\n")
+                '\r' -> sb.append("\\r")
+                '\t' -> sb.append("\\t")
+                '\b' -> sb.append("\\b")
+                '\u000C' -> sb.append("\\f")
+                else -> if (c < ' ') sb.append("\\u%04x".format(c.code)) else sb.append(c)
+            }
+        }
+        return sb.toString()
     }
 
     private fun generatePin(): String {
