@@ -48,8 +48,8 @@ import dev.cannoli.scorza.ui.theme.MPlus1Code
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.Timer
-import java.util.TimerTask
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 
 private const val ICON_BLUETOOTH = "\uDB80\uDCAF"   // 󰂯 nf-md-bluetooth
 private const val ICON_WIFI = "\uDB81\uDDA9"         // 󰖩 nf-md-wifi
@@ -74,12 +74,15 @@ fun StatusBar(
     var hasBluetooth by remember { mutableStateOf(false) }
     var rawTime by remember { mutableStateOf(Date()) }
 
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(15000)
+            rawTime = Date()
+        }
+    }
+
     DisposableEffect(Unit) {
         rawTime = Date()
-        val timer = Timer()
-        timer.scheduleAtFixedRate(object : TimerTask() {
-            override fun run() { rawTime = Date() }
-        }, 1000, 15000)
 
         val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         val batteryReceiver = object : BroadcastReceiver() {
@@ -130,7 +133,6 @@ fun StatusBar(
         }
 
         onDispose {
-            timer.cancel()
             try { context.unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
             try { context.unregisterReceiver(btReceiver) } catch (_: Exception) {}
             try { networkCallback?.let { cm?.unregisterNetworkCallback(it) } } catch (_: Exception) {}
