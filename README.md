@@ -7,6 +7,8 @@ Cannoli
 
 <h4 style="font-size:18px; padding-top:0px; margin-top:0px;">A frontend with just the right amount of filling!</h4>
 
+<video src="https://github.com/user-attachments/assets/84ef99a6-faeb-487d-93ad-6fbeaf607b75" width="600" autoplay loop muted playsinline></video>
+
 </div>
 
 ---
@@ -158,6 +160,44 @@ I consider Claude just another tool and have been upfront about its usage out of
 You can decide how that impacts your desire to use this project.
 
 Don't like AI? I don't care. I build this for fun, and you didn't pay shit for it. Take it for what it is.
+
+---
+
+# Credits and Licenses
+
+| Name                        | Detail                       |
+|-----------------------------|------------------------------|
+| Shaun Inman                 | MinUI — Inspiration          |
+| M+ Fonts Project            | M PLUS 1 Code — OFL          |
+| Nerd Fonts                  | NerdSymbols — OFL            |
+| ZXing                       | QR Code Library — Apache 2.0 |
+| Atari800                    | GPLv2                        |
+| Beetle NeoPop               | GPLv2                        |
+| Beetle PCE FAST             | GPLv2                        |
+| Beetle PC-FX                | GPLv2                        |
+| Beetle VB                   | GPLv2                        |
+| Beetle Wonderswan           | GPLv2                        |
+| blueMSX                     | GPLv2                        |
+| DOSBox-Pure                 | GPLv2                        |
+| FCEUmm                      | GPLv2                        |
+| FreeIntv                    | GPLv3                        |
+| Gambatte                    | GPLv2                        |
+| Genesis Plus GX             | Non-commercial               |
+| Handy                       | Zlib                         |
+| mGBA                        | MPLv2.0                      |
+| Mupen64Plus-Next            | GPLv2                        |
+| Nestopia                    | GPLv2                        |
+| PCSX ReARMed                | GPLv2                        |
+| PicoDrive                   | MAME                         |
+| PokeMini                    | GPLv3                        |
+| ProSystem                   | GPLv2                        |
+| Snes9x                      | Non-commercial               |
+| Stella                      | GPLv2                        |
+| SwanStation                 | GPLv3                        |
+| vecx                        | GPLv3                        |
+| Virtual Jaguar              | GPLv3                        |
+| lcd3x by Gigaherz           | Shader — Public domain       |
+| zfast_crt_geo by Greg Hogan | Shader — GPLv2               |
 
 ---
 
