@@ -25,7 +25,7 @@ class PlatformResolver(
     private var defaultApps = mapOf<String, List<String>>()
 
     private fun loadPlatformsAsset() {
-        val json = JSONObject(assets.open("platforms.json").bufferedReader().readText())
+        val json = JSONObject(assets.open("platforms.json").use { it.bufferedReader().readText() })
         val cores = mutableMapOf<String, String>()
         val names = mutableMapOf<String, String>()
         val raCores = mutableMapOf<String, List<String>>()
@@ -54,10 +54,10 @@ class PlatformResolver(
     }
 
     private var ini: IniData = IniData(emptyMap())
-    private var userCores: MutableMap<String, String> = mutableMapOf()
-    private var userRunners: MutableMap<String, String> = mutableMapOf()
-    private var userApps: MutableMap<String, String> = mutableMapOf()
-    private var gameOverrides: MutableMap<String, GameCoreOverride> = mutableMapOf()
+    private var userCores: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
+    private var userRunners: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
+    private var userApps: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
+    private var gameOverrides: MutableMap<String, GameCoreOverride> = java.util.concurrent.ConcurrentHashMap()
     private val coresFile get() = File(cannoliRoot, "Config/cores.json")
 
     fun load() {

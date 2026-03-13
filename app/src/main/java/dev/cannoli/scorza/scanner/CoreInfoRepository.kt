@@ -10,7 +10,8 @@ data class CoreInfo(
 
 class CoreInfoRepository(private val assets: AssetManager) {
 
-    private val cores = mutableListOf<CoreInfo>()
+    @Volatile private var cores = listOf<CoreInfo>()
+    @Volatile private var coreById = mapOf<String, CoreInfo>()
 
     private val tagToDatabases = mapOf(
         "GB" to listOf("Nintendo - Game Boy"),
@@ -59,7 +60,7 @@ class CoreInfoRepository(private val assets: AssetManager) {
     )
 
     fun load() {
-        cores.clear()
+        val result = mutableListOf<CoreInfo>()
         val files = try { assets.list("core_info") ?: emptyArray() } catch (_: Exception) { emptyArray() }
         for (filename in files) {
             if (!filename.endsWith(".info")) continue
@@ -81,13 +82,15 @@ class CoreInfoRepository(private val assets: AssetManager) {
                 }
             } catch (_: Exception) {}
             if (displayName != null) {
-                cores.add(CoreInfo(id, displayName!!, databases))
+                result.add(CoreInfo(id, displayName!!, databases))
             }
         }
+        cores = result
+        coreById = result.associateBy { it.id }
     }
 
     fun getDisplayName(coreId: String): String {
-        return cores.firstOrNull { it.id == coreId }?.displayName ?: coreId
+        return coreById[coreId]?.displayName ?: coreId
     }
 
     fun getCoresForTag(tag: String): List<CoreInfo> {

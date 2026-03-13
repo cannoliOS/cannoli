@@ -11,13 +11,13 @@ class FileScanner(
     private val cannoliRoot: File,
     private val platformResolver: PlatformResolver
 ) {
-    private val romsDir get() = File(cannoliRoot, "Roms")
-    private val artDir get() = File(cannoliRoot, "Art")
-    private val collectionsDir get() = File(cannoliRoot, "Collections")
-    private val toolsDir get() = File(cannoliRoot, "Config/Launch Scripts/Tools")
-    private val portsDir get() = File(cannoliRoot, "Config/Launch Scripts/Ports")
+    private val romsDir = File(cannoliRoot, "Roms")
+    private val artDir = File(cannoliRoot, "Art")
+    private val collectionsDir = File(cannoliRoot, "Collections")
+    private val toolsDir = File(cannoliRoot, "Config/Launch Scripts/Tools")
+    private val portsDir = File(cannoliRoot, "Config/Launch Scripts/Ports")
 
-    private val artCache = mutableMapOf<String, Map<String, File>>()
+    private val artCache = java.util.concurrent.ConcurrentHashMap<String, Map<String, File>>()
     private val discRegex = Regex("""\s*\((Disc|Disk)\s*\d+\)|\s*\(CD\d+\)""", RegexOption.IGNORE_CASE)
     private val tagRegex = Regex("""\s*(\([^)]*\)|\[[^\]]*\])""")
 
@@ -195,10 +195,6 @@ class FileScanner(
             val lines = file.readLines().map { it.trim() }.filter { it.isNotEmpty() }
             val entries = lines.map { File(it) }.filter { it.exists() }
 
-            if (entries.size < lines.size) {
-                file.writeText(entries.joinToString("\n") { it.absolutePath } + "\n")
-            }
-
             Collection(
                 name = file.nameWithoutExtension,
                 file = file,
@@ -241,15 +237,19 @@ class FileScanner(
                 )
             }
             .let { games ->
-                val favPaths = getFavoritePaths()
-                games.map { game ->
-                    if (game.file.absolutePath in favPaths)
-                        game.copy(displayName = "★ ${game.displayName}")
-                    else game
-                }.sortedWith(
-                    compareBy<Game> { !it.displayName.startsWith("★") }
-                        .thenBy(dev.cannoli.scorza.util.NaturalSort) { it.displayName.removePrefix("★ ") }
-                )
+                if (collectionName.equals("Favorites", ignoreCase = true)) {
+                    games.sortedWith(compareBy(dev.cannoli.scorza.util.NaturalSort) { it.displayName })
+                } else {
+                    val favPaths = getFavoritePaths()
+                    games.map { game ->
+                        if (game.file.absolutePath in favPaths)
+                            game.copy(displayName = "★ ${game.displayName}")
+                        else game
+                    }.sortedWith(
+                        compareBy<Game> { !it.displayName.startsWith("★") }
+                            .thenBy(dev.cannoli.scorza.util.NaturalSort) { it.displayName.removePrefix("★ ") }
+                    )
+                }
             }
     }
 
@@ -408,14 +408,10 @@ class FileScanner(
         val files = dir.listFiles() ?: return 0
         val visible = files.filter { it.name != ".emu_launch" }
         val discFiles = visible.filter { !it.isDirectory && discRegex.containsMatchIn(it.nameWithoutExtension) }
-        val discGroupCount = discFiles
-            .groupBy { it.nameWithoutExtension.replace(discRegex, "").trim() }
-            .count { it.value.size > 1 }
-        val discFileCount = discFiles.count { f ->
-            val base = f.nameWithoutExtension.replace(discRegex, "").trim()
-            discFiles.count { it.nameWithoutExtension.replace(discRegex, "").trim() == base } > 1
-        }
-        return visible.size - discFileCount + discGroupCount
+        val groups = discFiles.groupBy { it.nameWithoutExtension.replace(discRegex, "").trim() }
+        val multiDiscGroups = groups.filter { it.value.size > 1 }
+        val discFileCount = multiDiscGroups.values.sumOf { it.size }
+        return visible.size - discFileCount + multiDiscGroups.size
     }
 
     private fun findArt(tag: String, gameName: String): File? {
@@ -437,7 +433,7 @@ class FileScanner(
         artCache.clear()
     }
 
-    private val configDir get() = File(cannoliRoot, "Config")
+    private val configDir = File(cannoliRoot, "Config")
 
     fun loadPlatformOrder(): List<String> {
         val file = File(configDir, "platform_order.txt")
