@@ -168,6 +168,14 @@ class GameListViewModel(
                     _state.value = s.copy(selectedIndex = 0, scrollTarget = 0)
                 }
             }
+        } else if (current.platformTag == "tools" || current.platformTag == "ports") {
+            loadApkList(current.platformTag, current.breadcrumb) {
+                val s = _state.value
+                _state.value = s.copy(
+                    selectedIndex = preserveIndex.coerceAtMost(s.games.lastIndex.coerceAtLeast(0)),
+                    scrollTarget = preserveScroll.coerceAtMost(s.games.lastIndex.coerceAtLeast(0))
+                )
+            }
         } else if (current.platformTag.isNotEmpty()) {
             loadGames(current.platformTag, current.subfolderPath, preserveIndex, preserveScroll, prevCount)
         }
