@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.scorza.R
 import dev.cannoli.scorza.model.Game
-import dev.cannoli.scorza.settings.ScrollSpeed
 import dev.cannoli.scorza.ui.components.BottomBar
 import dev.cannoli.scorza.ui.components.ConfirmOverlay
 import dev.cannoli.scorza.ui.components.DialogOverlay
@@ -65,7 +64,6 @@ fun GameListScreen(
     listFontSize: TextUnit = 22.sp,
     listLineHeight: TextUnit = 32.sp,
     listVerticalPadding: Dp = 8.dp,
-    scrollSpeed: ScrollSpeed = ScrollSpeed.NORMAL,
     dialogState: DialogState = DialogState.None,
     onVisibleRangeChanged: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
     resumableGames: Set<String> = emptySet()
@@ -152,7 +150,6 @@ fun GameListScreen(
                                     fontSize = listFontSize,
                                     lineHeight = listLineHeight,
                                     verticalPadding = listVerticalPadding,
-                                    scrollSpeed = scrollSpeed,
                                     showReorderIcon = state.reorderMode && state.selectedIndex == index,
                                     checkState = if (state.multiSelectMode && !game.isSubfolder) index in state.checkedIndices else null
                                 )
@@ -245,7 +242,6 @@ private fun GameRow(
     fontSize: TextUnit,
     lineHeight: TextUnit,
     verticalPadding: Dp,
-    scrollSpeed: ScrollSpeed = ScrollSpeed.NORMAL,
     showReorderIcon: Boolean = false,
     checkState: Boolean? = null
 ) {
@@ -255,13 +251,9 @@ private fun GameRow(
     )
     val scrollState = rememberScrollState()
 
-    val pxPerMs = when (scrollSpeed) {
-        ScrollSpeed.SLOW -> 8
-        ScrollSpeed.NORMAL -> 4
-        ScrollSpeed.FAST -> 2
-    }
+    val pxPerMs = 4
 
-    LaunchedEffect(isSelected, scrollSpeed) {
+    LaunchedEffect(isSelected) {
         scrollState.scrollTo(0)
         if (isSelected) {
             delay(600)
