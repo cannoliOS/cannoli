@@ -96,7 +96,7 @@ fun LibretroScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black),
+                            .background(Color.Black.copy(alpha = 0.85f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
@@ -176,7 +176,7 @@ fun LibretroScreen(
                     }
                     return path
                 }
-                ScreenBackground(backgroundImagePath = null) {
+                ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()

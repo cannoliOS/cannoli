@@ -36,7 +36,7 @@ fun ControlsScreen(
     val hasToggle = useGlobalControls != null
     val buttonOffset = if (hasToggle) 1 else 0
 
-    ScreenBackground(backgroundImagePath = null) {
+    ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
         Box(
             modifier = Modifier
                 .fillMaxSize()

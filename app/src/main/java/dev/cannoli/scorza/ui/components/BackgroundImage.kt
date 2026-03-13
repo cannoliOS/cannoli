@@ -17,11 +17,12 @@ import java.io.File
 fun ScreenBackground(
     backgroundImagePath: String?,
     backgroundTint: Int = 0,
+    backgroundAlpha: Float = 1f,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = backgroundAlpha)))
 
         if (backgroundImagePath != null) {
             val bitmap = remember(backgroundImagePath) {
