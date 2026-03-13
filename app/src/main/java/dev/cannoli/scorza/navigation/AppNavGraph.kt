@@ -90,10 +90,7 @@ fun AppNavGraph(
         TextSize.COMPACT -> 22.sp
         TextSize.DEFAULT -> 32.sp
     }
-    val listVerticalPadding = when (appSettings.textSize) {
-        TextSize.COMPACT -> 4.dp
-        TextSize.DEFAULT -> 4.dp
-    }
+    val listVerticalPadding = 4.dp
 
     val cannoliColors = CannoliColors(
         highlight = appSettings.colorHighlight,
@@ -343,7 +340,7 @@ fun AppNavGraph(
                 }
             }
             is LauncherScreen.ControlBinding -> {
-                val tempInput = LibretroInput()
+                val tempInput = remember { LibretroInput() }
                 for ((key, keyCode) in currentScreen.controls) {
                     val btn = tempInput.buttons.find { it.prefKey == key } ?: continue
                     tempInput.assign(btn, keyCode)

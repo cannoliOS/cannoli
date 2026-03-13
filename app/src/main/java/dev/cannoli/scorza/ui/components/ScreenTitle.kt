@@ -20,7 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 import kotlinx.coroutines.delay
@@ -83,11 +85,11 @@ fun ScreenTitle(
             onTextLayout = { result ->
                 if (result.size.width > availableWidthPx && adjustedFontSizeSp > fontSize.value) {
                     val scale = availableWidthPx / result.size.width
-                    adjustedFontSizeSp = (adjustedFontSizeSp * scale).coerceAtLeast(fontSize.value)
+                    adjustedFontSizeSp = (adjustedFontSizeSp * scale - 0.2f).coerceAtLeast(fontSize.value)
                 }
             },
             modifier = Modifier
-                .padding(start = pillInternalH)
+                .padding(start = (pillInternalH - 4.dp))
                 .horizontalScroll(scrollState)
         )
     }

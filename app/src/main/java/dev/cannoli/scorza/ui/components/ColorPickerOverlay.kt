@@ -121,7 +121,7 @@ fun ColorPickerOverlay(
 
 val HEX_KEYS = listOf("0", "1", "2", "3", "4", "5", "6", "7", "←",
                        "8", "9", "A", "B", "C", "D", "E", "F", "↵")
-private const val HEX_ROW_SIZE = 9
+const val HEX_ROW_SIZE = 9
 
 @Composable
 fun HexColorInputOverlay(

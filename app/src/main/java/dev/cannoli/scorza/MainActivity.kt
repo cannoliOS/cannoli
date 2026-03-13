@@ -41,6 +41,7 @@ import dev.cannoli.scorza.scanner.PlatformResolver
 import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.ui.components.COLOR_GRID_COLS
 import dev.cannoli.scorza.ui.components.HEX_KEYS
+import dev.cannoli.scorza.ui.components.HEX_ROW_SIZE
 import dev.cannoli.scorza.ui.components.KEY_BACKSPACE
 import dev.cannoli.scorza.ui.components.KEY_ENTER
 import dev.cannoli.scorza.ui.components.KEY_SHIFT
@@ -66,6 +67,7 @@ import dev.cannoli.scorza.ui.viewmodel.SystemListViewModel
 import dev.cannoli.scorza.util.AtomicRename
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -91,6 +93,8 @@ class MainActivity : ComponentActivity() {
     private var resumableGames by mutableStateOf(emptySet<String>())
     private val dialogState = MutableStateFlow<DialogState>(DialogState.None)
     private val ioScope = CoroutineScope(Dispatchers.IO)
+    private val controlButtons = LibretroInput().buttons
+    private val controlButtonCount = controlButtons.size
     @Volatile private var navigating = false
     private var currentFirstVisible = 0
     private var currentPageSize = 10
@@ -100,15 +104,15 @@ class MainActivity : ComponentActivity() {
     private var setupVolumes = listOf<Pair<String, String>>()
 
     private val shortcutCountdownHandler = Handler(Looper.getMainLooper())
-    private val SHORTCUT_HOLD_MS = 1500
-    private val SHORTCUT_TICK_MS = 100L
+    private val shortcutHoldMs = 1500
+    private val shortcutTickMs = 100L
 
     private val shortcutCountdownRunnable = object : Runnable {
         override fun run() {
             val screen = screenStack.lastOrNull() as? LauncherScreen.ShortcutBinding ?: return
             if (!screen.listening) return
-            val newMs = screen.countdownMs + SHORTCUT_TICK_MS.toInt()
-            if (newMs >= SHORTCUT_HOLD_MS) {
+            val newMs = screen.countdownMs + shortcutTickMs.toInt()
+            if (newMs >= shortcutHoldMs) {
                 val action = ShortcutAction.entries[screen.selectedIndex]
                 screenStack[screenStack.lastIndex] = screen.copy(
                     shortcuts = screen.shortcuts + (action to screen.heldKeys),
@@ -116,7 +120,7 @@ class MainActivity : ComponentActivity() {
                 )
             } else {
                 screenStack[screenStack.lastIndex] = screen.copy(countdownMs = newMs)
-                shortcutCountdownHandler.postDelayed(this, SHORTCUT_TICK_MS)
+                shortcutCountdownHandler.postDelayed(this, shortcutTickMs)
             }
         }
     }
@@ -193,7 +197,7 @@ class MainActivity : ComponentActivity() {
             is LauncherScreen.ColorList -> screen.colors.size to screen.selectedIndex
             is LauncherScreen.CollectionPicker -> screen.collections.size to screen.selectedIndex
             is LauncherScreen.AppPicker -> screen.apps.size to screen.selectedIndex
-            is LauncherScreen.ControlBinding -> LibretroInput().buttons.size to screen.selectedIndex
+            is LauncherScreen.ControlBinding -> controlButtonCount to screen.selectedIndex
             is LauncherScreen.ShortcutBinding -> ShortcutAction.entries.size to screen.selectedIndex
         }
 
@@ -384,6 +388,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        ioScope.cancel()
         dev.cannoli.scorza.server.KitchenManager.stop()
     }
 
@@ -397,7 +402,10 @@ class MainActivity : ComponentActivity() {
             intent.categories?.contains(Intent.CATEGORY_HOME) == true &&
             ::inputHandler.isInitialized
         ) {
-            inputHandler.onStart()
+            window.decorView.post {
+                if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@post
+                inputHandler.onStart()
+            }
         }
     }
 
@@ -431,7 +439,7 @@ class MainActivity : ComponentActivity() {
                     screenStack[screenStack.lastIndex] = screen.copy(listeningIndex = -1)
                     return true
                 }
-                val btn = LibretroInput().buttons[screen.listeningIndex]
+                val btn = controlButtons[screen.listeningIndex]
                 screenStack[screenStack.lastIndex] = screen.copy(
                     controls = screen.controls + (btn.prefKey to keyCode),
                     listeningIndex = -1
@@ -444,7 +452,7 @@ class MainActivity : ComponentActivity() {
                 val newKeys = screen.heldKeys + keyCode
                 screenStack[screenStack.lastIndex] = screen.copy(heldKeys = newKeys, countdownMs = 0)
                 shortcutCountdownHandler.removeCallbacks(shortcutCountdownRunnable)
-                shortcutCountdownHandler.postDelayed(shortcutCountdownRunnable, SHORTCUT_TICK_MS)
+                shortcutCountdownHandler.postDelayed(shortcutCountdownRunnable, shortcutTickMs)
                 return true
             }
             else -> return false
@@ -478,16 +486,16 @@ class MainActivity : ComponentActivity() {
         val versionFile = java.io.File(coresDir, ".version")
         val currentVersion = java.io.File(applicationInfo.sourceDir).lastModified().toString()
         if (versionFile.exists() && versionFile.readText() == currentVersion) return coresDir.absolutePath
-        val apkZip = java.util.zip.ZipFile(applicationInfo.sourceDir)
-        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-        val prefix = "lib/$abi/"
-        for (entry in apkZip.entries()) {
-            if (!entry.name.startsWith(prefix) || !entry.name.endsWith("_libretro_android.so")) continue
-            val name = entry.name.removePrefix(prefix)
-            val dst = java.io.File(coresDir, name)
-            apkZip.getInputStream(entry).use { inp -> dst.outputStream().use { inp.copyTo(it) } }
+        java.util.zip.ZipFile(applicationInfo.sourceDir).use { apkZip ->
+            val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+            val prefix = "lib/$abi/"
+            for (entry in apkZip.entries()) {
+                if (!entry.name.startsWith(prefix) || !entry.name.endsWith("_libretro_android.so")) continue
+                val name = entry.name.removePrefix(prefix)
+                val dst = java.io.File(coresDir, name)
+                apkZip.getInputStream(entry).use { inp -> dst.outputStream().use { inp.copyTo(it) } }
+            }
         }
-        apkZip.close()
         versionFile.writeText(currentVersion)
         return coresDir.absolutePath
     }
@@ -569,7 +577,7 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = ds.copy(selectedRow = newRow)
                 }
                 is DialogState.HexColorInput -> {
-                    val rowSize = 9
+                    val rowSize = HEX_ROW_SIZE
                     val curRow = ds.selectedIndex / rowSize
                     val col = ds.selectedIndex % rowSize
                     val totalRows = (HEX_KEYS.size + rowSize - 1) / rowSize
@@ -618,7 +626,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     is LauncherScreen.ControlBinding -> {
-                        val count = LibretroInput().buttons.size
+                        val count = controlButtonCount
                         val newIdx = if (screen.selectedIndex <= 0) count - 1 else screen.selectedIndex - 1
                         screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx)
                     }
@@ -655,7 +663,7 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = ds.copy(selectedRow = newRow)
                 }
                 is DialogState.HexColorInput -> {
-                    val rowSize = 9
+                    val rowSize = HEX_ROW_SIZE
                     val curRow = ds.selectedIndex / rowSize
                     val col = ds.selectedIndex % rowSize
                     val totalRows = (HEX_KEYS.size + rowSize - 1) / rowSize
@@ -704,7 +712,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     is LauncherScreen.ControlBinding -> {
-                        val count = LibretroInput().buttons.size
+                        val count = controlButtonCount
                         val newIdx = if (screen.selectedIndex >= count - 1) 0 else screen.selectedIndex + 1
                         screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx)
                     }
@@ -736,7 +744,7 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = ds.copy(selectedCol = newCol)
                 }
                 is DialogState.HexColorInput -> {
-                    val rowSize = 9
+                    val rowSize = HEX_ROW_SIZE
                     val curRow = ds.selectedIndex / rowSize
                     val col = ds.selectedIndex % rowSize
                     val newCol = if (col <= 0) rowSize - 1 else col - 1
@@ -768,7 +776,7 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = ds.copy(selectedCol = newCol)
                 }
                 is DialogState.HexColorInput -> {
-                    val rowSize = 9
+                    val rowSize = HEX_ROW_SIZE
                     val curRow = ds.selectedIndex / rowSize
                     val col = ds.selectedIndex % rowSize
                     val newCol = if (col >= rowSize - 1) 0 else col + 1
@@ -851,7 +859,7 @@ class MainActivity : ComponentActivity() {
                         val remaining = scanner.scanCollections()
                             .filter { !it.name.equals("Favorites", ignoreCase = true) && it.entries.isNotEmpty() }
                         if (remaining.isEmpty()) {
-                            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                            withContext(Dispatchers.Main) {
                                 screenStack.removeAt(screenStack.lastIndex)
                                 rescanSystemList()
                             }
@@ -889,37 +897,34 @@ class MainActivity : ComponentActivity() {
                                 settingsViewModel.enterCategory()
                             }
                         } else {
-                            val key = settingsViewModel.enterSelected()
-                            if (key == "sd_root") {
-                                folderPickerLauncher.launch(null)
-                            } else if (key == "colors") {
-                                screenStack.add(LauncherScreen.ColorList(
+                            when (val key = settingsViewModel.enterSelected()) {
+                                "sd_root" -> folderPickerLauncher.launch(null)
+                                "colors" -> screenStack.add(LauncherScreen.ColorList(
                                     colors = settingsViewModel.getColorEntries()
                                 ))
-                            } else if (key != null && key.startsWith("color_")) {
-                                val entries = settingsViewModel.getColorEntries()
-                                val idx = entries.indexOfFirst { it.key == key }.coerceAtLeast(0)
-                                screenStack.add(LauncherScreen.ColorList(colors = entries, selectedIndex = idx))
-                                openColorPicker(key)
-                            } else if (key == "controls") {
-                                pushScreen(LauncherScreen.ControlBinding(controls = readGlobalControls()))
-                            } else if (key == "shortcuts") {
-                                pushScreen(LauncherScreen.ShortcutBinding(shortcuts = readGlobalShortcuts()))
-                            } else if (key == "core_mapping") {
-                                screenStack.add(LauncherScreen.CoreMapping(
+                                "controls" -> pushScreen(LauncherScreen.ControlBinding(controls = readGlobalControls()))
+                                "shortcuts" -> pushScreen(LauncherScreen.ShortcutBinding(shortcuts = readGlobalShortcuts()))
+                                "core_mapping" -> screenStack.add(LauncherScreen.CoreMapping(
                                     mappings = platformResolver.getDetailedMappings(packageManager)
                                 ))
-                            } else if (key == "manage_tools") {
-                                openAppPicker("tools")
-                            } else if (key == "manage_ports") {
-                                openAppPicker("ports")
-                            } else if (key != null) {
-                                val displayValue = settingsViewModel.getSelectedItemDisplayValue()
-                                dialogState.value = DialogState.RenameInput(
-                                    gameName = key,
-                                    currentName = displayValue,
-                                    cursorPos = displayValue.length
-                                )
+                                "manage_tools" -> openAppPicker("tools")
+                                "manage_ports" -> openAppPicker("ports")
+                                null -> {}
+                                else -> {
+                                    if (key.startsWith("color_")) {
+                                        val entries = settingsViewModel.getColorEntries()
+                                        val idx = entries.indexOfFirst { it.key == key }.coerceAtLeast(0)
+                                        screenStack.add(LauncherScreen.ColorList(colors = entries, selectedIndex = idx))
+                                        openColorPicker(key)
+                                    } else {
+                                        val displayValue = settingsViewModel.getSelectedItemDisplayValue()
+                                        dialogState.value = DialogState.RenameInput(
+                                            gameName = key,
+                                            currentName = displayValue,
+                                            cursorPos = displayValue.length
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1152,7 +1157,7 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 dialogState.value = DialogState.ContextMenu(
                                     gameName = game.displayName,
-                                    options = buildGameContextOptions(game)
+                                    options = gameContextOptions
                                 )
                             }
                         }
@@ -1623,7 +1628,7 @@ class MainActivity : ComponentActivity() {
         val m3uDir = java.io.File(cacheDir, "m3u")
         m3uDir.mkdirs()
         val m3uFile = java.io.File(m3uDir, "${game.displayName}.m3u")
-        m3uFile.writeText(game.discFiles!!.joinToString("\n") { it.absolutePath } + "\n")
+        m3uFile.writeText(checkNotNull(game.discFiles).joinToString("\n") { it.absolutePath } + "\n")
         return m3uFile
     }
 
@@ -1636,17 +1641,19 @@ class MainActivity : ComponentActivity() {
     private fun scanResumableGames() {
         val games = gameListViewModel.state.value.games
         val cannoliRoot = java.io.File(settings.sdCardRoot)
-        val result = mutableSetOf<String>()
-        for (game in games) {
-            if (game.isSubfolder) continue
-            if (getEmbeddedCorePath(game) == null) continue
-            val romName = game.file.nameWithoutExtension
-            val stateDir = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName")
-            if (stateDir.exists() && stateDir.listFiles()?.any { it.extension == "state" || it.name.contains(".state.") } == true) {
-                result.add(game.file.absolutePath)
+        ioScope.launch {
+            val result = mutableSetOf<String>()
+            for (game in games) {
+                if (game.isSubfolder) continue
+                if (getEmbeddedCorePath(game) == null) continue
+                val romName = game.file.nameWithoutExtension
+                val stateDir = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName")
+                if (stateDir.exists() && stateDir.listFiles()?.any { it.extension == "state" || it.name.contains(".state.") } == true) {
+                    result.add(game.file.absolutePath)
+                }
             }
+            withContext(Dispatchers.Main) { resumableGames = result }
         }
-        resumableGames = result
     }
 
     private fun getEmbeddedCorePath(game: dev.cannoli.scorza.model.Game): String? {
@@ -1745,9 +1752,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun buildGameContextOptions(game: dev.cannoli.scorza.model.Game): List<String> {
-        return listOf("Manage Collections", "Emulator Override", "Rename", "Delete")
-    }
+    private val gameContextOptions = listOf("Manage Collections", "Emulator Override", "Rename", "Delete")
 
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
         if (screenStack.last() == LauncherScreen.SystemList) {
@@ -1859,7 +1864,7 @@ class MainActivity : ComponentActivity() {
                     val options = if (glState.isCollectionsList) {
                         listOf("Rename", "Delete")
                     } else {
-                        buildGameContextOptions(game)
+                        gameContextOptions
                     }
                     dialogState.value = DialogState.ContextMenu(
                         gameName = game.displayName,

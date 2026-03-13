@@ -186,7 +186,7 @@ fun GameListScreen(
             } else {
                 stringResource(R.string.label_play)
             }
-            val showFavHint = !state.games.isEmpty() && !state.multiSelectMode &&
+            val showFavHint = state.games.isNotEmpty() && !state.multiSelectMode &&
                 !state.isCollectionsList && selectedGame?.isSubfolder != true &&
                 state.platformTag != "tools" && state.platformTag != "ports"
             val rightItems = if (state.games.isEmpty()) {
