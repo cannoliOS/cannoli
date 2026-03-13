@@ -8,6 +8,7 @@ import dev.cannoli.scorza.scanner.PlatformResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -199,16 +200,17 @@ class GameListViewModel(
     }
 
     fun moveSelection(delta: Int) {
-        val current = _state.value
-        if (current.games.isEmpty()) return
-        val size = current.games.size
-        val raw = current.selectedIndex + delta
-        val newIndex = ((raw % size) + size) % size
-        _state.value = current.copy(selectedIndex = newIndex)
+        _state.update { current ->
+            if (current.games.isEmpty()) return@update current
+            val size = current.games.size
+            val raw = current.selectedIndex + delta
+            val newIndex = ((raw % size) + size) % size
+            current.copy(selectedIndex = newIndex)
+        }
     }
 
     fun jumpToIndex(index: Int, scrollTarget: Int) {
-        _state.value = _state.value.copy(selectedIndex = index, scrollTarget = scrollTarget)
+        _state.update { it.copy(selectedIndex = index, scrollTarget = scrollTarget) }
     }
 
     fun getSelectedGame(): Game? {
@@ -238,70 +240,69 @@ class GameListViewModel(
     }
 
     fun enterMultiSelect() {
-        val current = _state.value
-        if (current.reorderMode || current.multiSelectMode) return
-        val game = current.games.getOrNull(current.selectedIndex)
-        val initial = if (game != null && !game.isSubfolder) setOf(current.selectedIndex) else emptySet()
-        _state.value = current.copy(
-            multiSelectMode = true,
-            checkedIndices = initial
-        )
+        _state.update { current ->
+            if (current.reorderMode || current.multiSelectMode) return@update current
+            val game = current.games.getOrNull(current.selectedIndex)
+            val initial = if (game != null && !game.isSubfolder) setOf(current.selectedIndex) else emptySet()
+            current.copy(multiSelectMode = true, checkedIndices = initial)
+        }
     }
 
     fun isMultiSelectMode(): Boolean = _state.value.multiSelectMode
 
     fun toggleChecked() {
-        val current = _state.value
-        if (!current.multiSelectMode) return
-        val idx = current.selectedIndex
-        val game = current.games.getOrNull(idx) ?: return
-        if (game.isSubfolder) return
-        val newChecked = if (idx in current.checkedIndices) {
-            current.checkedIndices - idx
-        } else {
-            current.checkedIndices + idx
+        _state.update { current ->
+            if (!current.multiSelectMode) return@update current
+            val idx = current.selectedIndex
+            val game = current.games.getOrNull(idx) ?: return@update current
+            if (game.isSubfolder) return@update current
+            val newChecked = if (idx in current.checkedIndices) current.checkedIndices - idx else current.checkedIndices + idx
+            current.copy(checkedIndices = newChecked)
         }
-        _state.value = current.copy(checkedIndices = newChecked)
     }
 
     fun confirmMultiSelect(): Set<Int> {
-        val current = _state.value
-        val checked = current.checkedIndices
-        _state.value = current.copy(multiSelectMode = false, checkedIndices = emptySet())
+        var checked = emptySet<Int>()
+        _state.update { current ->
+            checked = current.checkedIndices
+            current.copy(multiSelectMode = false, checkedIndices = emptySet())
+        }
         return checked
     }
 
     fun cancelMultiSelect() {
-        val current = _state.value
-        _state.value = current.copy(multiSelectMode = false, checkedIndices = emptySet())
+        _state.update { it.copy(multiSelectMode = false, checkedIndices = emptySet()) }
     }
 
     fun enterReorderMode() {
-        val current = _state.value
-        if (!current.isCollectionsList || current.games.isEmpty()) return
-        _state.value = current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
+        _state.update { current ->
+            if (!current.isCollectionsList || current.games.isEmpty()) return@update current
+            current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
+        }
     }
 
     fun isReorderMode(): Boolean = _state.value.reorderMode
 
     fun reorderMoveUp() {
-        val current = _state.value
-        if (!current.reorderMode) return
-        val idx = current.selectedIndex
-        if (idx <= 0) return
-        val games = current.games.toMutableList()
-        games[idx] = games[idx - 1].also { games[idx - 1] = games[idx] }
-        _state.value = current.copy(games = games, selectedIndex = idx - 1)
+        _state.update { current ->
+            if (!current.reorderMode) return@update current
+            val idx = current.selectedIndex
+            if (idx <= 0) return@update current
+            val games = current.games.toMutableList()
+            games[idx] = games[idx - 1].also { games[idx - 1] = games[idx] }
+            current.copy(games = games, selectedIndex = idx - 1)
+        }
     }
 
     fun reorderMoveDown() {
-        val current = _state.value
-        if (!current.reorderMode) return
-        val idx = current.selectedIndex
-        if (idx >= current.games.lastIndex) return
-        val games = current.games.toMutableList()
-        games[idx] = games[idx + 1].also { games[idx + 1] = games[idx] }
-        _state.value = current.copy(games = games, selectedIndex = idx + 1)
+        _state.update { current ->
+            if (!current.reorderMode) return@update current
+            val idx = current.selectedIndex
+            if (idx >= current.games.lastIndex) return@update current
+            val games = current.games.toMutableList()
+            games[idx] = games[idx + 1].also { games[idx + 1] = games[idx] }
+            current.copy(games = games, selectedIndex = idx + 1)
+        }
     }
 
     fun confirmReorder() {
@@ -311,7 +312,7 @@ class GameListViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             scanner.saveCollectionOrder(names)
         }
-        _state.value = current.copy(reorderMode = false, reorderOriginalIndex = -1)
+        _state.update { it.copy(reorderMode = false, reorderOriginalIndex = -1) }
     }
 
     fun cancelReorder() {

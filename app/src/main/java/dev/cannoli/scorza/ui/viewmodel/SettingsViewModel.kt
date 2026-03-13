@@ -10,6 +10,7 @@ import dev.cannoli.scorza.settings.TimeFormat
 import dev.cannoli.scorza.ui.theme.hexToColor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 
 class SettingsViewModel(
     private val settings: SettingsRepository,
@@ -108,24 +109,25 @@ class SettingsViewModel(
     }
 
     fun moveSelection(delta: Int) {
-        val current = _state.value
-        if (current.inSubList) {
-            if (current.items.isEmpty()) return
-            val size = current.items.size
-            val raw = current.selectedIndex + delta
-            val newIndex = ((raw % size) + size) % size
-            _state.value = current.copy(selectedIndex = newIndex)
-        } else {
-            if (current.categories.isEmpty()) return
-            val size = current.categories.size
-            val raw = current.categoryIndex + delta
-            val newIndex = ((raw % size) + size) % size
-            _state.value = current.copy(categoryIndex = newIndex)
+        _state.update { current ->
+            if (current.inSubList) {
+                if (current.items.isEmpty()) return@update current
+                val size = current.items.size
+                val raw = current.selectedIndex + delta
+                val newIndex = ((raw % size) + size) % size
+                current.copy(selectedIndex = newIndex)
+            } else {
+                if (current.categories.isEmpty()) return@update current
+                val size = current.categories.size
+                val raw = current.categoryIndex + delta
+                val newIndex = ((raw % size) + size) % size
+                current.copy(categoryIndex = newIndex)
+            }
         }
     }
 
     fun setCategoryIndex(index: Int) {
-        _state.value = _state.value.copy(categoryIndex = index)
+        _state.update { it.copy(categoryIndex = index) }
     }
 
     fun enterCategory(): Boolean {
@@ -133,22 +135,18 @@ class SettingsViewModel(
         if (current.inSubList) return false
         val cat = current.categories.getOrNull(current.categoryIndex) ?: return false
         val items = buildItemsForCategory(cat.key)
-        _state.value = current.copy(
-            activeCategory = cat.key,
-            items = items,
-            selectedIndex = 0
-        )
+        _state.update {
+            it.copy(activeCategory = cat.key, items = items, selectedIndex = 0)
+        }
         return true
     }
 
     fun exitSubList(): Boolean {
         val current = _state.value
         if (!current.inSubList) return false
-        _state.value = current.copy(
-            activeCategory = null,
-            items = emptyList(),
-            selectedIndex = 0
-        )
+        _state.update {
+            it.copy(activeCategory = null, items = emptyList(), selectedIndex = 0)
+        }
         return true
     }
 
@@ -196,7 +194,7 @@ class SettingsViewModel(
         }
 
         val catKey = current.activeCategory ?: return
-        _state.value = current.copy(items = buildItemsForCategory(catKey))
+        _state.update { it.copy(items = buildItemsForCategory(catKey)) }
         _appSettings.value = readAppSettings()
     }
 
@@ -287,7 +285,7 @@ class SettingsViewModel(
             "color_accent" -> settings.colorAccent = hex
         }
         val catKey = _state.value.activeCategory ?: return
-        _state.value = _state.value.copy(items = buildItemsForCategory(catKey))
+        _state.update { it.copy(items = buildItemsForCategory(catKey)) }
         _appSettings.value = readAppSettings()
     }
 

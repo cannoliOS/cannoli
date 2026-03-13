@@ -7,6 +7,7 @@ import dev.cannoli.scorza.scanner.FileScanner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SystemListViewModel(
@@ -108,19 +109,20 @@ class SystemListViewModel(
     }
 
     fun moveSelection(delta: Int) {
-        val current = _state.value
-        val selectableIndices = current.items.indices.filter { current.items[it] !is ListItem.Divider }
-        if (selectableIndices.isEmpty()) return
+        _state.update { current ->
+            val selectableIndices = current.items.indices.filter { current.items[it] !is ListItem.Divider }
+            if (selectableIndices.isEmpty()) return@update current
 
-        val currentPos = selectableIndices.indexOf(current.selectedIndex)
-        val raw = if (currentPos == -1) 0 else currentPos + delta
-        val targetPos = ((raw % selectableIndices.size) + selectableIndices.size) % selectableIndices.size
+            val currentPos = selectableIndices.indexOf(current.selectedIndex)
+            val raw = if (currentPos == -1) 0 else currentPos + delta
+            val targetPos = ((raw % selectableIndices.size) + selectableIndices.size) % selectableIndices.size
 
-        _state.value = current.copy(selectedIndex = selectableIndices[targetPos])
+            current.copy(selectedIndex = selectableIndices[targetPos])
+        }
     }
 
     fun jumpToIndex(index: Int, scrollTarget: Int) {
-        _state.value = _state.value.copy(selectedIndex = index, scrollTarget = scrollTarget)
+        _state.update { it.copy(selectedIndex = index, scrollTarget = scrollTarget) }
     }
 
     fun getSelectedItem(): ListItem? {
@@ -139,34 +141,37 @@ class SystemListViewModel(
         _state.value.items.filter { it !is ListItem.Divider }
 
     fun enterReorderMode() {
-        val current = _state.value
-        val item = current.items.getOrNull(current.selectedIndex) ?: return
-        if (!item.isReorderable()) return
-        _state.value = current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
+        _state.update { current ->
+            val item = current.items.getOrNull(current.selectedIndex) ?: return@update current
+            if (!item.isReorderable()) return@update current
+            current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
+        }
     }
 
     fun isReorderMode(): Boolean = _state.value.reorderMode
 
     fun reorderMoveUp() {
-        val current = _state.value
-        if (!current.reorderMode) return
-        val idx = current.selectedIndex
-        val items = current.items.toMutableList()
-        val prevSelectable = (idx - 1 downTo 0).firstOrNull { items[it].isReorderable() }
-            ?: return
-        items[idx] = items[prevSelectable].also { items[prevSelectable] = items[idx] }
-        _state.value = current.copy(items = items, selectedIndex = prevSelectable)
+        _state.update { current ->
+            if (!current.reorderMode) return@update current
+            val idx = current.selectedIndex
+            val items = current.items.toMutableList()
+            val prevSelectable = (idx - 1 downTo 0).firstOrNull { items[it].isReorderable() }
+                ?: return@update current
+            items[idx] = items[prevSelectable].also { items[prevSelectable] = items[idx] }
+            current.copy(items = items, selectedIndex = prevSelectable)
+        }
     }
 
     fun reorderMoveDown() {
-        val current = _state.value
-        if (!current.reorderMode) return
-        val idx = current.selectedIndex
-        val items = current.items.toMutableList()
-        val nextSelectable = (idx + 1..items.lastIndex).firstOrNull { items[it].isReorderable() }
-            ?: return
-        items[idx] = items[nextSelectable].also { items[nextSelectable] = items[idx] }
-        _state.value = current.copy(items = items, selectedIndex = nextSelectable)
+        _state.update { current ->
+            if (!current.reorderMode) return@update current
+            val idx = current.selectedIndex
+            val items = current.items.toMutableList()
+            val nextSelectable = (idx + 1..items.lastIndex).firstOrNull { items[it].isReorderable() }
+                ?: return@update current
+            items[idx] = items[nextSelectable].also { items[nextSelectable] = items[idx] }
+            current.copy(items = items, selectedIndex = nextSelectable)
+        }
     }
 
     fun confirmReorder() {
@@ -176,7 +181,7 @@ class SystemListViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             scanner.savePlatformOrder(tags)
         }
-        _state.value = current.copy(reorderMode = false, reorderOriginalIndex = -1)
+        _state.update { it.copy(reorderMode = false, reorderOriginalIndex = -1) }
     }
 
     fun cancelReorder(showTools: Boolean = false, showPorts: Boolean = false, showEmpty: Boolean = false, toolsName: String = "Tools", portsName: String = "Ports") {
@@ -186,38 +191,34 @@ class SystemListViewModel(
     }
 
     fun enterMultiSelect() {
-        val current = _state.value
-        if (current.reorderMode || current.multiSelectMode) return
-        _state.value = current.copy(
-            multiSelectMode = true,
-            checkedIndices = setOf(current.selectedIndex)
-        )
+        _state.update { current ->
+            if (current.reorderMode || current.multiSelectMode) return@update current
+            current.copy(multiSelectMode = true, checkedIndices = setOf(current.selectedIndex))
+        }
     }
 
     fun isMultiSelectMode(): Boolean = _state.value.multiSelectMode
 
     fun toggleChecked() {
-        val current = _state.value
-        if (!current.multiSelectMode) return
-        val idx = current.selectedIndex
-        val newChecked = if (idx in current.checkedIndices) {
-            current.checkedIndices - idx
-        } else {
-            current.checkedIndices + idx
+        _state.update { current ->
+            if (!current.multiSelectMode) return@update current
+            val idx = current.selectedIndex
+            val newChecked = if (idx in current.checkedIndices) current.checkedIndices - idx else current.checkedIndices + idx
+            current.copy(checkedIndices = newChecked)
         }
-        _state.value = current.copy(checkedIndices = newChecked)
     }
 
     fun confirmMultiSelect(): Set<Int> {
-        val current = _state.value
-        val checked = current.checkedIndices
-        _state.value = current.copy(multiSelectMode = false, checkedIndices = emptySet())
+        var checked = emptySet<Int>()
+        _state.update { current ->
+            checked = current.checkedIndices
+            current.copy(multiSelectMode = false, checkedIndices = emptySet())
+        }
         return checked
     }
 
     fun cancelMultiSelect() {
-        val current = _state.value
-        _state.value = current.copy(multiSelectMode = false, checkedIndices = emptySet())
+        _state.update { it.copy(multiSelectMode = false, checkedIndices = emptySet()) }
     }
 
     private fun ListItem.isReorderable(): Boolean = this is ListItem.PlatformItem || this is ListItem.ToolsFolder || this is ListItem.PortsFolder
