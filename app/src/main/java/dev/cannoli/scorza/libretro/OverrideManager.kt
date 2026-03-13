@@ -36,14 +36,12 @@ class OverrideManager(
 
     fun load(): Settings {
         val settings = Settings()
-        applyFile(globalFile, settings, loadOptions = false)
-        applyFile(coreFile, settings, loadOptions = true)
-        applyFile(gameFile, settings, loadOptions = true)
+        when {
+            gameFile.exists() -> applyFile(gameFile, settings, loadOptions = true)
+            coreFile.exists() -> applyFile(coreFile, settings, loadOptions = true)
+            else -> applyFile(globalFile, settings, loadOptions = false)
+        }
         return settings
-    }
-
-    fun saveGlobal(settings: Settings) {
-        writeNonCore(globalFile, settings)
     }
 
     fun saveCore(settings: Settings) {
@@ -129,14 +127,10 @@ class OverrideManager(
             "crt_noise" to settings.crtNoise.toString()
         )
 
-        if (settings.controls.isNotEmpty()) {
-            sections["controls"] = settings.controls.mapValues { it.value.toString() }
-        }
+        sections["controls"] = settings.controls.mapValues { it.value.toString() }
 
-        if (settings.shortcuts.isNotEmpty()) {
-            sections["shortcuts"] = settings.shortcuts.mapKeys { it.key.name }
-                .mapValues { it.value.joinToString(",") }
-        }
+        sections["shortcuts"] = settings.shortcuts.mapKeys { it.key.name }
+            .mapValues { it.value.joinToString(",") }
 
         val existing = if (file.exists()) IniParser.parse(file) else null
         val merged = existing?.sections?.toMutableMap() ?: mutableMapOf()

@@ -143,7 +143,7 @@ class LibretroActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         goFullscreen()
 
-        gameTitle = intent.getStringExtra("game_title") ?: ""
+        gameTitle = (intent.getStringExtra("game_title") ?: "").removePrefix("★ ")
         corePath = intent.getStringExtra("core_path") ?: run { finish(); return }
         romPath = intent.getStringExtra("rom_path") ?: run { finish(); return }
         sramPath = intent.getStringExtra("sram_path") ?: ""
@@ -255,7 +255,13 @@ class LibretroActivity : ComponentActivity() {
                         showBattery = showBattery,
                         use24h = use24h,
                         osdMessage = osdMessage,
-                        fastForwarding = fastForwarding
+                        fastForwarding = fastForwarding,
+                        gameInfo = GameInfo(
+                            coreName = coreInfoText,
+                            romPath = romPath,
+                            savePath = sramPath.takeIf { java.io.File(it).exists() },
+                            rootPrefix = cannoliRoot
+                        )
                     )
                 }
             }
@@ -287,6 +293,9 @@ class LibretroActivity : ComponentActivity() {
             is IGMScreen.Controls -> handleControlsInput(screen, keyCode)
             is IGMScreen.Shortcuts -> handleShortcutsInput(screen, keyCode)
             is IGMScreen.SavePrompt -> handleSavePromptInput(screen, keyCode)
+            is IGMScreen.Info -> {
+                if (keyCode == KeyEvent.KEYCODE_BUTTON_B || keyCode == KeyEvent.KEYCODE_BUTTON_A) { pop(); true } else true
+            }
         }
     }
 
@@ -505,6 +514,7 @@ class LibretroActivity : ComponentActivity() {
                 push(IGMScreen.Settings())
             }
             menu.resetIndex -> { runner.reset(); closeAll() }
+            menu.infoIndex -> push(IGMScreen.Info())
             menu.quitIndex -> quit()
         }
     }
@@ -859,7 +869,7 @@ class LibretroActivity : ComponentActivity() {
     // --- Save Prompt ---
 
     private fun handleSavePromptInput(screen: IGMScreen.SavePrompt, keyCode: Int): Boolean {
-        val count = 4
+        val count = 2
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
@@ -869,10 +879,8 @@ class LibretroActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 when (screen.selectedIndex) {
-                    0 -> { saveToScope(0); showOsd("Saved globally") }
-                    1 -> { saveToScope(1); showOsd("Saved for $platformName ($platformTag)") }
-                    2 -> { saveToScope(2); showOsd("Saved for this game") }
-                    3 -> showOsd("Changes discarded")
+                    0 -> { saveToScope(1); showOsd("Saved for $platformName") }
+                    1 -> { saveToScope(2); showOsd("Saved for this game") }
                 }
                 settingsSnapshot = null
                 pop(); pop()
@@ -941,10 +949,8 @@ class LibretroActivity : ComponentActivity() {
             IGMSettingsItem(action.label, label)
         }
         is IGMScreen.SavePrompt -> listOf(
-            IGMSettingsItem("Save for all games"),
-            IGMSettingsItem("Save for $platformName ($platformTag)"),
-            IGMSettingsItem("Save for this game"),
-            IGMSettingsItem("Discard changes")
+            IGMSettingsItem("Save for $platformName"),
+            IGMSettingsItem("Save for this game")
         )
         else -> emptyList()
     }
@@ -954,8 +960,7 @@ class LibretroActivity : ComponentActivity() {
     private fun buildCurrentSettings(): OverrideManager.Settings {
         val controlMap = mutableMapOf<String, Int>()
         for (btn in input.buttons) {
-            val keyCode = input.getKeyCodeFor(btn)
-            if (keyCode != btn.defaultKeyCode) controlMap[btn.prefKey] = keyCode
+            controlMap[btn.prefKey] = input.getKeyCodeFor(btn)
         }
         val optionMap = mutableMapOf<String, String>()
         for (opt in coreOptions) optionMap[opt.key] = opt.selected
@@ -983,7 +988,6 @@ class LibretroActivity : ComponentActivity() {
     private fun saveToScope(scopeIndex: Int) {
         val settings = buildCurrentSettings()
         when (scopeIndex) {
-            0 -> overrideManager.saveGlobal(settings)
             1 -> overrideManager.saveCore(settings)
             2 -> overrideManager.saveGame(settings)
         }
