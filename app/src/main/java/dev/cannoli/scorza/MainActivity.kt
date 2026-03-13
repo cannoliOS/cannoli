@@ -29,32 +29,33 @@ import android.os.Looper
 import dev.cannoli.scorza.input.InputHandler
 import dev.cannoli.scorza.launcher.ApkLauncher
 import dev.cannoli.scorza.launcher.EmuLauncher
-import dev.cannoli.scorza.launcher.LaunchResult
+import dev.cannoli.scorza.launcher.LaunchManager
 import dev.cannoli.scorza.launcher.RetroArchLauncher
-import dev.cannoli.scorza.model.LaunchTarget
 import dev.cannoli.scorza.navigation.AppNavGraph
 import dev.cannoli.scorza.navigation.LauncherScreen
 import dev.cannoli.scorza.libretro.LibretroInput
 import dev.cannoli.scorza.libretro.ShortcutAction
 import dev.cannoli.scorza.scanner.FileScanner
 import dev.cannoli.scorza.scanner.PlatformResolver
+import dev.cannoli.scorza.settings.GlobalOverridesManager
 import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.ui.components.COLOR_GRID_COLS
+import dev.cannoli.scorza.ui.components.handleKeyboardConfirm
 import dev.cannoli.scorza.ui.components.HEX_KEYS
+import dev.cannoli.scorza.ui.components.CREDITS
 import dev.cannoli.scorza.ui.components.HEX_ROW_SIZE
-import dev.cannoli.scorza.ui.components.KEY_BACKSPACE
-import dev.cannoli.scorza.ui.components.KEY_ENTER
-import dev.cannoli.scorza.ui.components.KEY_SHIFT
-import dev.cannoli.scorza.ui.components.KEY_SPACE
-import dev.cannoli.scorza.ui.components.KEY_SYMBOLS
 import dev.cannoli.scorza.ui.components.getKeyboardRows
 import dev.cannoli.scorza.ui.screens.ColorEntry
 import dev.cannoli.scorza.ui.screens.CoreMappingEntry
 import dev.cannoli.scorza.ui.screens.CorePickerOption
 import dev.cannoli.scorza.ui.screens.DialogState
-import dev.cannoli.scorza.ui.screens.KeyboardInputState
-import dev.cannoli.scorza.util.IniParser
-import dev.cannoli.scorza.util.IniWriter
+import dev.cannoli.scorza.ui.screens.asKeyboardState
+import dev.cannoli.scorza.ui.screens.withBackspace
+import dev.cannoli.scorza.ui.screens.withCaps
+import dev.cannoli.scorza.ui.screens.withCursor
+import dev.cannoli.scorza.ui.screens.withInsertedChar
+import dev.cannoli.scorza.ui.screens.withKeyboard
+import dev.cannoli.scorza.ui.screens.withMenuDelta
 import dev.cannoli.scorza.ui.theme.COLOR_PRESETS
 import dev.cannoli.scorza.ui.theme.CannoliTheme
 import dev.cannoli.scorza.ui.theme.colorToArgbLong
@@ -133,39 +134,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun globalIniFile() = File(settings.sdCardRoot, "Config/Overrides/global.ini")
-
-    private fun readGlobalControls(): Map<String, Int> {
-        val ini = IniParser.parse(globalIniFile())
-        val map = mutableMapOf<String, Int>()
-        for ((key, value) in ini.getSection("controls")) {
-            value.toIntOrNull()?.let { map[key] = it }
-        }
-        return map
-    }
-
-    private fun readGlobalShortcuts(): Map<ShortcutAction, Set<Int>> {
-        val ini = IniParser.parse(globalIniFile())
-        val map = mutableMapOf<ShortcutAction, Set<Int>>()
-        for ((key, value) in ini.getSection("shortcuts")) {
-            val action = try { ShortcutAction.valueOf(key) } catch (_: Exception) { continue }
-            val chord = if (value.isEmpty()) emptySet()
-            else value.split(",").mapNotNull { it.toIntOrNull() }.toSet()
-            map[action] = chord
-        }
-        return map
-    }
-
-    private fun saveGlobalControls(controls: Map<String, Int>) {
-        IniWriter.mergeWrite(globalIniFile(), "controls", controls.mapValues { it.value.toString() })
-    }
-
-    private fun saveGlobalShortcuts(shortcuts: Map<ShortcutAction, Set<Int>>) {
-        IniWriter.mergeWrite(
-            globalIniFile(), "shortcuts",
-            shortcuts.mapKeys { it.key.name }.mapValues { it.value.joinToString(",") }
-        )
-    }
+    private lateinit var globalOverrides: GlobalOverridesManager
+    private lateinit var launchManager: LaunchManager
 
     private fun pushScreen(new: LauncherScreen) {
         val current = screenStack.last()
@@ -181,6 +151,7 @@ class MainActivity : ComponentActivity() {
         is LauncherScreen.AppPicker -> screen.copy(scrollTarget = currentFirstVisible)
         is LauncherScreen.ControlBinding -> screen.copy(scrollTarget = currentFirstVisible)
         is LauncherScreen.ShortcutBinding -> screen.copy(scrollTarget = currentFirstVisible)
+        is LauncherScreen.Credits -> screen.copy(scrollTarget = currentFirstVisible)
         else -> screen
     }
 
@@ -199,6 +170,7 @@ class MainActivity : ComponentActivity() {
             is LauncherScreen.AppPicker -> screen.apps.size to screen.selectedIndex
             is LauncherScreen.ControlBinding -> controlButtonCount to screen.selectedIndex
             is LauncherScreen.ShortcutBinding -> ShortcutAction.entries.size to screen.selectedIndex
+            is LauncherScreen.Credits -> CREDITS.size to screen.selectedIndex
         }
 
         if (itemCount == 0) return
@@ -243,6 +215,7 @@ class MainActivity : ComponentActivity() {
             is LauncherScreen.AppPicker -> screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx, scrollTarget = newScroll)
             is LauncherScreen.ControlBinding -> screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx, scrollTarget = newScroll)
             is LauncherScreen.ShortcutBinding -> screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx, scrollTarget = newScroll)
+            is LauncherScreen.Credits -> screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx, scrollTarget = newScroll)
         }
     }
 
@@ -398,15 +371,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == Intent.ACTION_MAIN &&
-            intent.categories?.contains(Intent.CATEGORY_HOME) == true &&
-            ::inputHandler.isInitialized
-        ) {
-            window.decorView.post {
-                if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@post
-                inputHandler.onStart()
-            }
-        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) return true
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -480,46 +449,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun extractBundledCores(): String {
-        val coresDir = java.io.File(filesDir, "cores")
-        coresDir.mkdirs()
-        val versionFile = java.io.File(coresDir, ".version")
-        val currentVersion = java.io.File(applicationInfo.sourceDir).lastModified().toString()
-        if (versionFile.exists() && versionFile.readText() == currentVersion) return coresDir.absolutePath
-        java.util.zip.ZipFile(applicationInfo.sourceDir).use { apkZip ->
-            val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-            val prefix = "lib/$abi/"
-            for (entry in apkZip.entries()) {
-                if (!entry.name.startsWith(prefix) || !entry.name.endsWith("_libretro_android.so")) continue
-                val name = entry.name.removePrefix(prefix)
-                val dst = java.io.File(coresDir, name)
-                apkZip.getInputStream(entry).use { inp -> dst.outputStream().use { inp.copyTo(it) } }
-            }
-        }
-        versionFile.writeText(currentVersion)
-        return coresDir.absolutePath
-    }
-
     private fun initializeApp() {
         val root = File(settings.sdCardRoot)
-        val bundledCoresDir = extractBundledCores()
+
+        retroArchLauncher = RetroArchLauncher(this, settings.retroArchPackage, root.absolutePath)
+        emuLauncher = EmuLauncher(this)
+        apkLauncher = ApkLauncher(this)
+
         val coreInfo = dev.cannoli.scorza.scanner.CoreInfoRepository(assets)
         coreInfo.load()
+        val bundledCoresDir = LaunchManager.extractBundledCores(this)
         platformResolver = PlatformResolver(root, assets, coreInfo, bundledCoresDir)
         platformResolver.load()
 
+        launchManager = LaunchManager(this, settings, platformResolver, retroArchLauncher, emuLauncher, apkLauncher)
+
         scanner = FileScanner(root, platformResolver)
         scanner.ensureDirectories()
-        ensureRetroArchConfig(root)
+        launchManager.ensureRetroArchConfig(root)
 
         systemListViewModel = SystemListViewModel(scanner)
         gameListViewModel = GameListViewModel(scanner, platformResolver)
         settingsViewModel = SettingsViewModel(settings, root)
         atomicRename = AtomicRename(root)
 
-        retroArchLauncher = RetroArchLauncher(this, settings.retroArchPackage, root.absolutePath)
-        emuLauncher = EmuLauncher(this)
-        apkLauncher = ApkLauncher(this)
+        globalOverrides = GlobalOverridesManager { settings.sdCardRoot }
 
         inputHandler = InputHandler(
             getButtonLayout = { settings.buttonLayout },
@@ -637,6 +591,10 @@ class MainActivity : ComponentActivity() {
                             screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx)
                         }
                     }
+                    is LauncherScreen.Credits -> {
+                        val newIdx = if (screen.selectedIndex <= 0) CREDITS.lastIndex else screen.selectedIndex - 1
+                        screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx)
+                    }
                 }
                 else -> {}
             }
@@ -722,6 +680,10 @@ class MainActivity : ComponentActivity() {
                             val newIdx = if (screen.selectedIndex >= count - 1) 0 else screen.selectedIndex + 1
                             screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx)
                         }
+                    }
+                    is LauncherScreen.Credits -> {
+                        val newIdx = if (screen.selectedIndex >= CREDITS.lastIndex) 0 else screen.selectedIndex + 1
+                        screenStack[screenStack.lastIndex] = screen.copy(selectedIndex = newIdx)
                     }
                 }
                 else -> {}
@@ -902,8 +864,8 @@ class MainActivity : ComponentActivity() {
                                 "colors" -> screenStack.add(LauncherScreen.ColorList(
                                     colors = settingsViewModel.getColorEntries()
                                 ))
-                                "controls" -> pushScreen(LauncherScreen.ControlBinding(controls = readGlobalControls()))
-                                "shortcuts" -> pushScreen(LauncherScreen.ShortcutBinding(shortcuts = readGlobalShortcuts()))
+                                "controls" -> pushScreen(LauncherScreen.ControlBinding(controls = globalOverrides.readControls()))
+                                "shortcuts" -> pushScreen(LauncherScreen.ShortcutBinding(shortcuts = globalOverrides.readShortcuts()))
                                 "core_mapping" -> screenStack.add(LauncherScreen.CoreMapping(
                                     mappings = platformResolver.getDetailedMappings(packageManager)
                                 ))
@@ -983,6 +945,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                    is LauncherScreen.Credits -> {}
                 }
                 else -> {}
             }
@@ -1087,12 +1050,15 @@ class MainActivity : ComponentActivity() {
                         onCollectionPickerConfirm(screen)
                     }
                     is LauncherScreen.ControlBinding -> {
-                        saveGlobalControls(screen.controls)
+                        globalOverrides.saveControls(screen.controls)
                         screenStack.removeAt(screenStack.lastIndex)
                     }
                     is LauncherScreen.ShortcutBinding -> {
                         cancelShortcutListening()
-                        saveGlobalShortcuts(screen.shortcuts)
+                        globalOverrides.saveShortcuts(screen.shortcuts)
+                        screenStack.removeAt(screenStack.lastIndex)
+                    }
+                    is LauncherScreen.Credits -> {
                         screenStack.removeAt(screenStack.lastIndex)
                     }
                 }
@@ -1215,6 +1181,10 @@ class MainActivity : ComponentActivity() {
                 is DialogState.CollectionRenameInput -> {
                     ds.withInsertedChar(" ")?.let { dialogState.value = it }
                 }
+                DialogState.About -> {
+                    dialogState.value = DialogState.None
+                    screenStack.add(LauncherScreen.Credits())
+                }
                 is DialogState.Kitchen -> {
                     dev.cannoli.scorza.server.KitchenManager.stop()
                     dialogState.value = DialogState.None
@@ -1235,14 +1205,7 @@ class MainActivity : ComponentActivity() {
                     LauncherScreen.GameList -> {
                         val game = gameListViewModel.getSelectedGame()
                         if (game != null && !game.isSubfolder && !gameListViewModel.state.value.isCollectionsList) {
-                            val corePath = getEmbeddedCorePath(game)
-                            if (corePath != null) {
-                                val slot = findMostRecentSlot(game)
-                                if (slot != null) {
-                                    val launchFile = if (game.discFiles != null) createTempM3u(game) else game.file
-                                    launchEmbedded(game.copy(file = launchFile), corePath, slot)
-                                }
-                            }
+                            launchManager.resumeGame(game)
                         }
                     }
                     is LauncherScreen.CollectionPicker -> {
@@ -1533,190 +1496,16 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val launchFile = if (game.discFiles != null) createTempM3u(game) else game.file
-
-        val gameOverride = platformResolver.getGameOverride(game.file.absolutePath)
-        if (gameOverride?.appPackage != null) {
-            val result = apkLauncher.launchWithRom(gameOverride.appPackage, launchFile)
-            handleLaunchResult(result)
-            return
-        }
-
-        val result = when (val target = game.launchTarget) {
-            is LaunchTarget.RetroArch -> {
-                val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
-                if (runnerPref == "App") {
-                    val app = platformResolver.getAppPackage(game.platformTag)
-                    if (app != null) {
-                        apkLauncher.launchWithRom(app, launchFile)
-                    } else {
-                        LaunchResult.CoreNotInstalled("unknown")
-                    }
-                } else {
-                    val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag)
-                    if (core != null) {
-                        if (runnerPref != "RetroArch") {
-                            val embeddedCorePath = findEmbeddedCore(core)
-                            if (embeddedCorePath != null) {
-                                launchEmbedded(game.copy(file = launchFile), embeddedCorePath)
-                                return
-                            }
-                        }
-                        retroArchLauncher.launch(launchFile, core)
-                    } else {
-                        LaunchResult.CoreNotInstalled("unknown")
-                    }
-                }
-            }
-            is LaunchTarget.EmuLaunch -> {
-                emuLauncher.launch(launchFile, target.packageName, target.activityName, target.action)
-            }
-            is LaunchTarget.ApkLaunch -> {
-                if (launchFile.exists()) {
-                    apkLauncher.launchWithRom(target.packageName, launchFile)
-                } else {
-                    apkLauncher.launch(target.packageName)
-                }
-            }
-            is LaunchTarget.Embedded -> {
-                launchEmbedded(game.copy(file = launchFile), target.corePath)
-                return
-            }
-        }
-
-        handleLaunchResult(result)
-    }
-
-    private fun handleLaunchResult(result: LaunchResult) {
-        when (result) {
-            is LaunchResult.CoreNotInstalled -> {
-                dialogState.value = DialogState.MissingCore(result.coreName)
-            }
-            is LaunchResult.AppNotInstalled -> {
-                val appName = try {
-                    val info = packageManager.getApplicationInfo(result.packageName, 0)
-                    packageManager.getApplicationLabel(info).toString()
-                } catch (_: Exception) {
-                    result.packageName
-                }
-                dialogState.value = DialogState.MissingApp(appName, result.packageName)
-            }
-            is LaunchResult.Error -> {
-                dialogState.value = DialogState.LaunchError(result.message)
-            }
-            LaunchResult.Success -> {}
-        }
-    }
-
-    private fun ensureRetroArchConfig(root: File) {
-        val configFile = File(root, "Config/retroarch.cfg")
-        if (configFile.exists()) return
-        configFile.parentFile?.mkdirs()
-        val rootPath = root.absolutePath
-        configFile.writeText(
-            """
-            savefile_directory = "$rootPath/Saves"
-            savestate_directory = "$rootPath/Save States"
-            system_directory = "$rootPath/BIOS"
-            sort_savefiles_by_content_enable = "true"
-            sort_savestates_by_content_enable = "true"
-            """.trimIndent() + "\n"
-        )
-    }
-
-    private fun createTempM3u(game: dev.cannoli.scorza.model.Game): java.io.File {
-        val m3uDir = java.io.File(cacheDir, "m3u")
-        m3uDir.mkdirs()
-        val m3uFile = java.io.File(m3uDir, "${game.displayName}.m3u")
-        m3uFile.writeText(checkNotNull(game.discFiles).joinToString("\n") { it.absolutePath } + "\n")
-        return m3uFile
-    }
-
-    private fun findEmbeddedCore(coreName: String): String? {
-        val soName = "${coreName}_android.so"
-        val coreFile = java.io.File(filesDir, "cores/$soName")
-        return if (coreFile.exists()) coreFile.absolutePath else null
+        val errorDialog = launchManager.launchGame(game)
+        if (errorDialog != null) dialogState.value = errorDialog
     }
 
     private fun scanResumableGames() {
         val games = gameListViewModel.state.value.games
-        val cannoliRoot = java.io.File(settings.sdCardRoot)
         ioScope.launch {
-            val result = mutableSetOf<String>()
-            for (game in games) {
-                if (game.isSubfolder) continue
-                if (getEmbeddedCorePath(game) == null) continue
-                val romName = game.file.nameWithoutExtension
-                val stateDir = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName")
-                if (stateDir.exists() && stateDir.listFiles()?.any { it.extension == "state" || it.name.contains(".state.") } == true) {
-                    result.add(game.file.absolutePath)
-                }
-            }
+            val result = launchManager.findResumableGames(games)
             withContext(Dispatchers.Main) { resumableGames = result }
         }
-    }
-
-    private fun getEmbeddedCorePath(game: dev.cannoli.scorza.model.Game): String? {
-        val gameOverride = platformResolver.getGameOverride(game.file.absolutePath)
-        if (gameOverride?.appPackage != null) return null
-        val target = game.launchTarget
-        if (target is LaunchTarget.Embedded) return target.corePath
-        if (target !is LaunchTarget.RetroArch) return null
-        val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag) ?: return null
-        val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
-        if (runnerPref == "RetroArch") return null
-        return findEmbeddedCore(core)
-    }
-
-    private fun findMostRecentSlot(game: dev.cannoli.scorza.model.Game): Int? {
-        val cannoliRoot = java.io.File(settings.sdCardRoot)
-        val romName = game.file.nameWithoutExtension
-        val stateBase = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName/$romName.state")
-        val slotManager = dev.cannoli.scorza.libretro.SaveSlotManager(stateBase.absolutePath)
-        var bestSlot = -1
-        var bestTime = 0L
-        for (slot in slotManager.slots) {
-            val f = java.io.File(slotManager.statePath(slot))
-            if (f.exists() && f.lastModified() > bestTime) {
-                bestTime = f.lastModified()
-                bestSlot = slot.index
-            }
-        }
-        return if (bestSlot >= 0) bestSlot else null
-    }
-
-    private fun launchEmbedded(game: dev.cannoli.scorza.model.Game, corePath: String, resumeSlot: Int = -1) {
-        val cannoliRoot = java.io.File(settings.sdCardRoot)
-        val romName = game.file.nameWithoutExtension
-        val saveDir = java.io.File(cannoliRoot, "Saves/${game.platformTag}")
-        saveDir.mkdirs()
-
-        val intent = android.content.Intent(this, dev.cannoli.scorza.libretro.LibretroActivity::class.java).apply {
-            putExtra("game_title", game.displayName)
-            putExtra("core_path", corePath)
-            putExtra("rom_path", game.file.absolutePath)
-            putExtra("sram_path", java.io.File(saveDir, "$romName.srm").absolutePath)
-            val stateDir = java.io.File(cannoliRoot, "Save States/${game.platformTag}/$romName")
-            stateDir.mkdirs()
-            putExtra("state_path", java.io.File(stateDir, "$romName.state").absolutePath)
-            putExtra("platform_tag", game.platformTag)
-            putExtra("platform_name", platformResolver.getDisplayName(game.platformTag))
-            putExtra("cannoli_root", cannoliRoot.absolutePath)
-            putExtra("system_dir", java.io.File(cannoliRoot, "BIOS").absolutePath)
-            putExtra("save_dir", saveDir.absolutePath)
-            putExtra("color_highlight", settings.colorHighlight)
-            putExtra("color_text", settings.colorText)
-            putExtra("color_highlight_text", settings.colorHighlightText)
-            putExtra("color_accent", settings.colorAccent)
-            putExtra("show_wifi", settings.showWifi)
-            putExtra("show_bluetooth", settings.showBluetooth)
-            putExtra("show_clock", settings.showClock)
-            putExtra("show_battery", settings.showBattery)
-            putExtra("use_24h", settings.timeFormat == dev.cannoli.scorza.settings.TimeFormat.TWENTY_FOUR_HOUR)
-            putExtra("swap_start_select", settings.swapStartSelect)
-            if (resumeSlot >= 0) putExtra("resume_slot", resumeSlot)
-        }
-        startActivity(intent)
     }
 
     private fun onCorePickerConfirm(screen: LauncherScreen.CorePicker) {
@@ -1929,38 +1718,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handleKeyboardConfirm(
-        caps: Boolean, symbols: Boolean, keyRow: Int, keyCol: Int,
-        currentName: String, cursorPos: Int,
-        onChar: (String, Int) -> Unit,
-        onShift: () -> Unit,
-        onSymbols: () -> Unit,
-        onEnter: () -> Unit
-    ) {
-        val rows = getKeyboardRows(caps, symbols)
-        val row = rows.getOrNull(keyRow) ?: return
-        val key = row.getOrNull(keyCol) ?: return
-
-        when (key) {
-            KEY_SHIFT -> onShift()
-            KEY_SYMBOLS -> onSymbols()
-            KEY_ENTER -> onEnter()
-            KEY_BACKSPACE -> {
-                if (cursorPos > 0) {
-                    val newName = currentName.removeRange(cursorPos - 1, cursorPos)
-                    onChar(newName, cursorPos - 1)
-                }
-            }
-            KEY_SPACE -> {
-                val newName = currentName.substring(0, cursorPos) + " " + currentName.substring(cursorPos)
-                onChar(newName, cursorPos + 1)
-            }
-            else -> {
-                val newName = currentName.substring(0, cursorPos) + key + currentName.substring(cursorPos)
-                onChar(newName, cursorPos + 1)
-            }
-        }
-    }
 
     private fun onNewCollectionConfirm(state: DialogState.NewCollectionInput) {
         val name = state.currentName.trim()
@@ -2072,64 +1829,6 @@ class MainActivity : ComponentActivity() {
             }
             else -> { navigating = false }
         }
-    }
-
-    // -- Keyboard state helpers to reduce duplication across RenameInput/NewCollectionInput/CollectionRenameInput --
-
-    private fun DialogState.asKeyboardState(): KeyboardInputState? = this as? KeyboardInputState
-
-    private fun DialogState.withKeyboard(row: Int, col: Int): DialogState = when (this) {
-        is DialogState.RenameInput -> copy(keyRow = row, keyCol = col)
-        is DialogState.NewCollectionInput -> copy(keyRow = row, keyCol = col)
-        is DialogState.CollectionRenameInput -> copy(keyRow = row, keyCol = col)
-        else -> this
-    }
-
-    private fun DialogState.withCursor(pos: Int): DialogState = when (this) {
-        is DialogState.RenameInput -> copy(cursorPos = pos)
-        is DialogState.NewCollectionInput -> copy(cursorPos = pos)
-        is DialogState.CollectionRenameInput -> copy(cursorPos = pos)
-        else -> this
-    }
-
-    private fun DialogState.withCaps(caps: Boolean): DialogState = when (this) {
-        is DialogState.RenameInput -> copy(caps = caps)
-        is DialogState.NewCollectionInput -> copy(caps = caps)
-        is DialogState.CollectionRenameInput -> copy(caps = caps)
-        else -> this
-    }
-
-    private fun DialogState.withNameAndCursor(name: String, pos: Int): DialogState = when (this) {
-        is DialogState.RenameInput -> copy(currentName = name, cursorPos = pos)
-        is DialogState.NewCollectionInput -> copy(currentName = name, cursorPos = pos)
-        is DialogState.CollectionRenameInput -> copy(currentName = name, cursorPos = pos)
-        else -> this
-    }
-
-    /** Moves context menu selection by delta, wrapping around. */
-    private fun DialogState.withMenuDelta(delta: Int): DialogState? = when (this) {
-        is DialogState.ContextMenu -> {
-            val newIdx = (selectedOption + delta).mod(options.size)
-            copy(selectedOption = newIdx)
-        }
-        is DialogState.BulkContextMenu -> {
-            val newIdx = (selectedOption + delta).mod(options.size)
-            copy(selectedOption = newIdx)
-        }
-        else -> null
-    }
-
-    private fun DialogState.withBackspace(): DialogState? {
-        val ks = asKeyboardState() ?: return null
-        if (ks.cursorPos <= 0) return null
-        val newName = ks.currentName.removeRange(ks.cursorPos - 1, ks.cursorPos)
-        return withNameAndCursor(newName, ks.cursorPos - 1)
-    }
-
-    private fun DialogState.withInsertedChar(char: String): DialogState? {
-        val ks = asKeyboardState() ?: return null
-        val newName = ks.currentName.substring(0, ks.cursorPos) + char + ks.currentName.substring(ks.cursorPos)
-        return withNameAndCursor(newName, ks.cursorPos + 1)
     }
 
     private fun hideSystemUI() {

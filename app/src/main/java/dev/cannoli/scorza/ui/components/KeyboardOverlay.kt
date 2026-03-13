@@ -222,3 +222,36 @@ fun KeyboardOverlay(
         }
     }
 }
+
+fun handleKeyboardConfirm(
+    caps: Boolean, symbols: Boolean, keyRow: Int, keyCol: Int,
+    currentName: String, cursorPos: Int,
+    onChar: (String, Int) -> Unit,
+    onShift: () -> Unit,
+    onSymbols: () -> Unit,
+    onEnter: () -> Unit
+) {
+    val rows = getKeyboardRows(caps, symbols)
+    val row = rows.getOrNull(keyRow) ?: return
+    val key = row.getOrNull(keyCol) ?: return
+
+    when (key) {
+        KEY_SHIFT -> onShift()
+        KEY_SYMBOLS -> onSymbols()
+        KEY_ENTER -> onEnter()
+        KEY_BACKSPACE -> {
+            if (cursorPos > 0) {
+                val newName = currentName.removeRange(cursorPos - 1, cursorPos)
+                onChar(newName, cursorPos - 1)
+            }
+        }
+        KEY_SPACE -> {
+            val newName = currentName.substring(0, cursorPos) + " " + currentName.substring(cursorPos)
+            onChar(newName, cursorPos + 1)
+        }
+        else -> {
+            val newName = currentName.substring(0, cursorPos) + key + currentName.substring(cursorPos)
+            onChar(newName, cursorPos + 1)
+        }
+    }
+}
