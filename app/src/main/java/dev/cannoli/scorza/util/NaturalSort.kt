@@ -5,17 +5,18 @@ object NaturalSort : Comparator<String> {
     private val chunkPattern = Regex("(\\d+|\\D+)")
 
     override fun compare(a: String, b: String): Int {
-        val chunksA = chunkPattern.findAll(a.lowercase()).map { it.value }.toList()
-        val chunksB = chunkPattern.findAll(b.lowercase()).map { it.value }.toList()
+        val iterA = chunkPattern.findAll(a.lowercase()).iterator()
+        val iterB = chunkPattern.findAll(b.lowercase()).iterator()
 
-        for (i in 0 until minOf(chunksA.size, chunksB.size)) {
-            val ca = chunksA[i]
-            val cb = chunksB[i]
+        while (iterA.hasNext() && iterB.hasNext()) {
+            val ca = iterA.next().value
+            val cb = iterB.next().value
 
             val result = if (ca[0].isDigit() && cb[0].isDigit()) {
-                val na = ca.toBigInteger()
-                val nb = cb.toBigInteger()
-                na.compareTo(nb)
+                val na = ca.toLongOrNull()
+                val nb = cb.toLongOrNull()
+                if (na != null && nb != null) na.compareTo(nb)
+                else ca.toBigInteger().compareTo(cb.toBigInteger())
             } else {
                 ca.compareTo(cb)
             }
@@ -23,7 +24,7 @@ object NaturalSort : Comparator<String> {
             if (result != 0) return result
         }
 
-        return chunksA.size - chunksB.size
+        return iterA.hasNext().compareTo(iterB.hasNext())
     }
 }
 
