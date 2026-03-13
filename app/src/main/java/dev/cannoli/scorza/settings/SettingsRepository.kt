@@ -2,6 +2,8 @@ package dev.cannoli.scorza.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.HandlerThread
 import org.json.JSONObject
 import java.io.File
 
@@ -11,7 +13,15 @@ class SettingsRepository(context: Context) {
         context.getSharedPreferences("cannoli_settings", Context.MODE_PRIVATE)
 
     private var json = JSONObject()
+    private val jsonLock = Any()
     private var settingsFile: File? = null
+
+    private val saveThread = HandlerThread("settings-save").apply { start() }
+    private val saveHandler = Handler(saveThread.looper)
+    private val saveRunnable = Runnable { saveToDisk() }
+
+    private inline fun <T> jsonRead(block: JSONObject.() -> T): T = synchronized(jsonLock) { json.block() }
+    private inline fun jsonWrite(block: JSONObject.() -> Unit) { synchronized(jsonLock) { json.block() }; scheduleSave() }
 
     init {
         if (prefs.getString(KEY_RA_PACKAGE, null) == "com.retroarch") {
@@ -25,29 +35,41 @@ class SettingsRepository(context: Context) {
         val file = File(sdCardRoot, "Config/settings.json")
         settingsFile = file
         if (file.exists()) {
-            try { json = JSONObject(file.readText()) } catch (_: Exception) {}
+            try { synchronized(jsonLock) { json = JSONObject(file.readText()) } } catch (_: Exception) {}
         }
     }
 
-    private fun save() {
+    private fun scheduleSave() {
+        saveHandler.removeCallbacks(saveRunnable)
+        saveHandler.postDelayed(saveRunnable, 100)
+    }
+
+    private fun saveToDisk() {
         settingsFile?.let { file ->
             file.parentFile?.mkdirs()
-            file.writeText(json.toString(2))
+            synchronized(jsonLock) { file.writeText(json.toString(2)) }
         }
+    }
+
+    fun flush() {
+        saveHandler.removeCallbacks(saveRunnable)
+        saveToDisk()
     }
 
     private fun migrateFromPrefs() {
-        if (json.length() > 0) return
+        synchronized(jsonLock) { if (json.length() > 0) return }
         val keys = prefs.all.keys - KEY_SD_ROOT
         if (keys.isEmpty()) return
-        for (key in keys) {
-            when (val v = prefs.all[key]) {
-                is String -> json.put(key, v)
-                is Boolean -> json.put(key, v)
-                is Int -> json.put(key, v)
+        synchronized(jsonLock) {
+            for (key in keys) {
+                when (val v = prefs.all[key]) {
+                    is String -> json.put(key, v)
+                    is Boolean -> json.put(key, v)
+                    is Int -> json.put(key, v)
+                }
             }
         }
-        save()
+        saveToDisk()
         val editor = prefs.edit()
         for (key in keys) editor.remove(key)
         editor.apply()
@@ -66,100 +88,100 @@ class SettingsRepository(context: Context) {
         }
 
     var retroArchPackage: String
-        get() = json.optString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE)
-        set(value) { json.put(KEY_RA_PACKAGE, value); save() }
+        get() = jsonRead { optString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE) }
+        set(value) = jsonWrite { put(KEY_RA_PACKAGE, value) }
 
     var buttonLayout: ButtonLayout
-        get() = ButtonLayout.fromString(json.optString(KEY_BUTTON_LAYOUT, null))
-        set(value) { json.put(KEY_BUTTON_LAYOUT, value.name); save() }
+        get() = ButtonLayout.fromString(jsonRead { optString(KEY_BUTTON_LAYOUT, null) })
+        set(value) = jsonWrite { put(KEY_BUTTON_LAYOUT, value.name) }
 
     var textSize: TextSize
-        get() = TextSize.fromString(json.optString(KEY_TEXT_SIZE, null))
-        set(value) { json.put(KEY_TEXT_SIZE, value.name); save() }
+        get() = TextSize.fromString(jsonRead { optString(KEY_TEXT_SIZE, null) })
+        set(value) = jsonWrite { put(KEY_TEXT_SIZE, value.name) }
 
     var gameSortOrder: SortOrder
-        get() = SortOrder.fromString(json.optString(KEY_SORT_ORDER, null))
-        set(value) { json.put(KEY_SORT_ORDER, value.name); save() }
+        get() = SortOrder.fromString(jsonRead { optString(KEY_SORT_ORDER, null) })
+        set(value) = jsonWrite { put(KEY_SORT_ORDER, value.name) }
 
     var scrollSpeed: ScrollSpeed
-        get() = ScrollSpeed.fromString(json.optString(KEY_SCROLL_SPEED, null))
-        set(value) { json.put(KEY_SCROLL_SPEED, value.name); save() }
+        get() = ScrollSpeed.fromString(jsonRead { optString(KEY_SCROLL_SPEED, null) })
+        set(value) = jsonWrite { put(KEY_SCROLL_SPEED, value.name) }
 
     var showCoreTag: Boolean
-        get() = json.optBoolean(KEY_SHOW_CORE_TAG, false)
-        set(value) { json.put(KEY_SHOW_CORE_TAG, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_CORE_TAG, false) }
+        set(value) = jsonWrite { put(KEY_SHOW_CORE_TAG, value) }
 
     var timeFormat: TimeFormat
-        get() = TimeFormat.fromString(json.optString(KEY_TIME_FORMAT, null))
-        set(value) { json.put(KEY_TIME_FORMAT, value.name); save() }
+        get() = TimeFormat.fromString(jsonRead { optString(KEY_TIME_FORMAT, null) })
+        set(value) = jsonWrite { put(KEY_TIME_FORMAT, value.name) }
 
     var backgroundImagePath: String?
-        get() = json.optString(KEY_BG_IMAGE, "").ifEmpty { null }
-        set(value) { if (value != null) json.put(KEY_BG_IMAGE, value) else json.remove(KEY_BG_IMAGE); save() }
+        get() = jsonRead { optString(KEY_BG_IMAGE, "").ifEmpty { null } }
+        set(value) = jsonWrite { if (value != null) put(KEY_BG_IMAGE, value) else remove(KEY_BG_IMAGE) }
 
     var swapStartSelect: Boolean
-        get() = json.optBoolean(KEY_SWAP_START_SELECT, false)
-        set(value) { json.put(KEY_SWAP_START_SELECT, value); save() }
+        get() = jsonRead { optBoolean(KEY_SWAP_START_SELECT, false) }
+        set(value) = jsonWrite { put(KEY_SWAP_START_SELECT, value) }
 
     var platformSwitching: Boolean
-        get() = json.optBoolean(KEY_PLATFORM_SWITCHING, false)
-        set(value) { json.put(KEY_PLATFORM_SWITCHING, value); save() }
+        get() = jsonRead { optBoolean(KEY_PLATFORM_SWITCHING, false) }
+        set(value) = jsonWrite { put(KEY_PLATFORM_SWITCHING, value) }
 
     var showWifi: Boolean
-        get() = json.optBoolean(KEY_SHOW_WIFI, true)
-        set(value) { json.put(KEY_SHOW_WIFI, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_WIFI, true) }
+        set(value) = jsonWrite { put(KEY_SHOW_WIFI, value) }
 
     var showBluetooth: Boolean
-        get() = json.optBoolean(KEY_SHOW_BLUETOOTH, true)
-        set(value) { json.put(KEY_SHOW_BLUETOOTH, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_BLUETOOTH, true) }
+        set(value) = jsonWrite { put(KEY_SHOW_BLUETOOTH, value) }
 
     var showClock: Boolean
-        get() = json.optBoolean(KEY_SHOW_CLOCK, true)
-        set(value) { json.put(KEY_SHOW_CLOCK, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_CLOCK, true) }
+        set(value) = jsonWrite { put(KEY_SHOW_CLOCK, value) }
 
     var showBattery: Boolean
-        get() = json.optBoolean(KEY_SHOW_BATTERY, true)
-        set(value) { json.put(KEY_SHOW_BATTERY, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_BATTERY, true) }
+        set(value) = jsonWrite { put(KEY_SHOW_BATTERY, value) }
 
     var showEmpty: Boolean
-        get() = json.optBoolean(KEY_SHOW_EMPTY, false)
-        set(value) { json.put(KEY_SHOW_EMPTY, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_EMPTY, false) }
+        set(value) = jsonWrite { put(KEY_SHOW_EMPTY, value) }
 
     var showTools: Boolean
-        get() = json.optBoolean(KEY_SHOW_TOOLS, false)
-        set(value) { json.put(KEY_SHOW_TOOLS, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_TOOLS, false) }
+        set(value) = jsonWrite { put(KEY_SHOW_TOOLS, value) }
 
     var showPorts: Boolean
-        get() = json.optBoolean(KEY_SHOW_PORTS, false)
-        set(value) { json.put(KEY_SHOW_PORTS, value); save() }
+        get() = jsonRead { optBoolean(KEY_SHOW_PORTS, false) }
+        set(value) = jsonWrite { put(KEY_SHOW_PORTS, value) }
 
     var toolsName: String
-        get() = json.optString(KEY_TOOLS_NAME, "Tools").ifEmpty { "Tools" }
-        set(value) { if (value == "Tools") json.remove(KEY_TOOLS_NAME) else json.put(KEY_TOOLS_NAME, value); save() }
+        get() = jsonRead { optString(KEY_TOOLS_NAME, "Tools").ifEmpty { "Tools" } }
+        set(value) = jsonWrite { if (value == "Tools") remove(KEY_TOOLS_NAME) else put(KEY_TOOLS_NAME, value) }
 
     var portsName: String
-        get() = json.optString(KEY_PORTS_NAME, "Ports").ifEmpty { "Ports" }
-        set(value) { if (value == "Ports") json.remove(KEY_PORTS_NAME) else json.put(KEY_PORTS_NAME, value); save() }
+        get() = jsonRead { optString(KEY_PORTS_NAME, "Ports").ifEmpty { "Ports" } }
+        set(value) = jsonWrite { if (value == "Ports") remove(KEY_PORTS_NAME) else put(KEY_PORTS_NAME, value) }
 
     var backgroundTint: Int
-        get() = json.optInt(KEY_BG_TINT, 0)
-        set(value) { json.put(KEY_BG_TINT, value.coerceIn(0, 90)); save() }
+        get() = jsonRead { optInt(KEY_BG_TINT, 0) }
+        set(value) = jsonWrite { put(KEY_BG_TINT, value.coerceIn(0, 90)) }
 
     var colorHighlight: String
-        get() = json.optString(KEY_COLOR_HIGHLIGHT, "#FFFFFF")
-        set(value) { json.put(KEY_COLOR_HIGHLIGHT, value); save() }
+        get() = jsonRead { optString(KEY_COLOR_HIGHLIGHT, "#FFFFFF") }
+        set(value) = jsonWrite { put(KEY_COLOR_HIGHLIGHT, value) }
 
     var colorText: String
-        get() = json.optString(KEY_COLOR_TEXT, "#FFFFFF")
-        set(value) { json.put(KEY_COLOR_TEXT, value); save() }
+        get() = jsonRead { optString(KEY_COLOR_TEXT, "#FFFFFF") }
+        set(value) = jsonWrite { put(KEY_COLOR_TEXT, value) }
 
     var colorHighlightText: String
-        get() = json.optString(KEY_COLOR_HIGHLIGHT_TEXT, "#000000")
-        set(value) { json.put(KEY_COLOR_HIGHLIGHT_TEXT, value); save() }
+        get() = jsonRead { optString(KEY_COLOR_HIGHLIGHT_TEXT, "#000000") }
+        set(value) = jsonWrite { put(KEY_COLOR_HIGHLIGHT_TEXT, value) }
 
     var colorAccent: String
-        get() = json.optString(KEY_COLOR_ACCENT, "#FFFFFF")
-        set(value) { json.put(KEY_COLOR_ACCENT, value); save() }
+        get() = jsonRead { optString(KEY_COLOR_ACCENT, "#FFFFFF") }
+        set(value) = jsonWrite { put(KEY_COLOR_ACCENT, value) }
 
     companion object {
         const val DEFAULT_ROOT = "/storage/emulated/0/Cannoli/"
