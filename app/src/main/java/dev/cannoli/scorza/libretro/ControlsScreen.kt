@@ -29,12 +29,14 @@ fun ControlsScreen(
     input: LibretroInput,
     selectedIndex: Int,
     listeningIndex: Int,
-    useGlobalControls: Boolean? = null,
+    listenTimeoutMs: Int = 3000,
+    listenCountdownMs: Int = 0,
+    controlSource: OverrideSource? = null,
     title: String = "Controls"
 ) {
     val itemHeight = pillItemHeight(lineHeight, verticalPadding)
-    val hasToggle = useGlobalControls != null
-    val buttonOffset = if (hasToggle) 1 else 0
+    val hasSourceRow = controlSource != null
+    val buttonOffset = if (hasSourceRow) 1 else 0
 
     ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
         Box(
@@ -53,10 +55,15 @@ fun ControlsScreen(
                     lineHeight = lineHeight
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                if (hasToggle) {
+                if (hasSourceRow) {
+                    val sourceLabel = when (controlSource!!) {
+                        OverrideSource.GLOBAL -> "Global"
+                        OverrideSource.PLATFORM -> "Platform"
+                        OverrideSource.GAME -> "Game"
+                    }
                     PillRowKeyValue(
-                        label = "Use Global Controls",
-                        value = if (useGlobalControls == true) "On" else "Off",
+                        label = "Source",
+                        value = sourceLabel,
                         isSelected = selectedIndex == 0,
                         fontSize = fontSize,
                         lineHeight = lineHeight,
@@ -84,17 +91,18 @@ fun ControlsScreen(
                 }
             }
 
-            val bottomLeft = if (useGlobalControls == true) {
-                listOf("B" to "BACK")
+            val remainingSec = if (listeningIndex >= 0) {
+                ((listenTimeoutMs - listenCountdownMs + 999) / 1000).coerceAtLeast(0)
+            } else 0
+            val bottomLeft = if (listeningIndex >= 0) {
+                emptyList()
             } else {
                 listOf("B" to "BACK", "X" to "RESET ALL")
             }
             val bottomRight = if (listeningIndex >= 0) {
-                listOf("" to "PRESS A BUTTON...")
-            } else if (hasToggle && selectedIndex == 0) {
-                listOf("A" to "TOGGLE")
-            } else if (useGlobalControls == true) {
-                emptyList()
+                listOf("" to "PRESS A BUTTON... $remainingSec")
+            } else if (hasSourceRow && selectedIndex == 0) {
+                listOf("←→" to "CHANGE")
             } else {
                 listOf("A" to "REMAP")
             }

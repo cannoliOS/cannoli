@@ -63,12 +63,14 @@ class LibretroActivity : ComponentActivity() {
 
     private var coreOptions by mutableStateOf(emptyList<LibretroRunner.CoreOption>())
     private var coreCategories by mutableStateOf(emptyList<LibretroRunner.CoreOptionCategory>())
-    private var useGlobalControls by mutableStateOf(false)
+    private var controlSource by mutableStateOf(OverrideSource.GLOBAL)
+    private var shortcutSource by mutableStateOf(OverrideSource.GLOBAL)
     private var shortcuts by mutableStateOf(mapOf<ShortcutAction, Set<Int>>())
     private val shortcutChordKeys = mutableSetOf<Int>()
     private var coreInfoText by mutableStateOf("")
 
-    private var settingsSnapshot: OverrideManager.Settings? = null
+    private var frontendSnapshot: OverrideManager.Settings? = null
+    private var platformBaseline: OverrideManager.Settings? = null
 
     private var diskCount by mutableIntStateOf(0)
     private var currentDiskIndex by mutableIntStateOf(0)
@@ -176,7 +178,7 @@ class LibretroActivity : ComponentActivity() {
 
         val coreBaseName = File(corePath).nameWithoutExtension
         val gameBaseName = if (romPath.isNotEmpty()) File(romPath).nameWithoutExtension else ""
-        overrideManager = OverrideManager(cannoliRoot, coreBaseName, platformTag, gameBaseName)
+        overrideManager = OverrideManager(cannoliRoot, platformTag, gameBaseName, coreBaseName)
         loadOverrides()
 
         if (sramPath.isNotEmpty() && File(sramPath).exists()) runner.loadSRAM(sramPath)
@@ -247,7 +249,7 @@ class LibretroActivity : ComponentActivity() {
                         settingsItems = if (screen is IGMScreen.Menu) emptyList() else buildSettingsItems(),
                         coreInfo = coreInfoText,
                         input = input,
-                        useGlobalControls = useGlobalControls,
+                        controlSource = controlSource,
                         debugHud = debugHud,
                         renderer = renderer,
                         runner = runner,
@@ -522,7 +524,7 @@ class LibretroActivity : ComponentActivity() {
             }
             menu.settingsIndex -> {
                 coreOptions = runner.getCoreOptions()
-                settingsSnapshot = buildCurrentSettings()
+                frontendSnapshot = buildCurrentSettings()
                 push(IGMScreen.Settings())
             }
             menu.resetIndex -> {
@@ -565,7 +567,8 @@ class LibretroActivity : ComponentActivity() {
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
-                if (settingsSnapshot != null && buildCurrentSettings() != settingsSnapshot) {
+                val snap = frontendSnapshot
+                if (snap != null && !buildCurrentSettings().frontendEquals(snap)) {
                     push(IGMScreen.SavePrompt())
                 } else {
                     pop()
@@ -796,15 +799,30 @@ class LibretroActivity : ComponentActivity() {
 
     // --- Controls ---
 
+    private val controlListenTimeoutMs = 3000
+    private val controlListenTickMs = 100L
+
+    private val controlListenRunnable = object : Runnable {
+        override fun run() {
+            val screen = currentScreen as? IGMScreen.Controls ?: return
+            if (screen.listeningIndex < 0) return
+            val newMs = screen.listenCountdownMs + controlListenTickMs.toInt()
+            if (newMs >= controlListenTimeoutMs) {
+                replaceTop(screen.copy(listeningIndex = -1, listenCountdownMs = 0))
+            } else {
+                replaceTop(screen.copy(listenCountdownMs = newMs))
+                shortcutCountdownHandler.postDelayed(this, controlListenTickMs)
+            }
+        }
+    }
+
     private fun handleControlsInput(screen: IGMScreen.Controls, keyCode: Int): Boolean {
         if (screen.listeningIndex >= 0) {
-            if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_BUTTON_B) {
-                replaceTop(screen.copy(listeningIndex = -1))
-                return true
-            }
+            shortcutCountdownHandler.removeCallbacks(controlListenRunnable)
             val buttonIndex = screen.listeningIndex - 1
             input.assign(input.buttons[buttonIndex], keyCode)
-            replaceTop(screen.copy(listeningIndex = -1))
+            replaceTop(screen.copy(listeningIndex = -1, listenCountdownMs = 0))
+            saveCurrentControls()
             return true
         }
         val count = input.buttons.size + 1
@@ -815,16 +833,26 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
             }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (screen.selectedIndex == 0) cycleControlSource(-1)
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (screen.selectedIndex == 0) cycleControlSource(1)
+                true
+            }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 if (screen.selectedIndex == 0) {
-                    toggleGlobalControls()
-                } else if (!useGlobalControls) {
-                    replaceTop(screen.copy(listeningIndex = screen.selectedIndex))
+                    cycleControlSource(1)
+                } else {
+                    replaceTop(screen.copy(listeningIndex = screen.selectedIndex, listenCountdownMs = 0))
+                    shortcutCountdownHandler.postDelayed(controlListenRunnable, controlListenTickMs)
                 }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_X -> {
-                if (!useGlobalControls) input.resetDefaults()
+                input.resetDefaults()
+                saveCurrentControls()
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
@@ -832,15 +860,21 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
-    private fun toggleGlobalControls() {
-        useGlobalControls = !useGlobalControls
-        if (useGlobalControls) {
-            input.resetDefaults()
-            for ((key, keyCode) in overrideManager.loadGlobalControls()) {
-                val btn = input.buttons.find { it.prefKey == key } ?: continue
-                input.assign(btn, keyCode)
-            }
+    private fun cycleControlSource(direction: Int) {
+        val sources = OverrideSource.entries
+        controlSource = sources[(controlSource.ordinal + direction + sources.size) % sources.size]
+        overrideManager.saveControlSource(controlSource)
+        input.resetDefaults()
+        for ((key, kc) in overrideManager.loadControlsForSource(controlSource)) {
+            val btn = input.buttons.find { it.prefKey == key } ?: continue
+            input.assign(btn, kc)
         }
+    }
+
+    private fun saveCurrentControls() {
+        val controlMap = mutableMapOf<String, Int>()
+        for (btn in input.buttons) controlMap[btn.prefKey] = input.getKeyCodeFor(btn)
+        overrideManager.saveControls(controlSource, controlMap)
     }
 
     // --- Shortcuts ---
@@ -855,8 +889,9 @@ class LibretroActivity : ComponentActivity() {
             if (!screen.listening) return
             val newMs = screen.countdownMs + shortcutTickMs.toInt()
             if (newMs >= shortcutHoldMs) {
-                val action = ShortcutAction.entries[screen.selectedIndex]
+                val action = ShortcutAction.entries[screen.selectedIndex - 1]
                 shortcuts = shortcuts + (action to screen.heldKeys)
+                saveCurrentShortcuts()
                 replaceTop(screen.copy(listening = false, heldKeys = emptySet(), countdownMs = 0))
             } else {
                 replaceTop(screen.copy(countdownMs = newMs))
@@ -885,7 +920,7 @@ class LibretroActivity : ComponentActivity() {
             shortcutCountdownHandler.postDelayed(shortcutCountdownRunnable, shortcutTickMs)
             return true
         }
-        val count = ShortcutAction.entries.size
+        val count = ShortcutAction.entries.size + 1
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
@@ -893,13 +928,28 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
             }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (screen.selectedIndex == 0) cycleShortcutSource(-1)
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (screen.selectedIndex == 0) cycleShortcutSource(1)
+                true
+            }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                replaceTop(screen.copy(listening = true, heldKeys = emptySet(), countdownMs = 0))
+                if (screen.selectedIndex == 0) {
+                    cycleShortcutSource(1)
+                } else {
+                    replaceTop(screen.copy(listening = true, heldKeys = emptySet(), countdownMs = 0))
+                }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_X -> {
-                val action = ShortcutAction.entries[screen.selectedIndex]
-                shortcuts = shortcuts + (action to emptySet())
+                if (screen.selectedIndex > 0) {
+                    val action = ShortcutAction.entries[screen.selectedIndex - 1]
+                    shortcuts = shortcuts + (action to emptySet())
+                    saveCurrentShortcuts()
+                }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
@@ -907,10 +957,21 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
+    private fun cycleShortcutSource(direction: Int) {
+        val sources = OverrideSource.entries
+        shortcutSource = sources[(shortcutSource.ordinal + direction + sources.size) % sources.size]
+        overrideManager.saveShortcutSource(shortcutSource)
+        shortcuts = overrideManager.loadShortcutsForSource(shortcutSource)
+    }
+
+    private fun saveCurrentShortcuts() {
+        overrideManager.saveShortcuts(shortcutSource, shortcuts)
+    }
+
     // --- Save Prompt ---
 
     private fun handleSavePromptInput(screen: IGMScreen.SavePrompt, keyCode: Int): Boolean {
-        val count = 2
+        val count = 3
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
@@ -920,15 +981,15 @@ class LibretroActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 when (screen.selectedIndex) {
-                    0 -> { saveToScope(1); showOsd("Saved for $platformName") }
-                    1 -> { saveToScope(2); showOsd("Saved for this game") }
+                    0 -> { saveToPlatform(); showOsd("Saved for $platformName") }
+                    1 -> { saveToGame(); showOsd("Saved for this game") }
                 }
-                settingsSnapshot = null
+                frontendSnapshot = null
                 pop(); pop()
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
-                settingsSnapshot = null
+                frontendSnapshot = null
                 pop(); pop()
                 true
             }
@@ -983,15 +1044,19 @@ class LibretroActivity : ComponentActivity() {
                 IGMSettingsItem(opt.desc, label, hint = opt.info.ifEmpty { null })
             }
         }
-        is IGMScreen.Shortcuts -> ShortcutAction.entries.map { action ->
-            val chord = shortcuts[action]
-            val label = if (chord.isNullOrEmpty()) "None"
-            else chord.joinToString(" + ") { LibretroInput.keyCodeName(it) }
-            IGMSettingsItem(action.label, label)
+        is IGMScreen.Shortcuts -> buildList {
+            add(IGMSettingsItem("Source", sourceLabel(shortcutSource)))
+            for (action in ShortcutAction.entries) {
+                val chord = shortcuts[action]
+                val label = if (chord.isNullOrEmpty()) "None"
+                else chord.joinToString(" + ") { LibretroInput.keyCodeName(it) }
+                add(IGMSettingsItem(action.label, label))
+            }
         }
         is IGMScreen.SavePrompt -> listOf(
             IGMSettingsItem("Save for $platformName"),
-            IGMSettingsItem("Save for this game")
+            IGMSettingsItem("Save for this game"),
+            IGMSettingsItem("Discard")
         )
         else -> emptyList()
     }
@@ -999,10 +1064,6 @@ class LibretroActivity : ComponentActivity() {
     // --- Settings persistence ---
 
     private fun buildCurrentSettings(): OverrideManager.Settings {
-        val controlMap = mutableMapOf<String, Int>()
-        for (btn in input.buttons) {
-            controlMap[btn.prefKey] = input.getKeyCodeFor(btn)
-        }
         val optionMap = mutableMapOf<String, String>()
         for (opt in coreOptions) optionMap[opt.key] = opt.selected
 
@@ -1020,19 +1081,26 @@ class LibretroActivity : ComponentActivity() {
             crtSweep = crtSweep,
             crtBrightness = crtBrightness,
             crtNoise = crtNoise,
-            useGlobalControls = useGlobalControls,
-            controls = controlMap,
-            shortcuts = shortcuts,
             coreOptions = optionMap
         )
     }
 
-    private fun saveToScope(scopeIndex: Int) {
+    private fun saveToPlatform() {
         val settings = buildCurrentSettings()
-        when (scopeIndex) {
-            1 -> overrideManager.saveCore(settings)
-            2 -> overrideManager.saveGame(settings)
-        }
+        overrideManager.savePlatform(settings)
+        platformBaseline = overrideManager.loadPlatformBaseline()
+    }
+
+    private fun saveToGame() {
+        val settings = buildCurrentSettings()
+        val baseline = platformBaseline ?: overrideManager.loadPlatformBaseline()
+        overrideManager.saveGameDelta(settings, baseline)
+    }
+
+    private fun sourceLabel(source: OverrideSource): String = when (source) {
+        OverrideSource.GLOBAL -> "Global"
+        OverrideSource.PLATFORM -> platformName
+        OverrideSource.GAME -> "This Game"
     }
 
     private fun loadOverrides() {
@@ -1050,7 +1118,8 @@ class LibretroActivity : ComponentActivity() {
         crtSweep = settings.crtSweep
         crtBrightness = settings.crtBrightness
         crtNoise = settings.crtNoise
-        useGlobalControls = settings.useGlobalControls
+        controlSource = settings.controlSource
+        shortcutSource = settings.shortcutSource
         shortcuts = settings.shortcuts
 
         for ((key, keyCode) in settings.controls) {
@@ -1062,6 +1131,7 @@ class LibretroActivity : ComponentActivity() {
             runner.setCoreOption(key, value)
         }
         coreOptions = runner.getCoreOptions()
+        platformBaseline = overrideManager.loadPlatformBaseline()
     }
 
     // --- OSD / Undo ---

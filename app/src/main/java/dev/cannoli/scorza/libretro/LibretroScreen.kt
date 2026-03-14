@@ -51,7 +51,7 @@ fun LibretroScreen(
     settingsItems: List<IGMSettingsItem>,
     coreInfo: String,
     input: LibretroInput,
-    useGlobalControls: Boolean,
+    controlSource: OverrideSource,
     debugHud: Boolean,
     renderer: LibretroRenderer,
     runner: LibretroRunner,
@@ -132,7 +132,8 @@ fun LibretroScreen(
                 input = input,
                 selectedIndex = screen.selectedIndex,
                 listeningIndex = screen.listeningIndex,
-                useGlobalControls = useGlobalControls
+                listenCountdownMs = screen.listenCountdownMs,
+                controlSource = controlSource
             )
             is IGMScreen.Settings, is IGMScreen.Frontend, is IGMScreen.CrtSettings,
             is IGMScreen.Emulator, is IGMScreen.EmulatorCategory,
@@ -144,6 +145,7 @@ fun LibretroScreen(
                     (screen is IGMScreen.Emulator && settingsItems.all { it.value != null })
                 val bottomBarRight = when {
                     isOptionList -> listOf("A" to "INFO", "←→" to "CHANGE")
+                    screen is IGMScreen.Shortcuts && screen.selectedIndex == 0 -> listOf("←→" to "CHANGE")
                     screen is IGMScreen.Shortcuts -> listOf("X" to "CLEAR", "A" to "SET")
                     screen is IGMScreen.Frontend -> listOf("A" to "SELECT", "←→" to "CHANGE")
                     screen is IGMScreen.CrtSettings -> listOf("←→" to "CHANGE")

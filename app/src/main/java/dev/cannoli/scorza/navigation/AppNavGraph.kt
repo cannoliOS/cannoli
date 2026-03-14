@@ -66,7 +66,7 @@ sealed class LauncherScreen {
     data class ColorList(val colors: List<ColorEntry>, val selectedIndex: Int = 0, val scrollTarget: Int = 0) : LauncherScreen()
     data class CollectionPicker(val gamePaths: List<String>, val title: String, val collections: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet(), val scrollTarget: Int = 0) : LauncherScreen()
     data class AppPicker(val type: String, val title: String, val apps: List<String>, val packages: List<String>, val selectedIndex: Int = 0, val checkedIndices: Set<Int> = emptySet(), val initialChecked: Set<Int> = emptySet(), val scrollTarget: Int = 0) : LauncherScreen()
-    data class ControlBinding(val selectedIndex: Int = 0, val scrollTarget: Int = 0, val controls: Map<String, Int> = emptyMap(), val listeningIndex: Int = -1) : LauncherScreen()
+    data class ControlBinding(val selectedIndex: Int = 0, val scrollTarget: Int = 0, val controls: Map<String, Int> = emptyMap(), val listeningIndex: Int = -1, val listenCountdownMs: Int = 0) : LauncherScreen()
     data class ShortcutBinding(val selectedIndex: Int = 0, val scrollTarget: Int = 0, val shortcuts: Map<dev.cannoli.scorza.libretro.ShortcutAction, Set<Int>> = emptyMap(), val listening: Boolean = false, val heldKeys: Set<Int> = emptySet(), val countdownMs: Int = 0) : LauncherScreen()
     data class Credits(val selectedIndex: Int = 0, val scrollTarget: Int = 0) : LauncherScreen()
 }
@@ -342,15 +342,19 @@ fun AppNavGraph(
                 }
             }
             is LauncherScreen.ControlBinding -> {
-                val tempInput = remember { LibretroInput() }
-                for ((key, keyCode) in currentScreen.controls) {
-                    val btn = tempInput.buttons.find { it.prefKey == key } ?: continue
-                    tempInput.assign(btn, keyCode)
+                val tempInput = remember(currentScreen.controls) {
+                    LibretroInput().also { input ->
+                        for ((key, keyCode) in currentScreen.controls) {
+                            val btn = input.buttons.find { it.prefKey == key } ?: continue
+                            input.assign(btn, keyCode)
+                        }
+                    }
                 }
                 ControlsScreen(
                     input = tempInput,
                     selectedIndex = currentScreen.selectedIndex,
                     listeningIndex = currentScreen.listeningIndex,
+                    listenCountdownMs = currentScreen.listenCountdownMs,
                     title = "Button Mapping"
                 )
             }
@@ -453,7 +457,7 @@ fun AppNavGraph(
         }
 
         val kitchenRunning = dev.cannoli.scorza.server.KitchenManager.isRunning
-        val statusBarVisible = dialog !is DialogState.About && dialog !is DialogState.Kitchen && (kitchenRunning || appSettings.showWifi || appSettings.showBluetooth || appSettings.showClock || appSettings.showBattery)
+        val statusBarVisible = dialog !is DialogState.About && dialog !is DialogState.Kitchen && currentScreen !is LauncherScreen.Credits && (kitchenRunning || appSettings.showWifi || appSettings.showBluetooth || appSettings.showClock || appSettings.showBattery)
         if (statusBarVisible) {
         Box(
             modifier = Modifier

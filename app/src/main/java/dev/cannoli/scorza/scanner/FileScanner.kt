@@ -358,6 +358,7 @@ class FileScanner(
             File(cannoliRoot, "Config"),
             File(cannoliRoot, "Config/Overrides"),
             File(cannoliRoot, "Config/Overrides/Cores"),
+            File(cannoliRoot, "Config/Overrides/systems"),
             File(cannoliRoot, "Config/Overrides/Games"),
             File(cannoliRoot, "Backup"),
             File(cannoliRoot, "Wallpapers"),
