@@ -76,15 +76,7 @@ jobs:
           cp -r /tmp/kitchen/dist/* app/src/main/assets/kitchen/
 
       - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > /tmp/release.keystore
-          keytool -importkeystore \
-            -srckeystore /tmp/release.keystore -srcstoretype PKCS12 \
-            -srcstorepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -destkeystore app/release.keystore -deststoretype PKCS12 \
-            -deststorepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -J-Dkeystore.pkcs12.legacy
-          rm /tmp/release.keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
 
       - name: Build release APK
         env:
