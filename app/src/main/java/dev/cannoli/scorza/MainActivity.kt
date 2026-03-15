@@ -1118,7 +1118,7 @@ class MainActivity : ComponentActivity() {
                                 if (glState.isCollection && glState.collectionName != null) {
                                     options.add("Remove from Collection")
                                 }
-                                options.addAll(listOf("Manage Collections", "Delete"))
+                                options.addAll(listOf("Manage Collections", "Delete Art", "Delete Game"))
                                 gameListViewModel.confirmMultiSelect()
                                 dialogState.value = DialogState.BulkContextMenu(
                                     gamePaths = paths,
@@ -1147,9 +1147,14 @@ class MainActivity : ComponentActivity() {
                                     options = listOf("Rename", "Delete")
                                 )
                             } else {
+                                val options = if (game.artFile != null) {
+                                    gameContextOptions.toMutableList().apply { add(indexOf("Delete Game"), "Delete Art") }
+                                } else {
+                                    gameContextOptions
+                                }
                                 dialogState.value = DialogState.ContextMenu(
                                     gameName = game.displayName,
-                                    options = gameContextOptions
+                                    options = options
                                 )
                             }
                         }
@@ -1567,7 +1572,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val gameContextOptions = listOf("Manage Collections", "Emulator Override", "Rename", "Delete")
+    private val gameContextOptions = listOf("Manage Collections", "Emulator Override", "Rename", "Delete Game")
 
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
         if (screenStack.last() == LauncherScreen.SystemList) {
@@ -1601,7 +1606,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-            "Delete" -> {
+            "Delete", "Delete Game" -> {
                 if (glState.isCollectionsList) {
                     dialogState.value = DialogState.DeleteCollectionConfirm(collectionName = game.displayName)
                 } else {
@@ -1610,6 +1615,13 @@ class MainActivity : ComponentActivity() {
             }
             "Manage Collections" -> {
                 openCollectionManager(listOf(game.file.absolutePath), game.displayName)
+            }
+            "Delete Art" -> {
+                pendingContextReturn = null
+                game.artFile?.delete()
+                scanner.invalidateArtCache()
+                gameListViewModel.reload()
+                dialogState.value = DialogState.None
             }
             "Emulator Override" -> {
                 val tag = game.platformTag
@@ -1678,6 +1690,8 @@ class MainActivity : ComponentActivity() {
                     val glState = gameListViewModel.state.value
                     val options = if (glState.isCollectionsList) {
                         listOf("Rename", "Delete")
+                    } else if (game.artFile != null) {
+                        gameContextOptions.toMutableList().apply { add(indexOf("Delete Game"), "Delete Art") }
                     } else {
                         gameContextOptions
                     }
@@ -1726,9 +1740,20 @@ class MainActivity : ComponentActivity() {
             "Manage Collections" -> {
                 openCollectionManager(state.gamePaths, "${state.gamePaths.size} Selected")
             }
-            "Delete" -> {
+            "Delete Game" -> {
                 pendingContextReturn = null
                 dialogState.value = DialogState.DeleteConfirm(gameName = "${state.gamePaths.size} items")
+            }
+            "Delete Art" -> {
+                pendingContextReturn = null
+                val games = gameListViewModel.state.value.games
+                val pathSet = state.gamePaths.toSet()
+                games.filter { it.file.absolutePath in pathSet }
+                    .mapNotNull { it.artFile }
+                    .forEach { it.delete() }
+                scanner.invalidateArtCache()
+                gameListViewModel.reload()
+                dialogState.value = DialogState.None
             }
             "Remove from Collection" -> {
                 pendingContextReturn = null
