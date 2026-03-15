@@ -39,6 +39,7 @@ class OverrideManager(
         var crtVignette: Float = 0.85f,
         var crtGlow: Float = 0.25f,
         var crtSweep: Float = 1.0f,
+        var crtSweepBright: Float = 0.35f,
         var crtBrightness: Float = 1.0f,
         var crtNoise: Float = 0.15f,
         var controlSource: OverrideSource = OverrideSource.GLOBAL,
@@ -59,6 +60,7 @@ class OverrideManager(
             crtVignette == other.crtVignette &&
             crtGlow == other.crtGlow &&
             crtSweep == other.crtSweep &&
+            crtSweepBright == other.crtSweepBright &&
             crtBrightness == other.crtBrightness &&
             crtNoise == other.crtNoise &&
             coreOptions == other.coreOptions
@@ -187,6 +189,7 @@ class OverrideManager(
         s["crt_vignette"]?.toFloatOrNull()?.let { settings.crtVignette = it }
         s["crt_glow"]?.toFloatOrNull()?.let { settings.crtGlow = it }
         s["crt_sweep"]?.toFloatOrNull()?.let { settings.crtSweep = it }
+        s["crt_sweep_bright"]?.toFloatOrNull()?.let { settings.crtSweepBright = it }
         s["crt_brightness"]?.toFloatOrNull()?.let { settings.crtBrightness = it }
         s["crt_noise"]?.toFloatOrNull()?.let { settings.crtNoise = it }
     }
@@ -240,6 +243,7 @@ class OverrideManager(
         "crt_vignette" to settings.crtVignette.toString(),
         "crt_glow" to settings.crtGlow.toString(),
         "crt_sweep" to settings.crtSweep.toString(),
+        "crt_sweep_bright" to settings.crtSweepBright.toString(),
         "crt_brightness" to settings.crtBrightness.toString(),
         "crt_noise" to settings.crtNoise.toString()
     )
@@ -257,6 +261,7 @@ class OverrideManager(
         if (settings.crtVignette != baseline.crtVignette) delta["crt_vignette"] = settings.crtVignette.toString()
         if (settings.crtGlow != baseline.crtGlow) delta["crt_glow"] = settings.crtGlow.toString()
         if (settings.crtSweep != baseline.crtSweep) delta["crt_sweep"] = settings.crtSweep.toString()
+        if (settings.crtSweepBright != baseline.crtSweepBright) delta["crt_sweep_bright"] = settings.crtSweepBright.toString()
         if (settings.crtBrightness != baseline.crtBrightness) delta["crt_brightness"] = settings.crtBrightness.toString()
         if (settings.crtNoise != baseline.crtNoise) delta["crt_noise"] = settings.crtNoise.toString()
         return delta

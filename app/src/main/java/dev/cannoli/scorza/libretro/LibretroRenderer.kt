@@ -32,6 +32,7 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
     @Volatile var crtVignette = 0.85f
     @Volatile var crtGlow = 0.25f
     @Volatile var crtSweep = 1.0f
+    @Volatile var crtSweepBright = 0.35f
     @Volatile var crtBrightness = 1.0f
     @Volatile var crtNoise = 0.15f
 
@@ -44,9 +45,10 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
     @Volatile var viewportHeight = 0; private set
 
     private var frameCount = 0
-    private var totalFrameCount = 0
     private var fpsTimestamp = 0L
     private var startTimeNanos = 0L
+    private var sweepAccumNanos = 0L
+    private var sweepLastNanos = 0L
 
     var onFrameRendered: (() -> Unit)? = null
 
@@ -79,7 +81,9 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         fpsTimestamp = System.nanoTime()
-        startTimeNanos = System.nanoTime()
+        val now = System.nanoTime()
+        startTimeNanos = now
+        sweepLastNanos = now
 
         val vertices = floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)
         vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
@@ -136,13 +140,12 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         val w = runner.getFrameWidth()
         val h = runner.getFrameHeight()
         if (w == 0 || h == 0) {
-            if (screenEffect == ScreenEffect.CRT && totalFrameCount < 112) {
+            if (screenEffect == ScreenEffect.CRT && elapsedSeconds() < 1.867f) {
                 drawCrtBoot()
             } else {
                 GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
             }
             frameCount++
-            totalFrameCount++
             val now = System.nanoTime()
             val elapsed = now - fpsTimestamp
             if (elapsed >= 1_000_000_000L) {
@@ -234,13 +237,12 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         viewportHeight = vpH
 
         if (screenEffect == ScreenEffect.CRT) {
-            drawCrt(w, h, vpX, vpY, vpW, vpH, totalFrameCount)
+            drawCrt(w, h, vpX, vpY, vpW, vpH)
         } else {
             drawSimple(w, h, vpX, vpY, vpW, vpH)
         }
 
         frameCount++
-        totalFrameCount++
         val now = System.nanoTime()
         val elapsed = now - fpsTimestamp
         if (elapsed >= 1_000_000_000L) {
@@ -291,20 +293,32 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uVignette"), crtVignette)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uGlow"), crtGlow)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uSweep"), crtSweep)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uSweepBright"), crtSweepBright)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uBrightness"), crtBrightness)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uNoise"), crtNoise)
-        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uFrameCount"), totalFrameCount.toFloat())
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uTime"), elapsedSeconds())
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uSweepPhase"), sweepPhase())
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         unbindQuadAttribs(programCrt)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
     }
 
-    private fun sweepTime(): Float {
-        val elapsedSec = (System.nanoTime() - startTimeNanos) / 1_000_000_000f
-        return elapsedSec * 60f
+    private val SWEEP_CYCLE_NANOS = 8_000_000_000L
+
+    private fun elapsedSeconds(): Float =
+        (System.nanoTime() - startTimeNanos) / 1_000_000_000f
+
+    private fun sweepPhase(): Float {
+        val now = System.nanoTime()
+        if (!paused) {
+            sweepAccumNanos += now - sweepLastNanos
+            sweepAccumNanos %= SWEEP_CYCLE_NANOS
+        }
+        sweepLastNanos = now
+        return 1f - sweepAccumNanos.toFloat() / SWEEP_CYCLE_NANOS
     }
 
-    private fun drawCrt(w: Int, h: Int, vpX: Int, vpY: Int, vpW: Int, vpH: Int, bootFrameCount: Int) {
+    private fun drawCrt(w: Int, h: Int, vpX: Int, vpY: Int, vpW: Int, vpH: Int) {
         ensureCrtFbos(w, h)
 
         // Blit: copy game frame into FBO with Y-flip
@@ -365,10 +379,11 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uVignette"), crtVignette)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uGlow"), crtGlow)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uSweep"), crtSweep)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uSweepBright"), crtSweepBright)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uBrightness"), crtBrightness)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uNoise"), crtNoise)
-        val frameVal = if (bootFrameCount < 112) bootFrameCount.toFloat() else sweepTime()
-        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uFrameCount"), frameVal)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uTime"), elapsedSeconds())
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(programCrt, "uSweepPhase"), sweepPhase())
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         unbindQuadAttribs(programCrt)
 

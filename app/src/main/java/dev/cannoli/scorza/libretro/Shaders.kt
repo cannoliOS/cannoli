@@ -78,9 +78,11 @@ object Shaders {
         uniform float uVignette;
         uniform float uGlow;
         uniform float uSweep;
+        uniform float uSweepBright;
         uniform float uBrightness;
         uniform float uNoise;
-        uniform float uFrameCount;
+        uniform float uTime;
+        uniform float uSweepPhase;
 
         vec2 Warp(vec2 pos) {
             pos = pos * 2.0 - 1.0;
@@ -139,9 +141,8 @@ object Shaders {
             colour *= mix(1.0, vx * vy, uVignette);
 
             // Phosphor sweep — bright band rolling top to bottom
-            float sweep = 1.0 - mod(uFrameCount, 480.0) / 480.0;
-            float band = smoothstep(0.04, 0.0, abs(xy.y - sweep));
-            colour *= 1.0 + band * 0.07 * uSweep;
+            float band = smoothstep(0.04, 0.0, abs(xy.y - uSweepPhase));
+            colour *= 1.0 + band * uSweepBright * uSweep;
 
             // Inverse gamma — compensate for darkening from scanline + mask
             float pwr = 1.0 / ((-0.0325 * uScanline + 1.0) * (-0.311 * uMaskDark + 1.0)) - 1.2;
@@ -160,26 +161,26 @@ object Shaders {
             }
 
             // Static noise
-            float ntime = mod(uFrameCount, 1000.0);
+            float ntime = fract(uTime * 60.0) * 1000.0;
             vec2 seed = floor(vTexCoord * uOutputSize.xy) + vec2(ntime, ntime * 1.7);
             float n = (rand(seed) - 0.5) * 0.2 * uNoise;
             colour += vec3(n);
 
             // CRT boot — line, reveal from center, soft-to-sharp warmup
-            if (uFrameCount < 112.0) {
+            if (uTime < 1.867) {
                 float dist = abs(xy.y - 0.5);
 
-                if (uFrameCount < 11.0) {
+                if (uTime < 0.183) {
                     colour = vec3(0.0);
-                } else if (uFrameCount < 45.0) {
-                    float t = (uFrameCount - 11.0) / 34.0;
-                    float flicker = 0.8 + 0.2 * sin(uFrameCount * 3.5);
+                } else if (uTime < 0.75) {
+                    float t = (uTime - 0.183) / 0.567;
+                    float flicker = 0.8 + 0.2 * sin(uTime * 210.0);
                     float line = smoothstep(0.02, 0.0, dist) * flicker;
                     float glw = exp(-dist * dist * 200.0) * 0.4 * flicker;
                     float intensity = smoothstep(0.0, 0.2, t) * (line + glw);
                     colour = vec3(intensity * 0.7, intensity * 0.8, intensity * 1.0);
                 } else {
-                    float t = (uFrameCount - 45.0) / 67.0;
+                    float t = (uTime - 0.75) / 1.117;
                     float warmup = t * t;
 
                     vec3 blurry = texture2D(uGlowTex, xy).rgb;
