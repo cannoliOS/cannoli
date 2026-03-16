@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
 
         systemListViewModel = SystemListViewModel(scanner)
         gameListViewModel = GameListViewModel(scanner, platformResolver)
-        settingsViewModel = SettingsViewModel(settings, root)
+        settingsViewModel = SettingsViewModel(settings, root, packageManager)
         atomicRename = AtomicRename(root)
 
         globalOverrides = GlobalOverridesManager { settings.sdCardRoot }

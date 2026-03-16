@@ -106,6 +106,7 @@ class FileScanner(
 
         val discGroups = discCandidates.groupBy { it.displayName.replace(discRegex, "").trim() }
 
+        val usedM3uPaths = mutableSetOf<String>()
         val grouped = discGroups.flatMap { (baseName, games) ->
             if (games.size <= 1) return@flatMap games
 
@@ -114,6 +115,7 @@ class FileScanner(
                     it.file.nameWithoutExtension == baseName
             }
             if (existingM3u != null) {
+                usedM3uPaths.add(existingM3u.file.absolutePath)
                 return@flatMap listOf(existingM3u)
             }
 
@@ -137,7 +139,9 @@ class FileScanner(
             .values.flatten().map { it.file.absolutePath }.toSet()
 
         val filtered = others.filter {
-            it.file.absolutePath !in discFileSet && it.file.absolutePath !in coveredByM3u
+            it.file.absolutePath !in discFileSet &&
+                it.file.absolutePath !in coveredByM3u &&
+                it.file.absolutePath !in usedM3uPaths
         }
 
         val favPaths = getFavoritePaths()
@@ -215,7 +219,8 @@ class FileScanner(
             .filter { it.exists() && it.isFile }
             .map { file ->
                 val tag = resolvePlatformTag(file)
-                val displayName = file.nameWithoutExtension
+                val rawName = file.nameWithoutExtension
+                val displayName = rawName.replace(discRegex, "").trim().ifEmpty { rawName }
                 val artFile = findArt(tag, displayName)
                 val emuLaunch = platformResolver.getEmuLaunch(tag, romsDir)
                 val coreName = platformResolver.getCoreName(tag)

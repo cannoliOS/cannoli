@@ -186,6 +186,11 @@ class SettingsRepository(context: Context) {
     companion object {
         const val DEFAULT_ROOT = "/storage/emulated/0/Cannoli/"
         const val DEFAULT_RA_PACKAGE = "com.retroarch.aarch64"
+        val KNOWN_RA_PACKAGES = listOf(
+            "com.retroarch.aarch64",
+            "com.retroarch",
+            "com.retroarch.ra32"
+        )
 
         private const val KEY_SETUP_COMPLETED = "setup_completed"
         private const val KEY_SD_ROOT = "sd_root"

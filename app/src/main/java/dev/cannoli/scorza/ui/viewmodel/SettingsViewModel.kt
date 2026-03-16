@@ -1,9 +1,11 @@
 package dev.cannoli.scorza.ui.viewmodel
 
+import android.content.pm.PackageManager
 import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import dev.cannoli.scorza.R
+import dev.cannoli.scorza.launcher.isPackageInstalled
 import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.settings.TextSize
 import dev.cannoli.scorza.settings.TimeFormat
@@ -14,7 +16,8 @@ import kotlinx.coroutines.flow.update
 
 class SettingsViewModel(
     private val settings: SettingsRepository,
-    private val cannoliRoot: java.io.File? = null
+    private val cannoliRoot: java.io.File? = null,
+    private val packageManager: PackageManager? = null
 ) : ViewModel() {
 
     data class SettingsItem(
@@ -90,6 +93,12 @@ class SettingsViewModel(
         Category("advanced", R.string.settings_advanced),
         Category("about", R.string.settings_about)
     )
+
+    private val installedRaPackages: List<String> by lazy {
+        val pm = packageManager ?: return@lazy listOf(settings.retroArchPackage)
+        val installed = SettingsRepository.KNOWN_RA_PACKAGES.filter { pm.isPackageInstalled(it) }
+        installed.ifEmpty { listOf(settings.retroArchPackage) }
+    }
 
     private var snapshot: Map<String, Any?> = emptyMap()
 
@@ -190,7 +199,13 @@ class SettingsViewModel(
             "show_battery" -> settings.showBattery = !settings.showBattery
             "show_tools" -> settings.showTools = !settings.showTools
             "show_ports" -> settings.showPorts = !settings.showPorts
-
+            "ra_package" -> {
+                val pkgs = installedRaPackages
+                if (pkgs.size > 1) {
+                    val cur = pkgs.indexOf(settings.retroArchPackage).coerceAtLeast(0)
+                    settings.retroArchPackage = pkgs[((cur + direction) % pkgs.size + pkgs.size) % pkgs.size]
+                }
+            }
         }
 
         val catKey = current.activeCategory ?: return
@@ -378,7 +393,7 @@ class SettingsViewModel(
         "advanced" -> listOf(
             SettingsItem("core_mapping", R.string.setting_core_mapping, isEditable = true),
             SettingsItem("sd_root", R.string.setting_sd_root, valueText = settings.sdCardRoot, isEditable = true),
-            SettingsItem("ra_package", R.string.setting_ra_package, valueText = settings.retroArchPackage, isEditable = true)
+            SettingsItem("ra_package", R.string.setting_ra_package, valueText = settings.retroArchPackage)
         )
         else -> emptyList()
     }

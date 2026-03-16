@@ -40,9 +40,12 @@ class RetroArchLauncher(
 }
 
 /** Checks whether a package is installed on the device. */
-fun Context.isPackageInstalled(packageName: String): Boolean {
+fun Context.isPackageInstalled(packageName: String): Boolean =
+    packageManager.isPackageInstalled(packageName)
+
+fun PackageManager.isPackageInstalled(packageName: String): Boolean {
     return try {
-        packageManager.getPackageInfo(packageName, 0)
+        getPackageInfo(packageName, 0)
         true
     } catch (_: PackageManager.NameNotFoundException) {
         false
