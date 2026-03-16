@@ -241,6 +241,7 @@ class FileScanner(
                     launchTarget = target
                 )
             }
+            .let(::stripTags)
             .let { games ->
                 if (collectionName.equals("Favorites", ignoreCase = true)) {
                     games.sortedWith(compareBy(dev.cannoli.scorza.util.NaturalSort) { it.displayName })
