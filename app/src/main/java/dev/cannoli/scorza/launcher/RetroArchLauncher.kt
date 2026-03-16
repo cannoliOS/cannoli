@@ -16,9 +16,7 @@ class RetroArchLauncher(
             return LaunchResult.AppNotInstalled(retroArchPackage)
         }
 
-        val configFile = File(emulationRoot, "Config/retroarch.cfg")
-        val configPath = if (configFile.exists()) configFile.absolutePath else ""
-
+        // TODO: re-enable passing a config file to RetroArch once config management is implemented
         val intent = Intent().apply {
             component = ComponentName(
                 retroArchPackage,
@@ -26,7 +24,6 @@ class RetroArchLauncher(
             )
             putExtra("LIBRETRO", "/data/data/$retroArchPackage/cores/${coreName}_android.so")
             putExtra("ROM", romFile.absolutePath)
-            putExtra("CONFIGFILE", configPath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
