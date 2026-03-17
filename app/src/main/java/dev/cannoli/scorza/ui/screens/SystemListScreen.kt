@@ -46,18 +46,6 @@ fun SystemListScreen(
     val state by viewModel.state.collectAsState()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
 
-    if (dialogState.isFullScreen) {
-        DialogOverlay(
-            dialogState = dialogState,
-            backgroundImagePath = backgroundImagePath,
-            backgroundTint = backgroundTint,
-            listFontSize = listFontSize,
-            listLineHeight = listLineHeight,
-            listVerticalPadding = listVerticalPadding
-        )
-        return
-    }
-
     ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
         Box(
             modifier = Modifier
@@ -92,7 +80,18 @@ fun SystemListScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 48.dp)
+                    .padding(bottom = 48.dp),
+                key = { _, item ->
+                    when (item) {
+                        is ListItem.FavoritesItem -> "favorites"
+                        is ListItem.CollectionsFolder -> "collections"
+                        is ListItem.PlatformItem -> item.platform.tag
+                        is ListItem.CollectionItem -> "col:${item.name}"
+                        is ListItem.ToolsFolder -> "tools"
+                        is ListItem.PortsFolder -> "ports"
+                        is ListItem.Divider -> "div:${item.label}"
+                    }
+                }
             ) { index, item ->
                 val label = when (item) {
                     is ListItem.FavoritesItem -> "Favorites"
@@ -134,5 +133,16 @@ fun SystemListScreen(
                 rightItems = rightItems
             )
         }
+    }
+
+    if (dialogState.isFullScreen) {
+        DialogOverlay(
+            dialogState = dialogState,
+            backgroundImagePath = backgroundImagePath,
+            backgroundTint = backgroundTint,
+            listFontSize = listFontSize,
+            listLineHeight = listLineHeight,
+            listVerticalPadding = listVerticalPadding
+        )
     }
 }

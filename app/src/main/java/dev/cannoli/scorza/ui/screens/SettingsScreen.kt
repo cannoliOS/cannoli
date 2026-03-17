@@ -42,18 +42,6 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsState()
     val itemHeight = pillItemHeight(listLineHeight, listVerticalPadding)
 
-    if (dialogState.isFullScreen) {
-        DialogOverlay(
-            dialogState = dialogState,
-            backgroundImagePath = backgroundImagePath,
-            backgroundTint = backgroundTint,
-            listFontSize = listFontSize,
-            listLineHeight = listLineHeight,
-            listVerticalPadding = listVerticalPadding
-        )
-        return
-    }
-
     ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
     Box(
         modifier = Modifier
@@ -79,7 +67,8 @@ fun SettingsScreen(
                     items = state.items,
                     selectedIndex = state.selectedIndex,
                     itemHeight = itemHeight,
-                    onVisibleRangeChanged = onVisibleRangeChanged
+                    onVisibleRangeChanged = onVisibleRangeChanged,
+                    key = { _, item -> item.key }
                 ) { index, item ->
                     PillRowKeyValue(
                         label = stringResource(item.labelRes),
@@ -127,7 +116,8 @@ fun SettingsScreen(
                     items = state.categories,
                     selectedIndex = state.categoryIndex,
                     itemHeight = itemHeight,
-                    onVisibleRangeChanged = onVisibleRangeChanged
+                    onVisibleRangeChanged = onVisibleRangeChanged,
+                    key = { _, category -> category.key }
                 ) { index, category ->
                     PillRowText(
                         label = stringResource(category.labelRes),
@@ -146,5 +136,16 @@ fun SettingsScreen(
             )
         }
     }
+    }
+
+    if (dialogState.isFullScreen) {
+        DialogOverlay(
+            dialogState = dialogState,
+            backgroundImagePath = backgroundImagePath,
+            backgroundTint = backgroundTint,
+            listFontSize = listFontSize,
+            listLineHeight = listLineHeight,
+            listVerticalPadding = listVerticalPadding
+        )
     }
 }

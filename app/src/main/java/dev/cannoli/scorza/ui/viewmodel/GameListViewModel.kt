@@ -223,7 +223,8 @@ class GameListViewModel(
         val game = current.games.getOrNull(current.selectedIndex) ?: return
         if (game.isSubfolder || current.isCollectionsList || current.platformTag in listOf("tools", "ports")) return
         val path = game.file.absolutePath
-        val isFav = game.displayName.startsWith("★")
+        val isFav = game.displayName.startsWith("★") ||
+            (current.isCollection && current.collectionName == "Favorites")
         val oldIndex = current.selectedIndex
         viewModelScope.launch(Dispatchers.IO) {
             if (isFav) scanner.removeFromCollection("Favorites", path)
@@ -233,7 +234,8 @@ class GameListViewModel(
             } else {
                 scanner.scanGames(current.platformTag, current.subfolderPath)
             }
-            val newIndex = oldIndex.coerceAtMost(newGames.lastIndex.coerceAtLeast(0))
+            val newIndex = newGames.indexOfFirst { it.file.absolutePath == path }
+                .let { if (it >= 0) it else oldIndex.coerceAtMost(newGames.lastIndex.coerceAtLeast(0)) }
             _state.value = current.copy(games = newGames, selectedIndex = newIndex, scrollTarget = -1)
             withContext(Dispatchers.Main) { onDone() }
         }

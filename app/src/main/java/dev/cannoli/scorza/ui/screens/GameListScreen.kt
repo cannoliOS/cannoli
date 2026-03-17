@@ -20,7 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +52,8 @@ import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.GrayText
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 import dev.cannoli.scorza.ui.viewmodel.GameListViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun GameListScreen(
@@ -70,27 +72,16 @@ fun GameListScreen(
     val selectedGame = state.games.getOrNull(state.selectedIndex)
     val hasResumeState = selectedGame != null && !selectedGame.isSubfolder && resumableGames.contains(selectedGame.file.absolutePath)
 
-    if (dialogState.isFullScreen) {
-        DialogOverlay(
-            dialogState = dialogState,
-            backgroundImagePath = backgroundImagePath,
-            backgroundTint = backgroundTint,
-            listFontSize = listFontSize,
-            listLineHeight = listLineHeight,
-            listVerticalPadding = listVerticalPadding
-        )
-        return
-    }
-
-    val selectedArt: ImageBitmap? = if (selectedGame != null && !selectedGame.isSubfolder) {
-        remember(selectedGame.artFile?.absolutePath) {
-            selectedGame.artFile?.let { file ->
+    val artPath = if (selectedGame != null && !selectedGame.isSubfolder) selectedGame.artFile?.absolutePath else null
+    val selectedArt by produceState<ImageBitmap?>(null, artPath) {
+        value = if (artPath != null) {
+            withContext(Dispatchers.IO) {
                 try {
-                    BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                    BitmapFactory.decodeFile(artPath)?.asImageBitmap()
                 } catch (_: Exception) { null }
             }
-        }
-    } else null
+        } else null
+    }
 
     ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
         Box(
@@ -139,7 +130,8 @@ fun GameListScreen(
                                 onVisibleRangeChanged = { first, count, full ->
                                     viewModel.firstVisibleIndex = first
                                     onVisibleRangeChanged(first, count, full)
-                                }
+                                },
+                                key = { _, game -> game.file.absolutePath }
                             ) { index, game ->
                                 GameRow(
                                     game = game,
@@ -161,7 +153,7 @@ fun GameListScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Image(
-                                    bitmap = selectedArt!!,
+                                    bitmap = selectedArt ?: return@Box,
                                     contentDescription = null,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -193,7 +185,8 @@ fun GameListScreen(
             } else {
                 buildList {
                     if (showFavHint) {
-                        val isFav = selectedGame?.displayName?.startsWith("★") == true
+                        val isFav = selectedGame?.displayName?.startsWith("★") == true ||
+                            (state.isCollection && state.collectionName == "Favorites")
                         add("Y" to if (isFav) "UNFAVORITE" else "FAVORITE")
                     }
                     if (hasResumeState) add("X" to "RESUME")
@@ -229,6 +222,17 @@ fun GameListScreen(
                 else -> {}
             }
         }
+    }
+
+    if (dialogState.isFullScreen) {
+        DialogOverlay(
+            dialogState = dialogState,
+            backgroundImagePath = backgroundImagePath,
+            backgroundTint = backgroundTint,
+            listFontSize = listFontSize,
+            listLineHeight = listLineHeight,
+            listVerticalPadding = listVerticalPadding
+        )
     }
 }
 

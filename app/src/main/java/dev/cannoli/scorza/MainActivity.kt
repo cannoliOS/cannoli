@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
             if (!screen.listening) return
             val newMs = screen.countdownMs + shortcutTickMs.toInt()
             if (newMs >= shortcutHoldMs) {
-                val action = ShortcutAction.entries[screen.selectedIndex]
+                val action = ShortcutAction.entries.getOrNull(screen.selectedIndex) ?: return
                 screenStack[screenStack.lastIndex] = screen.copy(
                     shortcuts = screen.shortcuts + (action to screen.heldKeys),
                     listening = false, heldKeys = emptySet(), countdownMs = 0
@@ -379,6 +379,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        settings.shutdown()
         ioScope.cancel()
         dev.cannoli.scorza.server.KitchenManager.stop()
     }
@@ -427,7 +428,7 @@ class MainActivity : ComponentActivity() {
         val screen = screenStack.lastOrNull() ?: return false
         when (screen) {
             is LauncherScreen.ControlBinding -> {
-                if (screen.listeningIndex < 0) return false
+                if (screen.listeningIndex < 0 || screen.listeningIndex >= controlButtons.size) return false
                 shortcutCountdownHandler.removeCallbacks(controlListenRunnable)
                 val btn = controlButtons[screen.listeningIndex]
                 screenStack[screenStack.lastIndex] = screen.copy(
@@ -916,29 +917,31 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     is LauncherScreen.CoreMapping -> {
-                        val entry = screen.mappings[screen.selectedIndex]
-                        val options = platformResolver.getCorePickerOptions(entry.tag, packageManager)
-                        val currentCore = platformResolver.getCoreMapping(entry.tag)
-                        val currentApp = platformResolver.getAppPackage(entry.tag)
-                        val currentRunner = entry.runnerLabel
-                        val selectedIdx = if (currentRunner == "App" && currentApp != null) {
-                            options.indexOfFirst { it.appPackage == currentApp }.coerceAtLeast(0)
-                        } else {
-                            options.indexOfFirst { it.coreId == currentCore && it.runnerLabel == currentRunner }
-                                .coerceAtLeast(options.indexOfFirst { it.coreId == currentCore }.coerceAtLeast(0))
+                        screen.mappings.getOrNull(screen.selectedIndex)?.let { entry ->
+                            val options = platformResolver.getCorePickerOptions(entry.tag, packageManager)
+                            val currentCore = platformResolver.getCoreMapping(entry.tag)
+                            val currentApp = platformResolver.getAppPackage(entry.tag)
+                            val currentRunner = entry.runnerLabel
+                            val selectedIdx = if (currentRunner == "App" && currentApp != null) {
+                                options.indexOfFirst { it.appPackage == currentApp }.coerceAtLeast(0)
+                            } else {
+                                options.indexOfFirst { it.coreId == currentCore && it.runnerLabel == currentRunner }
+                                    .coerceAtLeast(options.indexOfFirst { it.coreId == currentCore }.coerceAtLeast(0))
+                            }
+                            pushScreen(LauncherScreen.CorePicker(
+                                tag = entry.tag,
+                                platformName = entry.platformName,
+                                cores = options,
+                                selectedIndex = selectedIdx,
+                                activeIndex = selectedIdx
+                            ))
                         }
-                        pushScreen(LauncherScreen.CorePicker(
-                            tag = entry.tag,
-                            platformName = entry.platformName,
-                            cores = options,
-                            selectedIndex = selectedIdx,
-                            activeIndex = selectedIdx
-                        ))
                     }
                     is LauncherScreen.CorePicker -> onCorePickerConfirm(screen)
                     is LauncherScreen.ColorList -> {
-                        val entry = screen.colors[screen.selectedIndex]
-                        openColorPicker(entry.key)
+                        screen.colors.getOrNull(screen.selectedIndex)?.let { entry ->
+                            openColorPicker(entry.key)
+                        }
                     }
                     is LauncherScreen.CollectionPicker -> {
                         if (screen.collections.isNotEmpty()) {
@@ -1054,7 +1057,7 @@ class MainActivity : ComponentActivity() {
                         if (screen.gamePath != null) {
                             restoreContextMenu()
                         } else {
-                            val cm = screenStack.last()
+                            val cm = screenStack.lastOrNull()
                             if (cm is LauncherScreen.CoreMapping) {
                                 val mappings = platformResolver.getDetailedMappings(packageManager)
                                 val idx = mappings.indexOfFirst { it.tag == screen.tag }.coerceAtLeast(0)
@@ -1247,10 +1250,11 @@ class MainActivity : ComponentActivity() {
                     }
                     is LauncherScreen.ShortcutBinding -> {
                         if (!screen.listening) {
-                            val action = ShortcutAction.entries[screen.selectedIndex]
-                            screenStack[screenStack.lastIndex] = screen.copy(
-                                shortcuts = screen.shortcuts + (action to emptySet())
-                            )
+                            ShortcutAction.entries.getOrNull(screen.selectedIndex)?.let { action ->
+                                screenStack[screenStack.lastIndex] = screen.copy(
+                                    shortcuts = screen.shortcuts + (action to emptySet())
+                                )
+                            }
                         }
                     }
                     else -> {}
@@ -1540,8 +1544,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onCorePickerConfirm(screen: LauncherScreen.CorePicker) {
-        if (screen.cores.isEmpty()) return
-        val chosen = screen.cores[screen.selectedIndex]
+        val chosen = screen.cores.getOrNull(screen.selectedIndex) ?: return
         if (screen.gamePath != null) {
             if (chosen.coreId.isEmpty() && chosen.appPackage == null) {
                 platformResolver.setGameOverride(screen.gamePath, null, null)
@@ -1563,7 +1566,7 @@ class MainActivity : ComponentActivity() {
             }
             platformResolver.saveCoreMappings()
             screenStack.removeAt(screenStack.lastIndex)
-            val cm = screenStack.last()
+            val cm = screenStack.lastOrNull()
             if (cm is LauncherScreen.CoreMapping) {
                 val mappings = platformResolver.getDetailedMappings(packageManager)
                 val idx = mappings.indexOfFirst { it.tag == screen.tag }.coerceAtLeast(0)
@@ -1793,7 +1796,7 @@ class MainActivity : ComponentActivity() {
             restoreContextMenu()
             return
         }
-        restoreContextMenu()
+        dialogState.value = DialogState.None
         ioScope.launch {
             scanner.renameCollection(state.oldName, newName)
             gameListViewModel.loadCollectionsList(restoreIndex = true)
@@ -1824,7 +1827,12 @@ class MainActivity : ComponentActivity() {
                     if (msg != null) dialogState.value = DialogState.RenameResult(false, msg)
                 }
             } else {
-                atomicRename.rename(game.file, newName, game.platformTag)
+                val result = atomicRename.rename(game.file, newName, game.platformTag)
+                if (!result.success) {
+                    withContext(Dispatchers.Main) {
+                        dialogState.value = DialogState.RenameResult(false, result.error ?: "Rename failed")
+                    }
+                }
             }
             scanner.invalidateArtCache()
             gameListViewModel.reload()
