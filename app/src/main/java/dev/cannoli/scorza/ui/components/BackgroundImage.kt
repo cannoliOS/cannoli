@@ -6,11 +6,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -25,20 +29,22 @@ fun ScreenBackground(
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = backgroundAlpha)))
 
         if (backgroundImagePath != null) {
-            val bitmap = remember(backgroundImagePath) {
-                try {
-                    val file = File(backgroundImagePath)
-                    if (file.exists()) {
-                        BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
-                    } else null
-                } catch (_: Exception) {
-                    null
+            val bitmap by produceState<ImageBitmap?>(null, backgroundImagePath) {
+                value = withContext(Dispatchers.IO) {
+                    try {
+                        val file = File(backgroundImagePath)
+                        if (file.exists()) {
+                            BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                        } else null
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
             }
 
             if (bitmap != null) {
                 Image(
-                    bitmap = bitmap,
+                    bitmap = bitmap!!,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

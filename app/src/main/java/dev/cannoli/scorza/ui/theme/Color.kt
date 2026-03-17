@@ -39,10 +39,9 @@ val COLOR_PRESETS = listOf(
 )
 
 fun colorToHex(color: Color): String {
-    val argb = color.value.shr(32).toLong()
-    val r = (argb shr 16) and 0xFF
-    val g = (argb shr 8) and 0xFF
-    val b = argb and 0xFF
+    val r = (color.red * 255).toInt()
+    val g = (color.green * 255).toInt()
+    val b = (color.blue * 255).toInt()
     return "#%02X%02X%02X".format(r, g, b)
 }
 
@@ -57,6 +56,8 @@ fun hexToColor(hex: String): Color? {
 }
 
 fun colorToArgbLong(color: Color): Long {
-    val argb = color.value.shr(32).toLong()
-    return argb or (0xFFL shl 24)
+    val r = (color.red * 255).toLong()
+    val g = (color.green * 255).toLong()
+    val b = (color.blue * 255).toLong()
+    return (0xFFL shl 24) or (r shl 16) or (g shl 8) or b
 }

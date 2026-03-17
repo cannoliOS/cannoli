@@ -37,14 +37,21 @@ fun ListScrollEffect(
         }
     }
 
-    LaunchedEffect(selectedIndex) {
+    LaunchedEffect(selectedIndex, itemCount) {
         if (itemCount == 0) return@LaunchedEffect
         if (listState.layoutInfo.visibleItemsInfo.isEmpty()) return@LaunchedEffect
 
         val index = selectedIndex.coerceAtLeast(0)
+        val totalHeight = listState.layoutInfo.visibleItemsInfo.sumOf { it.size }
+        val viewportHeight = listState.layoutInfo.viewportEndOffset
+        if (totalHeight <= viewportHeight) {
+            if (listState.firstVisibleItemIndex != 0) listState.scrollToItem(0)
+            return@LaunchedEffect
+        }
+
         val fullyVisible = listState.layoutInfo.visibleItemsInfo.filter { info ->
             info.offset >= 0 &&
-                info.offset + info.size <= listState.layoutInfo.viewportEndOffset
+                info.offset + info.size <= viewportHeight
         }
         val fullyVisibleCount = fullyVisible.size.coerceAtLeast(1)
         val firstFullyVisible = fullyVisible.firstOrNull()?.index ?: 0

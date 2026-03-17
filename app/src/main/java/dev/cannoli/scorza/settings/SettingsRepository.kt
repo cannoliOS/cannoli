@@ -56,6 +56,11 @@ class SettingsRepository(context: Context) {
         saveToDisk()
     }
 
+    fun shutdown() {
+        flush()
+        saveThread.quitSafely()
+    }
+
     private fun migrateFromPrefs() {
         synchronized(jsonLock) { if (json.length() > 0) return }
         val keys = prefs.all.keys - KEY_SD_ROOT

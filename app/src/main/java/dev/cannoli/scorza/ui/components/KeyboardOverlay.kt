@@ -101,14 +101,16 @@ fun KeyboardOverlay(
         cursorVisible = true
     }
 
-    val beforeCursor = text.substring(0, cursorPos)
-    val afterCursor = text.substring(cursorPos)
+    val safeCursor = cursorPos.coerceIn(0, text.length)
+    val beforeCursor = text.substring(0, safeCursor)
+    val afterCursor = text.substring(safeCursor)
     val cursorChar = if (cursorVisible) "|" else " "
     val displayText = "$beforeCursor$cursorChar$afterCursor"
 
     LaunchedEffect(cursorPos, text) {
+        val clamped = cursorPos.coerceIn(0, text.length)
         val target = if (text.isEmpty()) 0
-        else (scrollState.maxValue * cursorPos / (text.length + 1).coerceAtLeast(1))
+        else (scrollState.maxValue * clamped / (text.length + 1).coerceAtLeast(1))
         scrollState.scrollTo(target.coerceAtLeast(0))
     }
 
@@ -246,12 +248,14 @@ fun handleKeyboardConfirm(
             }
         }
         KEY_SPACE -> {
-            val newName = currentName.substring(0, cursorPos) + " " + currentName.substring(cursorPos)
-            onChar(newName, cursorPos + 1)
+            val pos = cursorPos.coerceIn(0, currentName.length)
+            val newName = currentName.substring(0, pos) + " " + currentName.substring(pos)
+            onChar(newName, pos + 1)
         }
         else -> {
-            val newName = currentName.substring(0, cursorPos) + key + currentName.substring(cursorPos)
-            onChar(newName, cursorPos + 1)
+            val pos = cursorPos.coerceIn(0, currentName.length)
+            val newName = currentName.substring(0, pos) + key + currentName.substring(pos)
+            onChar(newName, pos + 1)
         }
     }
 }

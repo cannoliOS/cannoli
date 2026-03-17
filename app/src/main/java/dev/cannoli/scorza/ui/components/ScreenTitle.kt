@@ -42,6 +42,9 @@ fun ScreenTitle(
     var adjustedFontSizeSp by remember(text, scaledFontSizeSp, statusBarLeftPx) {
         mutableStateOf(scaledFontSizeSp)
     }
+    var fontSettled by remember(text, scaledFontSizeSp, statusBarLeftPx) {
+        mutableStateOf(false)
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val containerWidthPx = with(density) { maxWidth.toPx() }
@@ -62,9 +65,10 @@ fun ScreenTitle(
             maxLines = 1,
             softWrap = false,
             onTextLayout = { result ->
-                if (result.size.width > availableWidthPx && adjustedFontSizeSp > fontSize.value) {
+                if (!fontSettled && result.size.width > availableWidthPx && adjustedFontSizeSp > fontSize.value) {
                     val scale = availableWidthPx / result.size.width
                     adjustedFontSizeSp = (adjustedFontSizeSp * scale - 0.2f).coerceAtLeast(fontSize.value)
+                    fontSettled = true
                 }
             },
             modifier = Modifier

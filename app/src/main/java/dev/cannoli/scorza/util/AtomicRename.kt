@@ -113,13 +113,15 @@ class AtomicRename(private val cannoliRoot: File) {
     private fun updateCollectionReferences(oldPath: String, newPath: String) {
         if (!collectionsDir.exists()) return
         collectionsDir.listFiles { f -> f.extension == "txt" }?.forEach { collFile ->
-            val lines = collFile.readLines()
-            val updated = lines.map { line ->
-                if (line.trim() == oldPath) newPath else line
-            }
-            if (updated != lines) {
-                collFile.writeText(updated.joinToString("\n") + "\n")
-            }
+            try {
+                val lines = collFile.readLines()
+                val updated = lines.map { line ->
+                    if (line.trim() == oldPath) newPath else line
+                }
+                if (updated != lines) {
+                    collFile.writeText(updated.joinToString("\n") + "\n")
+                }
+            } catch (_: Exception) { }
         }
     }
 }

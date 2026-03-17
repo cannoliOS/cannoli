@@ -20,6 +20,7 @@ fun <T> List(
     scrollTarget: Int = 0,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = scrollTarget),
     onVisibleRangeChanged: ((firstVisible: Int, visibleCount: Int, isViewportFull: Boolean) -> Unit)? = null,
+    key: ((index: Int, item: T) -> Any)? = null,
     itemContent: @Composable (index: Int, item: T) -> Unit
 ) {
     ListScrollEffect(listState, selectedIndex, items.size, scrollTarget, onVisibleRangeChanged)
@@ -47,7 +48,7 @@ fun <T> List(
         modifier = listModifier,
         contentPadding = PaddingValues(bottom = 2000.dp)
     ) {
-        itemsIndexed(items) { index, item ->
+        itemsIndexed(items, key = key) { index, item ->
             itemContent(index, item)
         }
     }
