@@ -167,7 +167,7 @@ class SettingsViewModel(
         when (item.key) {
             "text_size" -> {
                 val entries = TextSize.entries
-                val cur = entries.indexOf(settings.textSize)
+                val cur = entries.indexOf(settings.textSize).coerceAtLeast(0)
                 settings.textSize = entries[((cur + direction) % entries.size + entries.size) % entries.size]
             }
             "show_clock" -> {
@@ -209,7 +209,8 @@ class SettingsViewModel(
         }
 
         val catKey = current.activeCategory ?: return
-        _state.update { it.copy(items = buildItemsForCategory(catKey)) }
+        val newItems = buildItemsForCategory(catKey)
+        _state.update { it.copy(items = newItems, selectedIndex = it.selectedIndex.coerceAtMost((newItems.size - 1).coerceAtLeast(0))) }
         _appSettings.value = readAppSettings()
     }
 
@@ -256,13 +257,11 @@ class SettingsViewModel(
         val newIndex = if (currentIndex == -1) {
             if (direction > 0) 0 else images.lastIndex
         } else {
-            currentIndex + direction
+            val raw = currentIndex + direction
+            if (raw < 0 || raw >= images.size) -1 else raw
         }
 
-        settings.backgroundImagePath = when {
-            newIndex < 0 || newIndex >= images.size -> null
-            else -> images[newIndex].absolutePath
-        }
+        settings.backgroundImagePath = if (newIndex < 0) null else images[newIndex].absolutePath
     }
 
     fun getColorEntries(): List<dev.cannoli.scorza.ui.screens.ColorEntry> {
