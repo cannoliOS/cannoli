@@ -41,23 +41,34 @@ class GameListViewModel(
 
     private val breadcrumbStack = mutableListOf<String>()
     private val indexStack = mutableListOf<Pair<Int, Int>>() // selectedIndex to firstVisibleIndex
-    private var collectionsListSaved: Pair<Int, Int> = 0 to 0 // selectedIndex to firstVisibleIndex
+    private var collectionsListSaved: Pair<Int, Int> = 0 to 0
     private var collectionsListItemCount: Int = 0
+
+    fun saveCollectionsPosition() {
+        val current = _state.value
+        if (current.isCollectionsList) {
+            collectionsListSaved = current.selectedIndex to firstVisibleIndex
+            collectionsListItemCount = current.games.size
+        }
+    }
 
     fun loadPlatform(tag: String, onReady: () -> Unit = {}) {
         breadcrumbStack.clear()
         indexStack.clear()
         viewModelScope.launch(Dispatchers.IO) {
-            val games = scanner.scanGames(tag, null)
-            val displayName = platformResolver.getDisplayName(tag)
-            _state.value = State(
-                platformTag = tag,
-                breadcrumb = displayName,
-                games = games,
-                selectedIndex = 0,
-                isLoading = false
-            )
-            withContext(Dispatchers.Main) { onReady() }
+            try {
+                val games = scanner.scanGames(tag, null)
+                val displayName = platformResolver.getDisplayName(tag)
+                _state.value = State(
+                    platformTag = tag,
+                    breadcrumb = displayName,
+                    games = games,
+                    selectedIndex = 0,
+                    isLoading = false
+                )
+            } finally {
+                withContext(Dispatchers.Main) { onReady() }
+            }
         }
     }
 
@@ -70,16 +81,19 @@ class GameListViewModel(
         breadcrumbStack.clear()
         indexStack.clear()
         viewModelScope.launch(Dispatchers.IO) {
-            val games = scanner.scanCollectionGames(collectionName)
-            _state.value = State(
-                breadcrumb = collectionName,
-                games = games,
-                selectedIndex = 0,
-                isLoading = false,
-                isCollection = true,
-                collectionName = collectionName
-            )
-            withContext(Dispatchers.Main) { onReady() }
+            try {
+                val games = scanner.scanCollectionGames(collectionName)
+                _state.value = State(
+                    breadcrumb = collectionName,
+                    games = games,
+                    selectedIndex = 0,
+                    isLoading = false,
+                    isCollection = true,
+                    collectionName = collectionName
+                )
+            } finally {
+                withContext(Dispatchers.Main) { onReady() }
+            }
         }
     }
 
@@ -87,23 +101,26 @@ class GameListViewModel(
         breadcrumbStack.clear()
         indexStack.clear()
         viewModelScope.launch(Dispatchers.IO) {
-            val entries = if (type == "tools") scanner.scanTools() else scanner.scanPorts()
-            val games = entries.map { (name, launch) ->
-                Game(
-                    file = java.io.File(name),
-                    displayName = name,
+            try {
+                val entries = if (type == "tools") scanner.scanTools() else scanner.scanPorts()
+                val games = entries.map { (name, launch) ->
+                    Game(
+                        file = java.io.File(name),
+                        displayName = name,
+                        platformTag = type,
+                        launchTarget = launch
+                    )
+                }
+                _state.value = State(
                     platformTag = type,
-                    launchTarget = launch
+                    breadcrumb = displayName,
+                    games = games,
+                    selectedIndex = 0,
+                    isLoading = false
                 )
+            } finally {
+                withContext(Dispatchers.Main) { onReady() }
             }
-            _state.value = State(
-                platformTag = type,
-                breadcrumb = displayName,
-                games = games,
-                selectedIndex = 0,
-                isLoading = false
-            )
-            withContext(Dispatchers.Main) { onReady() }
         }
     }
 
@@ -111,8 +128,18 @@ class GameListViewModel(
         breadcrumbStack.clear()
         indexStack.clear()
         viewModelScope.launch(Dispatchers.IO) {
-            val collections = scanner.scanCollections()
-                .filter { !it.name.equals("Favorites", ignoreCase = true) && it.entries.isNotEmpty() }
+            val allNames = scanner.getCollectionNames()
+                .filter { !it.equals("Favorites", ignoreCase = true) }
+            val scanned = scanner.scanCollections()
+                .filter { !it.name.equals("Favorites", ignoreCase = true) }
+                .associateBy { it.name }
+            val collections = allNames.map { name ->
+                scanned[name] ?: dev.cannoli.scorza.model.Collection(
+                    name = name,
+                    file = java.io.File(name),
+                    entries = emptyList()
+                )
+            }
             val order = scanner.loadCollectionOrder()
             val ordered = if (order.isEmpty()) collections else {
                 val byName = collections.associateBy { it.name }
@@ -130,7 +157,7 @@ class GameListViewModel(
                     platformTag = ""
                 )
             }
-            val (idx, scroll) = if (restoreIndex && games.size == collectionsListItemCount && collectionsListItemCount > 0) {
+            val (idx, scroll) = if (restoreIndex && collectionsListItemCount > 0 && games.isNotEmpty()) {
                 val maxIdx = games.lastIndex.coerceAtLeast(0)
                 collectionsListSaved.first.coerceAtMost(maxIdx) to collectionsListSaved.second.coerceAtMost(maxIdx)
             } else {
@@ -264,12 +291,9 @@ class GameListViewModel(
     }
 
     fun confirmMultiSelect(): Set<Int> {
-        var checked = emptySet<Int>()
-        _state.update { current ->
-            checked = current.checkedIndices
-            current.copy(multiSelectMode = false, checkedIndices = emptySet())
-        }
-        return checked
+        val prev = _state.value
+        _state.update { it.copy(multiSelectMode = false, checkedIndices = emptySet()) }
+        return prev.checkedIndices
     }
 
     fun cancelMultiSelect() {
