@@ -21,24 +21,86 @@ object Shaders {
         }
     """.trimIndent()
 
-    // lcd3x by Gigaherz — public domain
+    // lcd3x by Gigaherz (public domain) + Pixel Transparency v1.1 by mattakins (MIT)
     // https://github.com/libretro/glsl-shaders/blob/master/handheld/shaders/lcd3x.glsl
+    // https://github.com/mattakins/Pixel_Transparency
     val lcd = """
-        precision mediump float;
+        precision highp float;
         varying vec2 vTexCoord;
         uniform sampler2D uTexture;
         uniform vec2 uSourceSize;
         uniform vec2 uOutputSize;
-        const float brighten_scanlines = 16.0;
-        const float brighten_lcd = 4.0;
-        const vec3 offsets = vec3(3.141592654) * vec3(0.5, 0.5 - 2.0/3.0, 0.5 - 4.0/3.0);
+
+        // --- lcd3x ---
+        #define PI 3.141592654
+        const float brighten_scanlines = 3.0;
+        const float brighten_lcd = 1.5;
+        const vec3 offsets = vec3(PI) * vec3(0.5, 0.5 - 2.0/3.0, 0.5 - 4.0/3.0);
+
+        // --- Pixel Transparency ---
+        const float PT_BASE_ALPHA = 0.20;
+        const float PT_THRESHOLD = 0.90;
+        const vec3  PT_TINT = vec3(0.651, 0.675, 0.518); // GB Pocket
+        const float PT_SHADOW_OFFSET = 3.0;
+        const float PT_SHADOW_OPACITY = 0.5;
+        const float PT_SHADOW_BLUR = 1.0;
+
+        float luma(vec3 c) {
+            return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+        }
+
+        float isWhite(vec3 c) {
+            return step(PT_THRESHOLD, luma(c))
+                 * step(PT_THRESHOLD * 0.9, min(min(c.r, c.g), c.b));
+        }
+
+        float hash(vec2 p) {
+            vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+        }
+
+        vec3 paperBg(vec2 uv) {
+            vec2 p = uv * 128.0;
+            float n = hash(p) * 0.5 + hash(p * 2.0) * 0.25 + hash(p * 4.0) * 0.125;
+            float grain = (n - 0.4375) * 0.065;
+            vec3 base = vec3(0.4773 + grain);
+            return clamp(PT_TINT + base * 2.0 - 1.0, 0.0, 1.0);
+        }
+
         void main() {
-            vec2 omega = vec2(3.141592654) * 2.0 * uSourceSize;
             vec3 res = texture2D(uTexture, vTexCoord).rgb;
+
+            // lcd3x
+            vec2 omega = vec2(PI) * 2.0 * uSourceSize;
             vec2 angle = vTexCoord * omega;
             float yfactor = (brighten_scanlines + sin(angle.y)) / (brighten_scanlines + 1.0);
             vec3 xfactors = (brighten_lcd + sin(angle.x + offsets)) / (brighten_lcd + 1.0);
-            gl_FragColor = vec4(res * yfactor * xfactors, 1.0);
+            vec3 lcd = res * yfactor * xfactors;
+
+            // Procedural paper background with tint
+            vec3 bg = paperBg(vTexCoord);
+
+            // Drop shadow (5-sample lite blur)
+            float sf = sqrt(uOutputSize.x * uOutputSize.y / 307200.0);
+            vec2 sOff = vec2(-PT_SHADOW_OFFSET) * sf / uOutputSize;
+            float bd = PT_SHADOW_BLUR * sf / uOutputSize.x;
+
+            vec3 ss = texture2D(uTexture, vTexCoord + sOff).rgb;
+            if (isWhite(ss) < 0.5) {
+                vec2 sp = vTexCoord + sOff;
+                float sh = (1.0 - luma(texture2D(uTexture, sp).rgb))
+                         + (1.0 - luma(texture2D(uTexture, sp + vec2(-bd, 0.0)).rgb))
+                         + (1.0 - luma(texture2D(uTexture, sp + vec2( bd, 0.0)).rgb))
+                         + (1.0 - luma(texture2D(uTexture, sp + vec2(0.0, -bd)).rgb))
+                         + (1.0 - luma(texture2D(uTexture, sp + vec2(0.0,  bd)).rgb));
+                bg = mix(bg, bg * 0.2, (sh / 5.0) * PT_SHADOW_OPACITY);
+            }
+
+            // Brightness-based transparency (using lcd-processed brightness)
+            float transparency = clamp(PT_BASE_ALPHA * luma(lcd) * 2.665, 0.0, 1.0);
+
+            gl_FragColor = vec4(mix(lcd, bg, transparency), 1.0);
         }
     """.trimIndent()
 
