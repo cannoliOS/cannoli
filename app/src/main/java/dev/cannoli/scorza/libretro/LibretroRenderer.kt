@@ -1,7 +1,9 @@
 package dev.cannoli.scorza.libretro
 
+import android.graphics.BitmapFactory
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
+import android.opengl.GLUtils
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -36,8 +38,14 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
     @Volatile var crtBrightness = 1.0f
     @Volatile var crtNoise = 0.15f
 
+    @Volatile var overlayPath: String? = null
+        set(value) { field = value; overlayDirty = true }
+
     @Volatile private var sharpnessDirty = false
     @Volatile private var shaderDirty = false
+    @Volatile private var overlayDirty = false
+    private var overlayTextureId = 0
+    private var overlayLoaded = false
 
     @Volatile var fps = 0f; private set
     @Volatile var frameTimeMs = 0f; private set
@@ -116,11 +124,22 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         val black = ByteBuffer.allocateDirect(4).put(byteArrayOf(0, 0, 0, -1)).also { it.position(0) }
         GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, 1, 1, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, black)
 
+        val ovlIds = IntArray(1)
+        GLES20.glGenTextures(1, ovlIds, 0)
+        overlayTextureId = ovlIds[0]
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTextureId)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        overlayLoaded = false
+
         crtFboW = 0
         crtFboH = 0
 
         shaderDirty = true
         sharpnessDirty = true
+        overlayDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -202,10 +221,14 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
             shaderDirty = false
             activeProgramId = when (screenEffect) {
                 ScreenEffect.NONE -> programNone
-
                 ScreenEffect.LCD -> programLcd
                 ScreenEffect.CRT -> programCrt
             }
+        }
+
+        if (overlayDirty) {
+            overlayDirty = false
+            loadOverlayTexture()
         }
 
         val gameAspect = when (scalingMode) {
@@ -217,7 +240,7 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
 
         var vpW: Int
         var vpH: Int
-        if (scalingMode == ScalingMode.INTEGER || sharpness == Sharpness.CRISP) {
+        if (scalingMode == ScalingMode.INTEGER) {
             val scaleX = surfaceWidth / w
             val scaleY = surfaceHeight / h
             val scale = maxOf(1, minOf(scaleX, scaleY))
@@ -241,6 +264,8 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         } else {
             drawSimple(w, h, vpX, vpY, vpW, vpH)
         }
+
+        if (overlayLoaded) drawOverlay()
 
         frameCount++
         val now = System.nanoTime()
@@ -388,6 +413,31 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         unbindQuadAttribs(programCrt)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+    }
+
+    private fun loadOverlayTexture() {
+        val path = overlayPath
+        if (path.isNullOrEmpty()) { overlayLoaded = false; return }
+        val bitmap = try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
+        if (bitmap == null) { overlayLoaded = false; return }
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTextureId)
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+        bitmap.recycle()
+        overlayLoaded = true
+    }
+
+    private fun drawOverlay() {
+        GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight)
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        GLES20.glUseProgram(programNone)
+        bindQuadAttribs(programNone)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTextureId)
+        GLES20.glUniform1i(GLES20.glGetUniformLocation(programNone, "uTexture"), 0)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        unbindQuadAttribs(programNone)
+        GLES20.glDisable(GLES20.GL_BLEND)
     }
 
     private fun bindQuadAttribs(program: Int, tcBuffer: FloatBuffer = texCoordBuffer) {

@@ -62,6 +62,9 @@ class LibretroActivity : ComponentActivity() {
     private var crtBrightness by mutableStateOf(1.0f)
     private var crtNoise by mutableStateOf(0.15f)
 
+    private var overlay by mutableStateOf("")
+    private var overlayImages = emptyList<String>()
+
     private var coreOptions by mutableStateOf(emptyList<LibretroRunner.CoreOption>())
     private var coreCategories by mutableStateOf(emptyList<LibretroRunner.CoreOptionCategory>())
     private var controlSource by mutableStateOf(OverrideSource.GLOBAL)
@@ -182,6 +185,7 @@ class LibretroActivity : ComponentActivity() {
         val gameBaseName = if (romPath.isNotEmpty()) File(romPath).nameWithoutExtension else ""
         overrideManager = OverrideManager(cannoliRoot, platformTag, gameBaseName, coreBaseName)
         loadOverrides()
+        scanOverlayImages()
 
         if (sramPath.isNotEmpty() && File(sramPath).exists()) runner.loadSRAM(sramPath)
 
@@ -214,6 +218,7 @@ class LibretroActivity : ComponentActivity() {
             it.crtSweepBright = crtSweepBright
             it.crtBrightness = crtBrightness
             it.crtNoise = crtNoise
+            it.overlayPath = resolveOverlayPath()
         }
 
         val glView = GLSurfaceView(this).apply {
@@ -614,6 +619,34 @@ class LibretroActivity : ComponentActivity() {
         Sharpness.SOFT -> "Soft"
     }
 
+    private fun overlayLabel() = if (overlay.isEmpty()) "None" else File(overlay).nameWithoutExtension
+
+    private fun resolveOverlayPath(): String? =
+        if (overlay.isEmpty()) null else File(cannoliRoot, "Overlays/$platformTag/$overlay").absolutePath
+
+    private fun scanOverlayImages() {
+        val dir = File(cannoliRoot, "Overlays/$platformTag")
+        val exts = setOf("png", "jpg", "jpeg")
+        overlayImages = dir.listFiles()
+            ?.filter { it.isFile && it.extension.lowercase(java.util.Locale.ROOT) in exts }
+            ?.sortedBy { it.name }
+            ?.map { it.name }
+            ?: emptyList()
+    }
+
+    private fun cycleOverlay(direction: Int) {
+        if (overlayImages.isEmpty()) { overlay = ""; return }
+        val currentIndex = overlayImages.indexOf(overlay)
+        val newIndex = if (currentIndex == -1) {
+            if (direction > 0) 0 else overlayImages.lastIndex
+        } else {
+            val raw = currentIndex + direction
+            if (raw < 0 || raw >= overlayImages.size) -1 else raw
+        }
+        overlay = if (newIndex < 0) "" else overlayImages[newIndex]
+        renderer.overlayPath = resolveOverlayPath()
+    }
+
     private fun handleFrontendInput(screen: IGMScreen.Frontend, keyCode: Int): Boolean {
         val count = frontendItemCount()
         return when (keyCode) {
@@ -636,12 +669,11 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
-    private fun frontendItemCount() = if (screenEffect == ScreenEffect.CRT) 6 else 5
+    private fun frontendItemCount() = if (screenEffect == ScreenEffect.CRT) 7 else 6
 
     private fun cycleFrontendValue(index: Int, direction: Int) {
+        val crtOff = if (screenEffect == ScreenEffect.CRT) 1 else 0
         val crtSettingsIdx = if (screenEffect == ScreenEffect.CRT) 3 else -1
-        val debugIdx = if (screenEffect == ScreenEffect.CRT) 4 else 3
-        val ffIdx = if (screenEffect == ScreenEffect.CRT) 5 else 4
         when (index) {
             0 -> {
                 val modes = ScalingMode.entries
@@ -652,6 +684,10 @@ class LibretroActivity : ComponentActivity() {
                 val vals = Sharpness.entries
                 sharpness = vals[(sharpness.ordinal + direction + vals.size) % vals.size]
                 renderer.sharpness = sharpness
+                if (sharpness == Sharpness.CRISP) {
+                    scalingMode = ScalingMode.INTEGER
+                    renderer.scalingMode = scalingMode
+                }
             }
             2 -> {
                 val effects = ScreenEffect.entries
@@ -659,8 +695,9 @@ class LibretroActivity : ComponentActivity() {
                 renderer.screenEffect = screenEffect
             }
             crtSettingsIdx -> {}
-            debugIdx -> { debugHud = !debugHud; renderer.debugHud = debugHud }
-            ffIdx -> { cycleFfSpeed(direction) }
+            3 + crtOff -> cycleOverlay(direction)
+            4 + crtOff -> { debugHud = !debugHud; renderer.debugHud = debugHud }
+            5 + crtOff -> { cycleFfSpeed(direction) }
         }
     }
 
@@ -1023,6 +1060,7 @@ class LibretroActivity : ComponentActivity() {
             if (screenEffect == ScreenEffect.CRT) {
                 add(IGMSettingsItem("CRT Settings"))
             }
+            add(IGMSettingsItem("Overlay", overlayLabel()))
             add(IGMSettingsItem("Debug HUD", if (debugHud) "On" else "Off"))
             add(IGMSettingsItem("Max FF Speed", "${maxFfSpeed}x"))
         }
@@ -1098,6 +1136,7 @@ class LibretroActivity : ComponentActivity() {
             crtSweepBright = crtSweepBright,
             crtBrightness = crtBrightness,
             crtNoise = crtNoise,
+            overlay = overlay,
             coreOptions = optionMap
         )
     }
@@ -1136,6 +1175,7 @@ class LibretroActivity : ComponentActivity() {
         crtSweepBright = settings.crtSweepBright
         crtBrightness = settings.crtBrightness
         crtNoise = settings.crtNoise
+        overlay = settings.overlay
         controlSource = settings.controlSource
         shortcutSource = settings.shortcutSource
         shortcuts = settings.shortcuts
