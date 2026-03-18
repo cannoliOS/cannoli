@@ -12,6 +12,7 @@ import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.settings.TimeFormat
 import dev.cannoli.scorza.ui.screens.DialogState
 import java.io.File
+import java.text.Normalizer
 
 class LaunchManager(
     private val context: Context,
@@ -66,7 +67,7 @@ class LaunchManager(
 
     fun findMostRecentSlot(game: Game): Int? {
         val cannoliRoot = File(settings.sdCardRoot)
-        val romName = game.file.nameWithoutExtension
+        val romName = normalizedRomName(game)
         val stateBase = File(cannoliRoot, "Save States/${game.platformTag}/$romName/$romName.state")
         val slotManager = SaveSlotManager(stateBase.absolutePath)
         var bestSlot = -1
@@ -87,7 +88,7 @@ class LaunchManager(
         for (game in games) {
             if (game.isSubfolder) continue
             if (getEmbeddedCorePath(game) == null) continue
-            val romName = game.file.nameWithoutExtension
+            val romName = normalizedRomName(game)
             val stateDir = File(cannoliRoot, "Save States/${game.platformTag}/$romName")
             if (stateDir.exists() && stateDir.listFiles()?.any { it.extension == "state" || it.name.contains(".state.") } == true) {
                 result.add(game.file.absolutePath)
@@ -175,7 +176,7 @@ class LaunchManager(
 
     fun launchEmbedded(game: Game, corePath: String, resumeSlot: Int = -1) {
         val cannoliRoot = File(settings.sdCardRoot)
-        val romName = game.file.nameWithoutExtension
+        val romName = normalizedRomName(game)
         val saveDir = File(cannoliRoot, "Saves/${game.platformTag}")
         saveDir.mkdirs()
 
@@ -206,6 +207,9 @@ class LaunchManager(
         }
         context.startActivity(intent)
     }
+
+    private fun normalizedRomName(game: Game): String =
+        Normalizer.normalize(game.file.nameWithoutExtension, Normalizer.Form.NFC)
 
     companion object {
         fun extractBundledCores(context: Context): String {

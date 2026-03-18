@@ -333,7 +333,7 @@ class FileServer(
             }
             2 -> {
                 val platformTag = segments[0]
-                val romName = segments[1]
+                val romName = java.text.Normalizer.normalize(segments[1], java.text.Normalizer.Form.NFC)
                 val gameDir = File(statesDir, "$platformTag/$romName")
                 if (!isSecure(gameDir)) { sendJson(output, 403, """{"error":"forbidden"}"""); return }
                 when (method) {
@@ -360,7 +360,7 @@ class FileServer(
             3 -> {
                 if (method != "GET") { sendJson(output, 405, """{"error":"method not allowed"}"""); return }
                 val platformTag = segments[0]
-                val romName = segments[1]
+                val romName = java.text.Normalizer.normalize(segments[1], java.text.Normalizer.Form.NFC)
                 val action = segments[2]
                 if (action == "thumbnail") {
                     val slot = query["slot"]?.toIntOrNull()
