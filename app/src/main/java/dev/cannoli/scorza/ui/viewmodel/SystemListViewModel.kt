@@ -21,7 +21,6 @@ class SystemListViewModel(
         data class CollectionItem(val name: String, val count: Int) : ListItem()
         data class ToolsFolder(val name: String, val count: Int) : ListItem()
         data class PortsFolder(val name: String, val count: Int) : ListItem()
-        data class Divider(val label: String? = null) : ListItem()
     }
 
     data class State(
@@ -31,9 +30,7 @@ class SystemListViewModel(
         val scrollTarget: Int = 0,
         val isLoading: Boolean = true,
         val reorderMode: Boolean = false,
-        val reorderOriginalIndex: Int = -1,
-        val multiSelectMode: Boolean = false,
-        val checkedIndices: Set<Int> = emptySet()
+        val reorderOriginalIndex: Int = -1
     )
 
     private val _state = MutableStateFlow(State())
@@ -86,17 +83,15 @@ class SystemListViewModel(
             items.addAll(ordered)
 
             val canRestore = (restored != null || items.size == prevItemCount) && prevItemCount > 0
-            val selectableIndices = items.indices.filter { items[it] !is ListItem.Divider }
             val (safeIndex, scrollTo) = if (canRestore) {
                 val idx = when {
-                    selectableIndices.isEmpty() -> 0
-                    prevSelectedIndex in selectableIndices -> prevSelectedIndex
-                    else -> selectableIndices.firstOrNull { it >= prevSelectedIndex } ?: selectableIndices.last()
+                    items.isEmpty() -> 0
+                    prevSelectedIndex in items.indices -> prevSelectedIndex
+                    else -> items.lastIndex
                 }
                 idx to prevFirstVisible.coerceAtMost(items.lastIndex.coerceAtLeast(0))
             } else {
-                val idx = if (selectableIndices.isNotEmpty()) selectableIndices.first() else 0
-                idx to 0
+                0 to 0
             }
             _state.value = State(
                 items = items,
@@ -110,14 +105,13 @@ class SystemListViewModel(
 
     fun moveSelection(delta: Int) {
         _state.update { current ->
-            val selectableIndices = current.items.indices.filter { current.items[it] !is ListItem.Divider }
-            if (selectableIndices.isEmpty()) return@update current
+            val size = current.items.size
+            if (size == 0) return@update current
 
-            val currentPos = selectableIndices.indexOf(current.selectedIndex)
-            val raw = if (currentPos == -1) 0 else currentPos + delta
-            val targetPos = ((raw % selectableIndices.size) + selectableIndices.size) % selectableIndices.size
+            val raw = current.selectedIndex + delta
+            val target = ((raw % size) + size) % size
 
-            current.copy(selectedIndex = selectableIndices[targetPos])
+            current.copy(selectedIndex = target)
         }
     }
 
@@ -138,7 +132,7 @@ class SystemListViewModel(
         _state.value.items.filterIsInstance<ListItem.PlatformItem>().map { it.platform.tag }
 
     fun getNavigableItems(): List<ListItem> =
-        _state.value.items.filter { it !is ListItem.Divider }
+        _state.value.items
 
     fun enterReorderMode() {
         _state.update { current ->
@@ -188,37 +182,6 @@ class SystemListViewModel(
         val current = _state.value
         if (!current.reorderMode) return
         scan(showTools, showPorts, showEmpty, toolsName, portsName)
-    }
-
-    fun enterMultiSelect() {
-        _state.update { current ->
-            if (current.reorderMode || current.multiSelectMode) return@update current
-            current.copy(multiSelectMode = true, checkedIndices = setOf(current.selectedIndex))
-        }
-    }
-
-    fun isMultiSelectMode(): Boolean = _state.value.multiSelectMode
-
-    fun toggleChecked() {
-        _state.update { current ->
-            if (!current.multiSelectMode) return@update current
-            val idx = current.selectedIndex
-            val newChecked = if (idx in current.checkedIndices) current.checkedIndices - idx else current.checkedIndices + idx
-            current.copy(checkedIndices = newChecked)
-        }
-    }
-
-    fun confirmMultiSelect(): Set<Int> {
-        var checked = emptySet<Int>()
-        _state.update { current ->
-            checked = current.checkedIndices
-            current.copy(multiSelectMode = false, checkedIndices = emptySet())
-        }
-        return checked
-    }
-
-    fun cancelMultiSelect() {
-        _state.update { it.copy(multiSelectMode = false, checkedIndices = emptySet()) }
     }
 
     private fun ListItem.isReorderable(): Boolean = this is ListItem.PlatformItem || this is ListItem.ToolsFolder || this is ListItem.PortsFolder

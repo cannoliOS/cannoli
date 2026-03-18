@@ -95,7 +95,7 @@ class PlatformResolver(
                     )
                 }
             }
-        } catch (_: Exception) {}
+        } catch (_: java.io.IOException) {} catch (_: org.json.JSONException) {}
     }
 
     fun reloadCoreMappings() {

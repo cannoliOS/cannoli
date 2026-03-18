@@ -18,9 +18,9 @@ sealed interface DialogState {
     data class MissingCore(val coreName: String) : DialogState
     data class MissingApp(val appName: String, val packageName: String) : DialogState
     data class LaunchError(val message: String) : DialogState
-    data class ContextMenu(val gameName: String, val selectedOption: Int = 0, val options: List<String> = listOf("Add to Favorites", "Manage Collections", "Rename", "Delete")) : DialogState
-    data class BulkContextMenu(val gamePaths: List<String>, val selectedOption: Int = 0, val options: List<String> = listOf("Add to Favorites", "Manage Collections", "Delete")) : DialogState
-    data class DeleteConfirm(val gameName: String) : DialogState
+    data class ContextMenu(val gameName: String, val selectedOption: Int = 0, val options: List<String>) : DialogState
+    data class BulkContextMenu(val gamePaths: List<String>, val selectedOption: Int = 0, val options: List<String>) : DialogState
+    data class DeleteConfirm(val gameName: String, val bulkPaths: List<String>? = null) : DialogState
     data class RenameInput(val gameName: String, override val currentName: String, override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState
     data class NewCollectionInput(val gamePaths: List<String> = emptyList(), override val currentName: String = "", override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState
     data class CollectionRenameInput(val oldName: String, override val currentName: String, override val cursorPos: Int = 0, override val keyRow: Int = 2, override val keyCol: Int = 0, override val caps: Boolean = false, override val symbols: Boolean = false) : DialogState, KeyboardInputState

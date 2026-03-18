@@ -163,7 +163,7 @@ class LaunchManager(
                 val appName = try {
                     val info = context.packageManager.getApplicationInfo(result.packageName, 0)
                     context.packageManager.getApplicationLabel(info).toString()
-                } catch (_: Exception) {
+                } catch (_: PackageManager.NameNotFoundException) {
                     result.packageName
                 }
                 DialogState.MissingApp(appName, result.packageName)

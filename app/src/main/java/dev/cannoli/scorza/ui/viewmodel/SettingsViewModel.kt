@@ -100,7 +100,31 @@ class SettingsViewModel(
         installed.ifEmpty { listOf(settings.retroArchPackage) }
     }
 
-    private var snapshot: Map<String, Any?> = emptyMap()
+    private data class SettingsSnapshot(
+        val textSize: TextSize,
+        val timeFormat: TimeFormat,
+        val bgImage: String?,
+        val bgTint: Int,
+        val colorHighlight: String,
+        val colorText: String,
+        val colorHighlightText: String,
+        val colorAccent: String,
+        val swapStartSelect: Boolean,
+        val platformSwitching: Boolean,
+        val showWifi: Boolean,
+        val showBluetooth: Boolean,
+        val showClock: Boolean,
+        val showBattery: Boolean,
+        val showEmpty: Boolean,
+        val showTools: Boolean,
+        val showPorts: Boolean,
+        val sdRoot: String,
+        val raPackage: String,
+        val toolsName: String,
+        val portsName: String
+    )
+
+    private var snapshot: SettingsSnapshot? = null
 
     fun load() {
         snapshot = captureSettings()
@@ -113,7 +137,7 @@ class SettingsViewModel(
     }
 
     fun cancel() {
-        restoreSettings(snapshot)
+        snapshot?.let { restoreSettings(it) }
         _appSettings.value = readAppSettings()
     }
 
@@ -242,7 +266,7 @@ class SettingsViewModel(
         val wallpapersDir = java.io.File(root, "Wallpapers")
         val imageExtensions = setOf("png", "jpg", "jpeg")
         val images = wallpapersDir.listFiles()
-            ?.filter { it.isFile && it.extension.lowercase() in imageExtensions }
+            ?.filter { it.isFile && it.extension.lowercase(java.util.Locale.ROOT) in imageExtensions }
             ?.sortedBy { it.name }
             ?: emptyList()
 
@@ -303,48 +327,52 @@ class SettingsViewModel(
         _appSettings.value = readAppSettings()
     }
 
-    private fun captureSettings(): Map<String, Any?> = mapOf(
-        "text_size" to settings.textSize,
-        "time_format" to settings.timeFormat,
-        "bg_image" to settings.backgroundImagePath,
-        "bg_tint" to settings.backgroundTint,
-        "color_highlight" to settings.colorHighlight,
-        "color_text" to settings.colorText,
-        "color_highlight_text" to settings.colorHighlightText,
-        "color_accent" to settings.colorAccent,
-        "swap_start_select" to settings.swapStartSelect,
-        "platform_switching" to settings.platformSwitching,
-        "show_wifi" to settings.showWifi,
-        "show_bluetooth" to settings.showBluetooth,
-        "show_clock" to settings.showClock,
-        "show_battery" to settings.showBattery,
-        "show_empty" to settings.showEmpty,
-        "show_tools" to settings.showTools,
-        "show_ports" to settings.showPorts,
-        "sd_root" to settings.sdCardRoot,
-        "ra_package" to settings.retroArchPackage
+    private fun captureSettings() = SettingsSnapshot(
+        textSize = settings.textSize,
+        timeFormat = settings.timeFormat,
+        bgImage = settings.backgroundImagePath,
+        bgTint = settings.backgroundTint,
+        colorHighlight = settings.colorHighlight,
+        colorText = settings.colorText,
+        colorHighlightText = settings.colorHighlightText,
+        colorAccent = settings.colorAccent,
+        swapStartSelect = settings.swapStartSelect,
+        platformSwitching = settings.platformSwitching,
+        showWifi = settings.showWifi,
+        showBluetooth = settings.showBluetooth,
+        showClock = settings.showClock,
+        showBattery = settings.showBattery,
+        showEmpty = settings.showEmpty,
+        showTools = settings.showTools,
+        showPorts = settings.showPorts,
+        sdRoot = settings.sdCardRoot,
+        raPackage = settings.retroArchPackage,
+        toolsName = settings.toolsName,
+        portsName = settings.portsName
     )
 
-    private fun restoreSettings(snap: Map<String, Any?>) {
-        (snap["text_size"] as? TextSize)?.let { settings.textSize = it }
-        (snap["time_format"] as? TimeFormat)?.let { settings.timeFormat = it }
-        settings.backgroundImagePath = snap["bg_image"] as? String
-        (snap["bg_tint"] as? Int)?.let { settings.backgroundTint = it }
-        (snap["color_highlight"] as? String)?.let { settings.colorHighlight = it }
-        (snap["color_text"] as? String)?.let { settings.colorText = it }
-        (snap["color_highlight_text"] as? String)?.let { settings.colorHighlightText = it }
-        (snap["color_accent"] as? String)?.let { settings.colorAccent = it }
-        (snap["swap_start_select"] as? Boolean)?.let { settings.swapStartSelect = it }
-        (snap["platform_switching"] as? Boolean)?.let { settings.platformSwitching = it }
-        (snap["show_wifi"] as? Boolean)?.let { settings.showWifi = it }
-        (snap["show_bluetooth"] as? Boolean)?.let { settings.showBluetooth = it }
-        (snap["show_clock"] as? Boolean)?.let { settings.showClock = it }
-        (snap["show_battery"] as? Boolean)?.let { settings.showBattery = it }
-        (snap["show_empty"] as? Boolean)?.let { settings.showEmpty = it }
-        (snap["show_tools"] as? Boolean)?.let { settings.showTools = it }
-        (snap["show_ports"] as? Boolean)?.let { settings.showPorts = it }
-        (snap["sd_root"] as? String)?.let { settings.sdCardRoot = it }
-        (snap["ra_package"] as? String)?.let { settings.retroArchPackage = it }
+    private fun restoreSettings(snap: SettingsSnapshot) {
+        settings.textSize = snap.textSize
+        settings.timeFormat = snap.timeFormat
+        settings.backgroundImagePath = snap.bgImage
+        settings.backgroundTint = snap.bgTint
+        settings.colorHighlight = snap.colorHighlight
+        settings.colorText = snap.colorText
+        settings.colorHighlightText = snap.colorHighlightText
+        settings.colorAccent = snap.colorAccent
+        settings.swapStartSelect = snap.swapStartSelect
+        settings.platformSwitching = snap.platformSwitching
+        settings.showWifi = snap.showWifi
+        settings.showBluetooth = snap.showBluetooth
+        settings.showClock = snap.showClock
+        settings.showBattery = snap.showBattery
+        settings.showEmpty = snap.showEmpty
+        settings.showTools = snap.showTools
+        settings.showPorts = snap.showPorts
+        settings.sdCardRoot = snap.sdRoot
+        settings.retroArchPackage = snap.raPackage
+        settings.toolsName = snap.toolsName
+        settings.portsName = snap.portsName
     }
 
     private fun onOff(value: Boolean) = if (value) R.string.value_on else R.string.value_off
@@ -358,7 +386,7 @@ class SettingsViewModel(
                 add(SettingsItem("bg_tint", R.string.setting_bg_tint, valueText = if (tintVal == 0) null else "$tintVal%", valueRes = if (tintVal == 0) R.string.value_off else null))
             }
             add(SettingsItem("colors", R.string.setting_colors, isEditable = true))
-            add(SettingsItem("text_size", R.string.setting_text_size, valueText = settings.textSize.name.lowercase().replaceFirstChar { it.uppercase() }))
+            add(SettingsItem("text_size", R.string.setting_text_size, valueText = settings.textSize.name.lowercase(java.util.Locale.ROOT).replaceFirstChar { it.uppercase() }))
         }
         "content" -> buildList {
             add(SettingsItem("show_empty", R.string.setting_show_empty, valueRes = showHide(settings.showEmpty)))

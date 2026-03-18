@@ -35,7 +35,7 @@ class SettingsRepository(context: Context) {
         val file = File(sdCardRoot, "Config/settings.json")
         settingsFile = file
         if (file.exists()) {
-            try { synchronized(jsonLock) { json = JSONObject(file.readText()) } } catch (_: Exception) {}
+            try { synchronized(jsonLock) { json = JSONObject(file.readText()) } } catch (_: java.io.IOException) {} catch (_: org.json.JSONException) {}
         }
     }
 
@@ -88,6 +88,7 @@ class SettingsRepository(context: Context) {
         get() = prefs.getString(KEY_SD_ROOT, DEFAULT_ROOT) ?: DEFAULT_ROOT
         set(value) {
             prefs.edit().putString(KEY_SD_ROOT, value).apply()
+            flush()
             settingsFile = File(value, "Config/settings.json")
             loadFromDisk()
         }
@@ -103,18 +104,6 @@ class SettingsRepository(context: Context) {
     var textSize: TextSize
         get() = TextSize.fromString(jsonRead { optString(KEY_TEXT_SIZE, null) })
         set(value) = jsonWrite { put(KEY_TEXT_SIZE, value.name) }
-
-    var gameSortOrder: SortOrder
-        get() = SortOrder.fromString(jsonRead { optString(KEY_SORT_ORDER, null) })
-        set(value) = jsonWrite { put(KEY_SORT_ORDER, value.name) }
-
-    var scrollSpeed: ScrollSpeed
-        get() = ScrollSpeed.fromString(jsonRead { optString(KEY_SCROLL_SPEED, null) })
-        set(value) = jsonWrite { put(KEY_SCROLL_SPEED, value.name) }
-
-    var showCoreTag: Boolean
-        get() = jsonRead { optBoolean(KEY_SHOW_CORE_TAG, false) }
-        set(value) = jsonWrite { put(KEY_SHOW_CORE_TAG, value) }
 
     var timeFormat: TimeFormat
         get() = TimeFormat.fromString(jsonRead { optString(KEY_TIME_FORMAT, null) })
@@ -202,9 +191,6 @@ class SettingsRepository(context: Context) {
         private const val KEY_RA_PACKAGE = "ra_package"
         private const val KEY_BUTTON_LAYOUT = "button_layout"
         private const val KEY_TEXT_SIZE = "text_size"
-        private const val KEY_SORT_ORDER = "sort_order"
-        private const val KEY_SCROLL_SPEED = "scroll_speed"
-        private const val KEY_SHOW_CORE_TAG = "show_core_tag"
         private const val KEY_TIME_FORMAT = "time_format"
         private const val KEY_BG_IMAGE = "bg_image"
         private const val KEY_SWAP_START_SELECT = "swap_start_select"
@@ -239,22 +225,6 @@ enum class TextSize {
     companion object {
         fun fromString(value: String?): TextSize =
             entries.firstOrNull { it.name == value } ?: DEFAULT
-    }
-}
-
-enum class SortOrder {
-    NATURAL, DATE_ADDED;
-    companion object {
-        fun fromString(value: String?): SortOrder =
-            entries.firstOrNull { it.name == value } ?: NATURAL
-    }
-}
-
-enum class ScrollSpeed {
-    SLOW, NORMAL, FAST;
-    companion object {
-        fun fromString(value: String?): ScrollSpeed =
-            entries.firstOrNull { it.name == value } ?: NORMAL
     }
 }
 
