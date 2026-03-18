@@ -6,6 +6,7 @@ import dev.cannoli.scorza.model.LaunchTarget
 import dev.cannoli.scorza.model.Platform
 import dev.cannoli.scorza.util.sortedNatural
 import java.io.File
+import java.io.IOException
 
 class FileScanner(
     private val cannoliRoot: File,
@@ -17,6 +18,8 @@ class FileScanner(
     private val toolsDir = File(cannoliRoot, "Config/Launch Scripts/Tools")
     private val portsDir = File(cannoliRoot, "Config/Launch Scripts/Ports")
 
+    private val favoritesLock = Any()
+    @Volatile private var favoritesCache: Set<String>? = null
     private val artCache = java.util.concurrent.ConcurrentHashMap<String, Map<String, File>>()
     private val mapCache = java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
     private val discRegex = Regex("""\s*\((Disc|Disk)\s*\d+\)|\s*\(CD\d+\)""", RegexOption.IGNORE_CASE)
@@ -221,7 +224,7 @@ class FileScanner(
         return files.mapNotNull { file ->
             val lines = try {
                 file.readLines().map { it.trim() }.filter { it.isNotEmpty() }
-            } catch (_: Exception) { return@mapNotNull null }
+            } catch (_: IOException) { return@mapNotNull null }
             val entries = lines.map { File(it) }.filter { it.exists() }
 
             Collection(
@@ -239,7 +242,7 @@ class FileScanner(
 
         val lines = try {
             collFile.readLines()
-        } catch (_: Exception) { return emptyList() }
+        } catch (_: IOException) { return emptyList() }
 
         return lines
             .map { it.trim() }
@@ -297,10 +300,11 @@ class FileScanner(
         val collFile = File(collectionsDir, "$collectionName.txt")
         val existing = try {
             if (collFile.exists()) collFile.readLines().map { it.trim() } else emptyList()
-        } catch (_: Exception) { emptyList() }
+        } catch (_: IOException) { emptyList() }
         if (romPath !in existing) {
-            try { collFile.appendText("$romPath\n") } catch (_: Exception) { }
+            try { collFile.appendText("$romPath\n") } catch (_: IOException) { }
         }
+        favoritesCache = null
     }
 
     fun removeFromCollection(collectionName: String, romPath: String) {
@@ -308,8 +312,9 @@ class FileScanner(
         if (!collFile.exists()) return
         try {
             val remaining = collFile.readLines().map { it.trim() }.filter { it != romPath && it.isNotEmpty() }
-            collFile.writeText(remaining.joinToString("\n") { it } + if (remaining.isNotEmpty()) "\n" else "")
-        } catch (_: Exception) { }
+            collFile.writeText(remaining.joinToString("\n") + if (remaining.isNotEmpty()) "\n" else "")
+        } catch (_: IOException) { }
+        favoritesCache = null
     }
 
     fun isInCollection(collectionName: String, romPath: String): Boolean {
@@ -317,15 +322,21 @@ class FileScanner(
         if (!collFile.exists()) return false
         return try {
             collFile.readLines().any { it.trim() == romPath }
-        } catch (_: Exception) { false }
+        } catch (_: IOException) { false }
     }
 
     fun getFavoritePaths(): Set<String> {
-        val collFile = File(collectionsDir, "Favorites.txt")
-        if (!collFile.exists()) return emptySet()
-        return try {
-            collFile.readLines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        } catch (_: Exception) { emptySet() }
+        favoritesCache?.let { return it }
+        return synchronized(favoritesLock) {
+            favoritesCache?.let { return it }
+            val collFile = File(collectionsDir, "Favorites.txt")
+            if (!collFile.exists()) return emptySet()
+            val result = try {
+                collFile.readLines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            } catch (_: IOException) { emptySet() }
+            favoritesCache = result
+            result
+        }
     }
 
     fun createCollection(name: String) {
@@ -355,6 +366,7 @@ class FileScanner(
     }
 
     fun deleteGame(game: Game) {
+        val paths = (game.discFiles?.map { it.absolutePath } ?: listOf(game.file.absolutePath)).toSet()
         if (game.discFiles != null) {
             game.discFiles.forEach { it.delete() }
         } else if (game.file.isDirectory) {
@@ -362,6 +374,21 @@ class FileScanner(
         } else {
             game.file.delete()
         }
+        cleanCollectionPaths(paths)
+    }
+
+    private fun cleanCollectionPaths(deletedPaths: Set<String>) {
+        if (!collectionsDir.exists()) return
+        collectionsDir.listFiles { f -> f.extension == "txt" }?.forEach { collFile ->
+            try {
+                val lines = collFile.readLines()
+                val cleaned = lines.filter { it.trim() !in deletedPaths }
+                if (cleaned.size != lines.size) {
+                    collFile.writeText(cleaned.joinToString("\n") + if (cleaned.isNotEmpty()) "\n" else "")
+                }
+            } catch (_: IOException) { }
+        }
+        favoritesCache = null
     }
 
     fun scanApkLaunches(dir: File): List<LaunchTarget.ApkLaunch> {
@@ -370,7 +397,9 @@ class FileScanner(
         val files = dir.listFiles { f -> f.extension == "apk_launch" } ?: return emptyList()
 
         return files.mapNotNull { file ->
-            val pkg = file.readText().trim()
+            val pkg = try {
+                file.readText().trim()
+            } catch (_: IOException) { return@mapNotNull null }
             if (pkg.isNotEmpty()) LaunchTarget.ApkLaunch(pkg) else null
         }
     }
@@ -427,7 +456,9 @@ class FileScanner(
         val files = dir.listFiles { f -> f.extension == "apk_launch" } ?: return emptyList()
 
         return files.mapNotNull { file ->
-            val pkg = file.readText().trim()
+            val pkg = try {
+                file.readText().trim()
+            } catch (_: IOException) { return@mapNotNull null }
             if (pkg.isNotEmpty()) {
                 file.nameWithoutExtension to LaunchTarget.ApkLaunch(pkg)
             } else null
@@ -442,7 +473,7 @@ class FileScanner(
                 if (file.readLines().any { it.trim() == romPath }) {
                     result.add(file.nameWithoutExtension)
                 }
-            } catch (_: Exception) { }
+            } catch (_: IOException) { }
         }
         return result
     }
@@ -458,11 +489,18 @@ class FileScanner(
     private fun countGames(dir: File): Int {
         val files = dir.listFiles() ?: return 0
         val visible = files.filter { it.name != ".emu_launch" && it.name != "map.txt" }
+        val m3uNames = visible
+            .filter { !it.isDirectory && it.extension.equals("m3u", ignoreCase = true) }
+            .map { it.nameWithoutExtension }
+            .toSet()
         val discFiles = visible.filter { !it.isDirectory && discRegex.containsMatchIn(it.nameWithoutExtension) }
         val groups = discFiles.groupBy { it.nameWithoutExtension.replace(discRegex, "").trim() }
         val multiDiscGroups = groups.filter { it.value.size > 1 }
-        val discFileCount = multiDiscGroups.values.sumOf { it.size }
-        return visible.size - discFileCount + multiDiscGroups.size
+        val coveredByM3u = multiDiscGroups.filter { it.key in m3uNames }
+        val uncoveredGroups = multiDiscGroups - coveredByM3u.keys
+        val discFileCount = uncoveredGroups.values.sumOf { it.size }
+        val coveredDiscCount = coveredByM3u.values.sumOf { it.size }
+        return visible.size - discFileCount + uncoveredGroups.size - coveredDiscCount
     }
 
     private fun findArt(tag: String, gameName: String): File? {
@@ -483,6 +521,7 @@ class FileScanner(
     fun invalidateArtCache() {
         artCache.clear()
         mapCache.clear()
+        favoritesCache = null
     }
 
     private val configDir = File(cannoliRoot, "Config")
