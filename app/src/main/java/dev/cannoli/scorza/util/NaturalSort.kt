@@ -1,12 +1,14 @@
 package dev.cannoli.scorza.util
 
+import java.util.Locale
+
 object NaturalSort : Comparator<String> {
 
     private val chunkPattern = Regex("(\\d+|\\D+)")
 
     override fun compare(a: String, b: String): Int {
-        val iterA = chunkPattern.findAll(a.lowercase()).iterator()
-        val iterB = chunkPattern.findAll(b.lowercase()).iterator()
+        val iterA = chunkPattern.findAll(a.lowercase(Locale.ROOT)).iterator()
+        val iterB = chunkPattern.findAll(b.lowercase(Locale.ROOT)).iterator()
 
         while (iterA.hasNext() && iterB.hasNext()) {
             val ca = iterA.next().value

@@ -88,7 +88,7 @@ class LibretroInput {
             .removePrefix("KEYCODE_")
             .replace("BUTTON_", "")
             .split("_")
-            .joinToString(" ") { word -> word.lowercase().replaceFirstChar { it.uppercase() } }
+            .joinToString(" ") { word -> word.lowercase(java.util.Locale.ROOT).replaceFirstChar { it.uppercase() } }
             .replace("Dpad ", "D-Pad ")
     }
 }
