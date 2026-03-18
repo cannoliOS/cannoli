@@ -9,12 +9,16 @@ class GlobalOverridesManager(private val sdCardRoot: () -> String) {
 
     private fun iniFile() = File(sdCardRoot(), "Config/Overrides/global.ini")
 
+    @Volatile private var controlsCache: Map<String, Int>? = null
+
     fun readControls(): Map<String, Int> {
+        controlsCache?.let { return it }
         val ini = IniParser.parse(iniFile())
         val map = mutableMapOf<String, Int>()
         for ((key, value) in ini.getSection("controls")) {
             value.toIntOrNull()?.let { map[key] = it }
         }
+        controlsCache = map
         return map
     }
 
@@ -22,7 +26,7 @@ class GlobalOverridesManager(private val sdCardRoot: () -> String) {
         val ini = IniParser.parse(iniFile())
         val map = mutableMapOf<ShortcutAction, Set<Int>>()
         for ((key, value) in ini.getSection("shortcuts")) {
-            val action = try { ShortcutAction.valueOf(key) } catch (_: Exception) { continue }
+            val action = try { ShortcutAction.valueOf(key) } catch (_: IllegalArgumentException) { continue }
             val chord = if (value.isEmpty()) emptySet()
             else value.split(",").mapNotNull { it.toIntOrNull() }.toSet()
             map[action] = chord
@@ -31,6 +35,7 @@ class GlobalOverridesManager(private val sdCardRoot: () -> String) {
     }
 
     fun saveControls(controls: Map<String, Int>) {
+        controlsCache = null
         IniWriter.mergeWrite(iniFile(), "controls", controls.mapValues { it.value.toString() })
     }
 

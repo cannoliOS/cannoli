@@ -8,10 +8,10 @@ import java.io.File
 
 class RetroArchLauncher(
     private val context: Context,
-    private val retroArchPackage: String,
-    private val emulationRoot: String
+    private val getRetroArchPackage: () -> String
 ) {
     fun launch(romFile: File, coreName: String): LaunchResult {
+        val retroArchPackage = getRetroArchPackage()
         if (!context.isPackageInstalled(retroArchPackage)) {
             return LaunchResult.AppNotInstalled(retroArchPackage)
         }
