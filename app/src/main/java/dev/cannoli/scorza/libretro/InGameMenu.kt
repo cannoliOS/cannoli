@@ -41,7 +41,7 @@ import dev.cannoli.scorza.ui.components.ScreenTitle
 import dev.cannoli.scorza.ui.components.pillItemHeight
 import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.GrayText
-import dev.cannoli.scorza.ui.theme.LocalCannoliColors
+
 
 class InGameMenuOptions(hasDiscs: Boolean, val discLabel: String) {
     val options: List<String>
@@ -186,7 +186,8 @@ fun InGameMenu(
                 if (canDeleteSlot) add("Y" to "DELETE")
             }
             val rightItems = when {
-                showThumbnail -> listOf("◀▶" to "SLOT", "A" to "SELECT")
+                selectedIndex == menuOptions.saveStateIndex -> listOf("◀▶" to "SLOT", "A" to "SAVE")
+                selectedIndex == menuOptions.loadStateIndex -> listOf("◀▶" to "SLOT", "A" to "LOAD")
                 onDiscRow -> listOf("◀▶" to "DISC", "A" to "SELECT")
                 else -> listOf("A" to "SELECT")
             }
@@ -207,12 +208,7 @@ internal fun PolaroidFrame(
     slotOccupied: List<Boolean>,
     showIndicators: Boolean = true
 ) {
-    val accent = LocalCannoliColors.current.accent
-    val aspectRatio = if (thumbnail != null) {
-        thumbnail.width.toFloat() / thumbnail.height.toFloat()
-    } else {
-        10f / 9f
-    }
+    val selectedColor = Color(0xFF4A90D9)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -224,7 +220,7 @@ internal fun PolaroidFrame(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(aspectRatio)
+                .aspectRatio(10f / 9f)
                 .clip(RoundedCornerShape(2.dp))
                 .background(Color(0xFF222222)),
             contentAlignment = Alignment.Center
@@ -235,7 +231,7 @@ internal fun PolaroidFrame(
                     bitmap = imageBitmap,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
+                    contentScale = ContentScale.Crop
                 )
             } else {
                 Text(
@@ -256,18 +252,25 @@ internal fun PolaroidFrame(
         ) {
             val autoSelected = selectedSlotIndex == 0
             val autoOccupied = slotOccupied.getOrElse(0) { false }
-            Text(
-                text = "A",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = when {
-                        autoSelected -> accent
-                        autoOccupied -> Color.Black
-                        else -> Color(0xFFCCCCCC)
-                    }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .then(if (autoSelected) Modifier.background(selectedColor) else Modifier)
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = "AUTO",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp,
+                        color = when {
+                            autoSelected -> Color.White
+                            autoOccupied -> Color.Black
+                            else -> Color(0xFFCCCCCC)
+                        }
+                    )
                 )
-            )
+            }
             Spacer(modifier = Modifier.width(6.dp))
 
             for (i in 1..10) {
@@ -283,7 +286,7 @@ internal fun PolaroidFrame(
                             if (occupied) {
                                 Modifier
                                     .clip(CircleShape)
-                                    .background(if (selected) accent else Color.Black)
+                                    .background(if (selected) selectedColor else Color.Black)
                             } else {
                                 Modifier
                                     .clip(CircleShape)
