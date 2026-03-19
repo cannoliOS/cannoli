@@ -19,6 +19,7 @@ class GameListViewModel(
 
     data class State(
         val platformTag: String = "",
+        val platformTags: List<String> = emptyList(),
         val breadcrumb: String = "",
         val games: List<Game> = emptyList(),
         val selectedIndex: Int = 0,
@@ -52,15 +53,16 @@ class GameListViewModel(
         }
     }
 
-    fun loadPlatform(tag: String, onReady: () -> Unit = {}) {
+    fun loadPlatform(tag: String, tags: List<String> = listOf(tag), onReady: () -> Unit = {}) {
         breadcrumbStack.clear()
         indexStack.clear()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val games = scanner.scanGames(tag, null)
+                val games = scanner.scanGames(tags, null)
                 val displayName = platformResolver.getDisplayName(tag)
                 _state.value = State(
                     platformTag = tag,
+                    platformTags = tags,
                     breadcrumb = displayName,
                     games = games,
                     selectedIndex = 0,
@@ -205,7 +207,7 @@ class GameListViewModel(
                 )
             }
         } else if (current.platformTag.isNotEmpty()) {
-            loadGames(current.platformTag, current.subfolderPath, preserveIndex, preserveScroll, prevCount)
+            loadGames(current.platformTags, current.subfolderPath, preserveIndex, preserveScroll, prevCount)
         }
     }
 
@@ -214,7 +216,7 @@ class GameListViewModel(
         indexStack.add(current.selectedIndex to firstVisibleIndex)
         breadcrumbStack.add(folderName)
         val subPath = breadcrumbStack.joinToString("/")
-        loadGames(current.platformTag, subPath)
+        loadGames(current.platformTags, subPath)
     }
 
     fun exitSubfolder(): Boolean {
@@ -222,7 +224,7 @@ class GameListViewModel(
         breadcrumbStack.removeAt(breadcrumbStack.lastIndex)
         val (parentIndex, parentScroll) = if (indexStack.isNotEmpty()) indexStack.removeAt(indexStack.lastIndex) else (0 to 0)
         val subPath = if (breadcrumbStack.isEmpty()) null else breadcrumbStack.joinToString("/")
-        loadGames(_state.value.platformTag, subPath, parentIndex, parentScroll)
+        loadGames(_state.value.platformTags, subPath, parentIndex, parentScroll)
         return true
     }
 
@@ -259,7 +261,7 @@ class GameListViewModel(
             val newGames = if (current.isCollection && current.collectionName != null) {
                 scanner.scanCollectionGames(current.collectionName)
             } else {
-                scanner.scanGames(current.platformTag, current.subfolderPath)
+                scanner.scanGames(current.platformTags, current.subfolderPath)
             }
             val newIndex = newGames.indexOfFirst { it.file.absolutePath == path }
                 .let { if (it >= 0) it else oldIndex.coerceAtMost(newGames.lastIndex.coerceAtLeast(0)) }
@@ -347,9 +349,10 @@ class GameListViewModel(
         loadCollectionsList()
     }
 
-    private fun loadGames(tag: String, subfolder: String?, preserveIndex: Int = 0, preserveScroll: Int = 0, prevCount: Int = -1) {
+    private fun loadGames(tags: List<String>, subfolder: String?, preserveIndex: Int = 0, preserveScroll: Int = 0, prevCount: Int = -1) {
+        val tag = tags.first()
         viewModelScope.launch(Dispatchers.IO) {
-            val games = scanner.scanGames(tag, subfolder)
+            val games = scanner.scanGames(tags, subfolder)
             val displayName = platformResolver.getDisplayName(tag)
 
             val breadcrumb = if (breadcrumbStack.isEmpty()) {
@@ -369,6 +372,7 @@ class GameListViewModel(
 
             _state.value = State(
                 platformTag = tag,
+                platformTags = tags,
                 breadcrumb = breadcrumb,
                 games = games,
                 selectedIndex = idx,

@@ -30,13 +30,34 @@ class FileScanner(
 
         val tagDirs = romsDir.listFiles { f -> f.isDirectory } ?: return emptyList()
 
-        return tagDirs
+        val all = tagDirs
             .filter { platformResolver.isKnownTag(it.name) }
             .map { dir ->
                 val tag = dir.name
                 val gameCount = countGames(dir)
                 platformResolver.resolvePlatform(tag, romsDir, gameCount)
-            }.sortedNatural { it.displayName }
+            }
+
+        return all.groupBy { it.displayName }.map { (_, group) ->
+            if (group.size == 1) group[0]
+            else {
+                val primary = group.maxBy { it.gameCount }
+                primary.copy(
+                    gameCount = group.sumOf { it.gameCount },
+                    tags = group.map { it.tag }
+                )
+            }
+        }.sortedNatural { it.displayName }
+    }
+
+    fun scanGames(tags: List<String>, subfolder: String? = null): List<Game> {
+        if (tags.size == 1) return scanGames(tags[0], subfolder)
+        val combined = tags.flatMap { scanGames(it, subfolder) }
+        return combined.sortedWith(
+            compareBy<Game> { !it.isSubfolder }
+                .thenBy { !it.displayName.startsWith("★") }
+                .thenBy(dev.cannoli.scorza.util.NaturalSort) { it.displayName.removePrefix("★ ") }
+        )
     }
 
     fun scanGames(tag: String, subfolder: String? = null): List<Game> {

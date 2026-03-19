@@ -150,11 +150,11 @@
     "core": "fbneo_libretro"
   },
   "MAME": {
-    "name": "Arcade (MAME)",
+    "name": "Arcade",
     "core": "mame2003_plus_libretro"
   },
   "FBN": {
-    "name": "Arcade (FBNeo)",
+    "name": "Arcade",
     "core": "fbneo_libretro"
   },
   "VIRTUALBOY": {

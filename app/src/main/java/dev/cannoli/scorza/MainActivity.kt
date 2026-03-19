@@ -1396,7 +1396,7 @@ class MainActivity : ComponentActivity() {
             }
             is SystemListViewModel.ListItem.PlatformItem -> {
                 navigating = true
-                gameListViewModel.loadPlatform(item.platform.tag) {
+                gameListViewModel.loadPlatform(item.platform.tag, item.platform.allTags) {
                     scanResumableGames()
                     screenStack.add(LauncherScreen.GameList)
                     navigating = false
@@ -1821,7 +1821,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is SystemListViewModel.ListItem.PlatformItem -> {
-                gameListViewModel.loadPlatform(target.platform.tag) {
+                gameListViewModel.loadPlatform(target.platform.tag, target.platform.allTags) {
                     scanResumableGames()
                     navigating = false
                 }
