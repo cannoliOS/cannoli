@@ -24,6 +24,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import dev.cannoli.scorza.libretro.shader.PresetParser
 import dev.cannoli.scorza.libretro.shader.ShaderPipeline
+import dev.cannoli.scorza.libretro.shader.SlangTranspiler
 import dev.cannoli.scorza.ui.theme.CannoliColors
 import dev.cannoli.scorza.ui.theme.CannoliTheme
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
@@ -277,7 +278,9 @@ class LibretroActivity : ComponentActivity() {
                 runner.setAudioCallback(audio!!)
                 audio!!.start()
 
-                ShaderPipeline.cacheDir = File(cacheDir, "shader_cache")
+                val shaderCacheDir = File(cacheDir, "shader_cache")
+                ShaderPipeline.cacheDir = shaderCacheDir
+                SlangTranspiler.cacheDir = shaderCacheDir
                 renderer = LibretroRenderer(runner).also {
                     it.coreAspectRatio = runner.getAspectRatio()
                     it.scalingMode = scalingMode

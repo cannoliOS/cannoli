@@ -88,11 +88,13 @@ class ShaderPipeline private constructor(
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, wrap)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, wrap)
             setUniform1i(program, "Texture", 0)
+            setUniform1i(program, "Source", 0)
 
             // Bind original frame
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sourceTexture)
             setUniform1i(program, "OrigTexture", 1)
+            setUniform1i(program, "Original", 1)
 
             // Bind LUT textures starting at unit 2
             var texUnit = 2
@@ -118,24 +120,35 @@ class ShaderPipeline private constructor(
                 }
             }
 
-            // Standard uniforms
+            // Standard uniforms (vec2 for GLSL presets)
             setUniform2f(program, "TextureSize", inputW.toFloat(), inputH.toFloat())
             setUniform2f(program, "InputSize", frameW.toFloat(), frameH.toFloat())
             setUniform2f(program, "OutputSize", outW.toFloat(), outH.toFloat())
             setUniform2f(program, "OrigTextureSize", frameW.toFloat(), frameH.toFloat())
             setUniform2f(program, "OrigInputSize", frameW.toFloat(), frameH.toFloat())
 
+            // Slang push_constant convention (vec4: xy = size, zw = 1/size)
+            for (prefix in arrayOf("params.", "params_")) {
+                setUniform4f(program, "${prefix}SourceSize", inputW.toFloat(), inputH.toFloat(), 1f / inputW, 1f / inputH)
+                setUniform4f(program, "${prefix}OriginalSize", frameW.toFloat(), frameH.toFloat(), 1f / frameW, 1f / frameH)
+                setUniform4f(program, "${prefix}OutputSize", outW.toFloat(), outH.toFloat(), 1f / outW, 1f / outH)
+            }
+
             val fc = if (pass.frameCountMod > 0) frameCount % pass.frameCountMod else frameCount
             setUniform1i(program, "FrameCount", fc)
+            setUniform1i(program, "params_FrameCount", fc)
             setUniform1i(program, "FrameDirection", 1)
 
             // MVP identity matrix
-            val mvpLoc = GLES20.glGetUniformLocation(program, "MVPMatrix")
-            if (mvpLoc >= 0) GLES20.glUniformMatrix4fv(mvpLoc, 1, false, IDENTITY_MATRIX, 0)
+            for (name in arrayOf("MVPMatrix", "global.MVP", "global_MVP")) {
+                val loc = GLES20.glGetUniformLocation(program, name)
+                if (loc >= 0) GLES20.glUniformMatrix4fv(loc, 1, false, IDENTITY_MATRIX, 0)
+            }
 
             // User-adjustable parameters
             for ((key, value) in parameters) {
                 setUniform1f(program, key, value)
+                setUniform1f(program, "params_$key", value)
             }
 
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
@@ -198,7 +211,6 @@ class ShaderPipeline private constructor(
 
     companion object {
         private const val TAG = "ShaderPipeline"
-
         private var passthroughProgram = 0
 
         fun invalidateSharedProgram() {
@@ -263,14 +275,29 @@ class ShaderPipeline private constructor(
                     return null
                 }
                 val source = shaderFile.readText()
-                val prepared = prepareSource(source)
-                val (vertexSrc, fragmentSrc) = PresetParser.splitVertexFragment(prepared)
-                val vs = vertexSrc ?: DEFAULT_VERTEX
-                val fs = fragmentSrc ?: prepared
+                val vs: String
+                val fs: String
+
+                if (SlangTranspiler.isVulkanGLSL(source)) {
+                    val (rawVs, rawFs) = SlangTranspiler.splitSlangStages(source)
+                    val basePath = shaderFile.parent
+                    val transVs = SlangTranspiler.transpile(rawVs, isVertex = true, basePath)
+                    val transFs = SlangTranspiler.transpile(rawFs, isVertex = false, basePath)
+                    if (transVs == null || transFs == null) {
+                        cleanup(passPrograms)
+                        return null
+                    }
+                    vs = transVs
+                    fs = transFs
+                } else {
+                    val prepared = prepareSource(source)
+                    val (splitVs, splitFs) = PresetParser.splitVertexFragment(prepared)
+                    vs = splitVs ?: DEFAULT_VERTEX
+                    fs = splitFs ?: prepared
+                }
 
                 val program = compileProgram(vs, ensurePrecision(fs))
                 if (program == 0) {
-                    Log.e(TAG, "Failed to compile pass $i: ${pass.shaderPath}")
                     cleanup(passPrograms)
                     return null
                 }
@@ -340,7 +367,8 @@ class ShaderPipeline private constructor(
             val status = IntArray(1)
             GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, status, 0)
             if (status[0] == 0) {
-                Log.e(TAG, "Link error: ${GLES20.glGetProgramInfoLog(program)}")
+                val err = GLES20.glGetProgramInfoLog(program)
+                Log.e(TAG, "Link error: $err")
                 GLES20.glDeleteProgram(program)
                 return 0
             }
@@ -412,7 +440,8 @@ class ShaderPipeline private constructor(
             GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, status, 0)
             if (status[0] == 0) {
                 val typeName = if (type == GLES20.GL_VERTEX_SHADER) "vertex" else "fragment"
-                Log.e(TAG, "Compile error ($typeName): ${GLES20.glGetShaderInfoLog(shader)}")
+                val err = GLES20.glGetShaderInfoLog(shader)
+                Log.e(TAG, "Compile error ($typeName): $err")
                 GLES20.glDeleteShader(shader)
                 return 0
             }
@@ -478,15 +507,21 @@ class ShaderPipeline private constructor(
             for (p in programs) if (p != 0) GLES20.glDeleteProgram(p)
         }
 
+        private fun findAttrib(program: Int, vararg names: String): Int {
+            for (name in names) {
+                val loc = GLES20.glGetAttribLocation(program, name)
+                if (loc >= 0) return loc
+            }
+            return -1
+        }
+
         private fun bindQuad(program: Int, vertexBuffer: FloatBuffer, texCoordBuffer: FloatBuffer) {
-            val posLoc = GLES20.glGetAttribLocation(program, "VertexCoord")
-                .let { if (it >= 0) it else GLES20.glGetAttribLocation(program, "aPosition") }
+            val posLoc = findAttrib(program, "VertexCoord", "Position", "aPosition")
             if (posLoc >= 0) {
                 GLES20.glEnableVertexAttribArray(posLoc)
                 GLES20.glVertexAttribPointer(posLoc, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer)
             }
-            val texLoc = GLES20.glGetAttribLocation(program, "TexCoord")
-                .let { if (it >= 0) it else GLES20.glGetAttribLocation(program, "aTexCoord") }
+            val texLoc = findAttrib(program, "TexCoord", "aTexCoord")
             if (texLoc >= 0) {
                 GLES20.glEnableVertexAttribArray(texLoc)
                 GLES20.glVertexAttribPointer(texLoc, 2, GLES20.GL_FLOAT, false, 0, texCoordBuffer)
@@ -494,11 +529,9 @@ class ShaderPipeline private constructor(
         }
 
         private fun unbindQuad(program: Int) {
-            val posLoc = GLES20.glGetAttribLocation(program, "VertexCoord")
-                .let { if (it >= 0) it else GLES20.glGetAttribLocation(program, "aPosition") }
+            val posLoc = findAttrib(program, "VertexCoord", "Position", "aPosition")
             if (posLoc >= 0) GLES20.glDisableVertexAttribArray(posLoc)
-            val texLoc = GLES20.glGetAttribLocation(program, "TexCoord")
-                .let { if (it >= 0) it else GLES20.glGetAttribLocation(program, "aTexCoord") }
+            val texLoc = findAttrib(program, "TexCoord", "aTexCoord")
             if (texLoc >= 0) GLES20.glDisableVertexAttribArray(texLoc)
         }
 
@@ -515,6 +548,11 @@ class ShaderPipeline private constructor(
         private fun setUniform2f(program: Int, name: String, x: Float, y: Float) {
             val loc = GLES20.glGetUniformLocation(program, name)
             if (loc >= 0) GLES20.glUniform2f(loc, x, y)
+        }
+
+        private fun setUniform4f(program: Int, name: String, x: Float, y: Float, z: Float, w: Float) {
+            val loc = GLES20.glGetUniformLocation(program, name)
+            if (loc >= 0) GLES20.glUniform4f(loc, x, y, z, w)
         }
     }
 }

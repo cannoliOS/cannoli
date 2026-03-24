@@ -1,0 +1,6 @@
+[submodule "app/src/main/cpp/third_party/glslang"]
+	path = app/src/main/cpp/third_party/glslang
+	url = https://github.com/KhronosGroup/glslang.git
+[submodule "app/src/main/cpp/third_party/spirv-cross"]
+	path = app/src/main/cpp/third_party/spirv-cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git
