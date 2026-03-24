@@ -61,6 +61,10 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         pipeline?.parameters?.set(id, value)
     }
 
+    fun clearShaderParamOverrides() {
+        shaderParamOverrides.clear()
+    }
+
     var onFrameRendered: (() -> Unit)? = null
 
     private var textureId = 0

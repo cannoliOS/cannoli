@@ -75,6 +75,7 @@ class LibretroActivity : ComponentActivity() {
     private var coreInfoText by mutableStateOf("")
 
     private var frontendSnapshot: OverrideManager.Settings? = null
+    private var shaderParamsDirty = false
     private var platformBaseline: OverrideManager.Settings? = null
     private var globalControls = emptyMap<String, Int>()
 
@@ -553,7 +554,9 @@ class LibretroActivity : ComponentActivity() {
             }
             menu.settingsIndex -> {
                 coreOptions = runner.getCoreOptions()
+                refreshShaderParams()
                 frontendSnapshot = buildCurrentSettings()
+                shaderParamsDirty = false
                 push(IGMScreen.Settings())
             }
             menu.resetIndex -> {
@@ -597,7 +600,7 @@ class LibretroActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
                 val snap = frontendSnapshot
-                if (snap != null && !buildCurrentSettings().frontendEquals(snap)) {
+                if (snap != null && (shaderParamsDirty || !buildCurrentSettings().frontendEquals(snap))) {
                     push(IGMScreen.SavePrompt())
                 } else {
                     pop()
@@ -722,7 +725,7 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun frontendHasShaderSettings() =
-        screenEffect == ScreenEffect.SHADER && shaderPreset.isNotEmpty()
+        screenEffect == ScreenEffect.SHADER && shaderParams.isNotEmpty()
     private fun frontendItemCount() = if (frontendHasShaderSettings()) 7 else 6
 
     private fun cycleFrontendValue(index: Int, direction: Int) {
@@ -758,15 +761,21 @@ class LibretroActivity : ComponentActivity() {
         } else {
             val currentIndex = if (screenEffect == ScreenEffect.NONE) -1
                 else shaderPresets.indexOf(shaderPreset)
+            val count = shaderPresets.size
             val newIndex = currentIndex + direction
-            if (newIndex < 0 || newIndex >= shaderPresets.size) {
+            if (newIndex in 0 until count) {
+                screenEffect = ScreenEffect.SHADER
+                shaderPreset = shaderPresets[newIndex]
+            } else if (newIndex >= count) {
                 screenEffect = ScreenEffect.NONE
                 shaderPreset = ""
             } else {
                 screenEffect = ScreenEffect.SHADER
-                shaderPreset = shaderPresets[newIndex]
+                shaderPreset = shaderPresets[count - 1]
             }
         }
+        shaderParamsDirty = true
+        renderer.clearShaderParamOverrides()
         renderer.screenEffect = screenEffect
         renderer.shaderPresetPath = resolveShaderPresetPath()
         refreshShaderParams()
@@ -793,6 +802,7 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun cycleShaderParam(index: Int, direction: Int) {
+        shaderParamsDirty = true
         val param = shaderParams.getOrNull(index) ?: return
         val newValue = cycleFloat(param.value, direction, param.min, param.max, param.step)
         shaderParams = shaderParams.toMutableList().also {
@@ -1107,11 +1117,13 @@ class LibretroActivity : ComponentActivity() {
                     1 -> { saveToGame(); showOsd("Saved for this game") }
                 }
                 frontendSnapshot = null
+                shaderParamsDirty = false
                 pop(); pop()
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
                 frontendSnapshot = null
+                shaderParamsDirty = false
                 pop(); pop()
                 true
             }
@@ -1127,7 +1139,7 @@ class LibretroActivity : ComponentActivity() {
             add(IGMSettingsItem("Screen Scaling", scalingLabel()))
             add(IGMSettingsItem("Screen Sharpness", sharpnessLabel()))
             add(IGMSettingsItem("Shader", shaderLabel()))
-            if (screenEffect == ScreenEffect.SHADER && shaderPreset.isNotEmpty()) {
+            if (screenEffect == ScreenEffect.SHADER && shaderParams.isNotEmpty()) {
                 add(IGMSettingsItem("Shader Settings"))
             }
             add(IGMSettingsItem("Overlay", overlayLabel()))
