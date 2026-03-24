@@ -6,6 +6,7 @@ import android.opengl.GLES30
 import android.opengl.GLUtils
 import android.util.Log
 import java.io.File
+import java.security.MessageDigest
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -319,7 +320,12 @@ class ShaderPipeline private constructor(
             return "precision mediump float;\n$fragment"
         }
 
+        var cacheDir: File? = null
+
         private fun compileProgram(vertexSrc: String, fragmentSrc: String): Int {
+            val cached = loadCachedBinary(vertexSrc, fragmentSrc)
+            if (cached != 0) return cached
+
             val vs = compileShader(GLES20.GL_VERTEX_SHADER, vertexSrc)
             if (vs == 0) return 0
             val fs = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentSrc)
@@ -327,6 +333,7 @@ class ShaderPipeline private constructor(
             val program = GLES20.glCreateProgram()
             GLES20.glAttachShader(program, vs)
             GLES20.glAttachShader(program, fs)
+            GLES30.glProgramParameteri(program, GLES30.GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GLES20.GL_TRUE)
             GLES20.glLinkProgram(program)
             GLES20.glDeleteShader(vs)
             GLES20.glDeleteShader(fs)
@@ -337,7 +344,64 @@ class ShaderPipeline private constructor(
                 GLES20.glDeleteProgram(program)
                 return 0
             }
+            saveBinaryToCache(program, vertexSrc, fragmentSrc)
             return program
+        }
+
+        private fun sourceHash(vertexSrc: String, fragmentSrc: String): String {
+            val digest = MessageDigest.getInstance("SHA-1")
+            digest.update(vertexSrc.toByteArray())
+            digest.update(fragmentSrc.toByteArray())
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
+
+        private fun loadCachedBinary(vertexSrc: String, fragmentSrc: String): Int {
+            val dir = cacheDir ?: return 0
+            val hash = sourceHash(vertexSrc, fragmentSrc)
+            val binFile = File(dir, "$hash.bin")
+            val fmtFile = File(dir, "$hash.fmt")
+            if (!binFile.exists() || !fmtFile.exists()) return 0
+
+            return try {
+                val binary = binFile.readBytes()
+                val format = fmtFile.readText().trim().toInt()
+                val buf = ByteBuffer.allocateDirect(binary.size)
+                    .order(ByteOrder.nativeOrder()).put(binary).also { it.position(0) }
+                val program = GLES20.glCreateProgram()
+                GLES30.glProgramBinary(program, format, buf, binary.size)
+                val status = IntArray(1)
+                GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, status, 0)
+                if (status[0] == 0) {
+                    GLES20.glDeleteProgram(program)
+                    binFile.delete()
+                    fmtFile.delete()
+                    0
+                } else {
+                    Log.i(TAG, "Loaded cached shader: $hash")
+                    program
+                }
+            } catch (_: Exception) { 0 }
+        }
+
+        private fun saveBinaryToCache(program: Int, vertexSrc: String, fragmentSrc: String) {
+            val dir = cacheDir ?: return
+            try {
+                val length = IntArray(1)
+                GLES20.glGetProgramiv(program, GLES30.GL_PROGRAM_BINARY_LENGTH, length, 0)
+                if (length[0] <= 0) return
+                val binary = ByteBuffer.allocateDirect(length[0]).order(ByteOrder.nativeOrder())
+                val format = IntArray(1)
+                val written = IntArray(1)
+                GLES30.glGetProgramBinary(program, length[0], written, 0, format, 0, binary)
+                if (written[0] <= 0) return
+                val hash = sourceHash(vertexSrc, fragmentSrc)
+                dir.mkdirs()
+                val bytes = ByteArray(written[0])
+                binary.position(0)
+                binary.get(bytes)
+                File(dir, "$hash.bin").writeBytes(bytes)
+                File(dir, "$hash.fmt").writeText(format[0].toString())
+            } catch (_: Exception) { }
         }
 
         private fun compileShader(type: Int, source: String): Int {
