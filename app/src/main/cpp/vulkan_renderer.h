@@ -7,12 +7,29 @@
 #include <string>
 #include <map>
 
+struct VkPassConfig {
+    std::vector<uint32_t> vertSpirv;
+    std::vector<uint32_t> fragSpirv;
+    bool filterLinear = false;
+    int scaleType = 0; // 0=source, 1=viewport, 2=absolute
+    float scaleX = 1.0f, scaleY = 1.0f;
+    bool needsOriginal = false;
+};
+
 struct VkPassResources {
     VkImage image = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+    VkShaderModule vertModule = VK_NULL_HANDLE;
+    VkShaderModule fragModule = VK_NULL_HANDLE;
     uint32_t width = 0, height = 0;
+    bool filterLinear = false;
+    int scaleType = 0;
+    float scaleX = 1.0f, scaleY = 1.0f;
+    bool needsOriginal = false;
 };
 
 class VulkanRenderer {
@@ -21,8 +38,7 @@ public:
     void destroy();
     void surfaceChanged(int width, int height);
 
-    bool loadPreset(const std::vector<std::vector<uint32_t>> &spirvModules,
-                    const std::vector<bool> &filterLinear);
+    bool loadPreset(const std::vector<VkPassConfig> &passes);
     void unloadPreset();
 
     void setParameter(const std::string &name, float value);
@@ -89,6 +105,18 @@ private:
     VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
     VkSemaphore renderFinishedSemaphore_ = VK_NULL_HANDLE;
     VkFence inFlightFence_ = VK_NULL_HANDLE;
+
+    std::vector<VkPassResources> passes_;
+    VkRenderPass intermediateRenderPass_ = VK_NULL_HANDLE;
+    VkDescriptorSetLayout multiPassDescLayout_ = VK_NULL_HANDLE;
+    VkPipelineLayout multiPassPipelineLayout_ = VK_NULL_HANDLE;
+    bool presetLoaded_ = false;
+
+    bool createIntermediateRenderPass();
+    bool createMultiPassLayouts();
+    bool createPassPipeline(VkPassResources &pass);
+    bool createPassFbo(VkPassResources &pass, uint32_t w, uint32_t h);
+    void renderMultiPass();
 
     int surfaceWidth_ = 0, surfaceHeight_ = 0;
     int scalingMode_ = 0; // 0=core, 1=integer, 2=fullscreen

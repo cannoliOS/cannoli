@@ -504,38 +504,14 @@ void VulkanRenderer::renderFrame() {
         return;
     }
 
-    VkCommandBuffer cmd = commandBuffers_[0];
-    vkResetCommandBuffer(cmd, 0);
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    vkBeginCommandBuffer(cmd, &beginInfo);
-
-    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-    VkRenderPassBeginInfo rpBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    rpBegin.renderPass = renderPass_;
-    rpBegin.framebuffer = swapchainFramebuffers_[imageIndex];
-    rpBegin.renderArea.extent = swapchainExtent_;
-    rpBegin.clearValueCount = 1;
-    rpBegin.pClearValues = &clearColor;
-
-    vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, passthroughPipeline_);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &descriptorSet_, 0, nullptr);
-
-    // Compute viewport with aspect ratio
+    // Compute viewport
     int sw = swapchainExtent_.width, sh = swapchainExtent_.height;
-    float gameAspect;
-    if (scalingMode_ == 2) { // fullscreen
-        gameAspect = (float)sw / sh;
-    } else {
-        gameAspect = (coreAspect_ > 0) ? coreAspect_ : (float)frameWidth_ / frameHeight_;
-    }
+    float gameAspect = (scalingMode_ == 2) ? (float)sw / sh
+        : (coreAspect_ > 0) ? coreAspect_ : (float)frameWidth_ / frameHeight_;
     float screenAspect = (float)sw / sh;
 
-    if (scalingMode_ == 1) { // integer
-        int scaleX = sw / frameWidth_;
-        int scaleY = sh / frameHeight_;
-        int scale = (scaleX < scaleY ? scaleX : scaleY);
-        if (scale < 1) scale = 1;
+    if (scalingMode_ == 1) {
+        int scale = std::max(1, std::min((int)(sw / frameWidth_), (int)(sh / frameHeight_)));
         vpW_ = frameWidth_ * scale;
         vpH_ = frameHeight_ * scale;
     } else if (gameAspect > screenAspect) {
@@ -548,13 +524,83 @@ void VulkanRenderer::renderFrame() {
     vpX_ = (sw - vpW_) / 2;
     vpY_ = (sh - vpH_) / 2;
 
-    VkViewport viewport{(float)vpX_, (float)vpY_, (float)vpW_, (float)vpH_, 0.0f, 1.0f};
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    VkRect2D scissor{{vpX_, vpY_}, {(uint32_t)vpW_, (uint32_t)vpH_}};
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    VkCommandBuffer cmd = commandBuffers_[0];
+    vkResetCommandBuffer(cmd, 0);
+    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    vkBeginCommandBuffer(cmd, &beginInfo);
 
-    vkCmdDraw(cmd, 3, 1, 0, 0);
-    vkCmdEndRenderPass(cmd);
+    if (presetLoaded_ && !passes_.empty()) {
+        renderMultiPass();
+        // Last pass: render to swapchain
+        auto &lastPass = passes_.back();
+
+        // Build push constants
+        struct { float s[4]; float o[4]; float out[4]; uint32_t fc; float p[9]; } push{};
+        push.o[0] = (float)frameWidth_; push.o[1] = (float)frameHeight_;
+        push.o[2] = 1.0f / frameWidth_; push.o[3] = 1.0f / frameHeight_;
+        push.out[0] = (float)vpW_; push.out[1] = (float)vpH_;
+        push.out[2] = 1.0f / vpW_; push.out[3] = 1.0f / vpH_;
+        if (passes_.size() > 1) {
+            auto &prev = passes_[passes_.size()-2];
+            push.s[0] = (float)prev.width; push.s[1] = (float)prev.height;
+        } else {
+            push.s[0] = (float)frameWidth_; push.s[1] = (float)frameHeight_;
+        }
+        push.s[2] = 1.0f / push.s[0]; push.s[3] = 1.0f / push.s[1];
+        push.fc = (uint32_t)frameCount_;
+        const char *pn[] = {"curvature","scanline","mask_dark","vignette","glow_strength","sweep","sweep_bright","crt_brightness","noise_amount"};
+        float pd[] = {1.7f,0.75f,0.3f,0.85f,0.25f,1.0f,0.35f,1.0f,0.15f};
+        for (int i = 0; i < 9; i++) { auto it = params_.find(pn[i]); push.p[i] = (it != params_.end()) ? it->second : pd[i]; }
+
+        // Update last pass descriptors
+        VkDescriptorImageInfo srcInfo{frameSampler_, (passes_.size() > 1) ? passes_[passes_.size()-2].view : frameView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo origInfo{frameSampler_, frameView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet writes[2]{};
+        writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, lastPass.descriptorSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &srcInfo, nullptr, nullptr};
+        writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, lastPass.descriptorSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &origInfo, nullptr, nullptr};
+        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+
+        VkClearValue clear = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+        VkRenderPassBeginInfo rpBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        rpBegin.renderPass = renderPass_;
+        rpBegin.framebuffer = swapchainFramebuffers_[imageIndex];
+        rpBegin.renderArea.extent = swapchainExtent_;
+        rpBegin.clearValueCount = 1;
+        rpBegin.pClearValues = &clear;
+
+        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, lastPass.pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, multiPassPipelineLayout_, 0, 1, &lastPass.descriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, multiPassPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+
+        VkViewport viewport{(float)vpX_, (float)vpY_, (float)vpW_, (float)vpH_, 0.0f, 1.0f};
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor{{vpX_, vpY_}, {(uint32_t)vpW_, (uint32_t)vpH_}};
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    } else {
+        // Passthrough
+        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+        VkRenderPassBeginInfo rpBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        rpBegin.renderPass = renderPass_;
+        rpBegin.framebuffer = swapchainFramebuffers_[imageIndex];
+        rpBegin.renderArea.extent = swapchainExtent_;
+        rpBegin.clearValueCount = 1;
+        rpBegin.pClearValues = &clearColor;
+
+        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, passthroughPipeline_);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &descriptorSet_, 0, nullptr);
+
+        VkViewport viewport{(float)vpX_, (float)vpY_, (float)vpW_, (float)vpH_, 0.0f, 1.0f};
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor{{vpX_, vpY_}, {(uint32_t)vpW_, (uint32_t)vpH_}};
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    }
+
     vkEndCommandBuffer(cmd);
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -769,14 +815,362 @@ void VulkanRenderer::setScaling(int mode, float coreAspect, int sharpness) {
     sharpness_ = sharpness;
 }
 
-bool VulkanRenderer::loadPreset(const std::vector<std::vector<uint32_t>> &spirvModules,
-                                const std::vector<bool> &filterLinear) {
-    // TODO: multi-pass pipeline
+bool VulkanRenderer::createIntermediateRenderPass() {
+    VkAttachmentDescription att{};
+    att.format = VK_FORMAT_R8G8B8A8_UNORM;
+    att.samples = VK_SAMPLE_COUNT_1_BIT;
+    att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    att.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription sub{};
+    sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    sub.colorAttachmentCount = 1;
+    sub.pColorAttachments = &ref;
+
+    VkRenderPassCreateInfo rpInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    rpInfo.attachmentCount = 1;
+    rpInfo.pAttachments = &att;
+    rpInfo.subpassCount = 1;
+    rpInfo.pSubpasses = &sub;
+    return vkCreateRenderPass(device_, &rpInfo, nullptr, &intermediateRenderPass_) == VK_SUCCESS;
+}
+
+bool VulkanRenderer::createMultiPassLayouts() {
+    // Descriptor layout: binding 0 = Source (previous pass), binding 1 = Original
+    VkDescriptorSetLayoutBinding bindings[2]{};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    layoutInfo.bindingCount = 2;
+    layoutInfo.pBindings = bindings;
+    if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &multiPassDescLayout_) != VK_SUCCESS)
+        return false;
+
+    // Push constant range for sizes + params
+    VkPushConstantRange pushRange{};
+    pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    pushRange.offset = 0;
+    pushRange.size = 128; // enough for sizes + 9 params
+
+    VkPipelineLayoutCreateInfo plInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    plInfo.setLayoutCount = 1;
+    plInfo.pSetLayouts = &multiPassDescLayout_;
+    plInfo.pushConstantRangeCount = 1;
+    plInfo.pPushConstantRanges = &pushRange;
+    return vkCreatePipelineLayout(device_, &plInfo, nullptr, &multiPassPipelineLayout_) == VK_SUCCESS;
+}
+
+bool VulkanRenderer::createPassPipeline(VkPassResources &pass) {
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = pass.vertModule;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = pass.fragModule;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vertexInput{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo viewportState{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates = dynStates;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+
+    VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAtt{};
+    blendAtt.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo colorBlend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    colorBlend.attachmentCount = 1;
+    colorBlend.pAttachments = &blendAtt;
+
+    VkGraphicsPipelineCreateInfo pInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    pInfo.stageCount = 2;
+    pInfo.pStages = stages;
+    pInfo.pVertexInputState = &vertexInput;
+    pInfo.pInputAssemblyState = &inputAssembly;
+    pInfo.pViewportState = &viewportState;
+    pInfo.pRasterizationState = &rasterizer;
+    pInfo.pMultisampleState = &ms;
+    pInfo.pColorBlendState = &colorBlend;
+    pInfo.pDynamicState = &dynamicState;
+    pInfo.layout = multiPassPipelineLayout_;
+    // Last pass renders to swapchain, others to intermediate
+    pInfo.renderPass = (&pass == &passes_.back()) ? renderPass_ : intermediateRenderPass_;
+
+    return vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pInfo, nullptr, &pass.pipeline) == VK_SUCCESS;
+}
+
+bool VulkanRenderer::createPassFbo(VkPassResources &pass, uint32_t w, uint32_t h) {
+    pass.width = w;
+    pass.height = h;
+
+    VkImageCreateInfo imgInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    imgInfo.imageType = VK_IMAGE_TYPE_2D;
+    imgInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    imgInfo.extent = {w, h, 1};
+    imgInfo.mipLevels = 1;
+    imgInfo.arrayLayers = 1;
+    imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imgInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkCreateImage(device_, &imgInfo, nullptr, &pass.image);
+
+    VkMemoryRequirements memReq;
+    vkGetImageMemoryRequirements(device_, pass.image, &memReq);
+    VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkAllocateMemory(device_, &allocInfo, nullptr, &pass.memory);
+    vkBindImageMemory(device_, pass.image, pass.memory, 0);
+
+    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    viewInfo.image = pass.image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vkCreateImageView(device_, &viewInfo, nullptr, &pass.view);
+
+    VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    fbInfo.renderPass = intermediateRenderPass_;
+    fbInfo.attachmentCount = 1;
+    fbInfo.pAttachments = &pass.view;
+    fbInfo.width = w;
+    fbInfo.height = h;
+    fbInfo.layers = 1;
+    return vkCreateFramebuffer(device_, &fbInfo, nullptr, &pass.framebuffer) == VK_SUCCESS;
+}
+
+bool VulkanRenderer::loadPreset(const std::vector<VkPassConfig> &configs) {
+    unloadPreset();
+    if (configs.empty()) return false;
+
+    if (intermediateRenderPass_ == VK_NULL_HANDLE && !createIntermediateRenderPass()) return false;
+    if (multiPassDescLayout_ == VK_NULL_HANDLE && !createMultiPassLayouts()) return false;
+
+    passes_.resize(configs.size());
+    for (size_t i = 0; i < configs.size(); i++) {
+        auto &pass = passes_[i];
+        auto &cfg = configs[i];
+        pass.filterLinear = cfg.filterLinear;
+        pass.scaleType = cfg.scaleType;
+        pass.scaleX = cfg.scaleX;
+        pass.scaleY = cfg.scaleY;
+        pass.needsOriginal = cfg.needsOriginal;
+
+        pass.vertModule = createShaderModule(cfg.vertSpirv);
+        pass.fragModule = createShaderModule(cfg.fragSpirv);
+        if (pass.vertModule == VK_NULL_HANDLE || pass.fragModule == VK_NULL_HANDLE) {
+            LOGE("Failed to create shader modules for pass %zu", i);
+            unloadPreset();
+            return false;
+        }
+
+        if (!createPassPipeline(pass)) {
+            LOGE("Failed to create pipeline for pass %zu", i);
+            unloadPreset();
+            return false;
+        }
+
+        // Allocate descriptor set
+        VkDescriptorSetAllocateInfo dsAlloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        dsAlloc.descriptorPool = descriptorPool_;
+        dsAlloc.descriptorSetCount = 1;
+        dsAlloc.pSetLayouts = &multiPassDescLayout_;
+        vkAllocateDescriptorSets(device_, &dsAlloc, &pass.descriptorSet);
+
+        // FBOs created lazily when frame dimensions are known (except last pass)
+    }
+
+    presetLoaded_ = true;
+    LOGI("Loaded %zu-pass preset", configs.size());
     return true;
 }
 
 void VulkanRenderer::unloadPreset() {
-    // TODO
+    if (!presetLoaded_) return;
+    vkDeviceWaitIdle(device_);
+    for (auto &pass : passes_) {
+        if (pass.pipeline) vkDestroyPipeline(device_, pass.pipeline, nullptr);
+        if (pass.vertModule) vkDestroyShaderModule(device_, pass.vertModule, nullptr);
+        if (pass.fragModule) vkDestroyShaderModule(device_, pass.fragModule, nullptr);
+        if (pass.framebuffer) vkDestroyFramebuffer(device_, pass.framebuffer, nullptr);
+        if (pass.view) vkDestroyImageView(device_, pass.view, nullptr);
+        if (pass.image) vkDestroyImage(device_, pass.image, nullptr);
+        if (pass.memory) vkFreeMemory(device_, pass.memory, nullptr);
+    }
+    passes_.clear();
+    presetLoaded_ = false;
+}
+
+void VulkanRenderer::renderMultiPass() {
+    // Ensure intermediate FBOs exist
+    for (size_t i = 0; i + 1 < passes_.size(); i++) {
+        auto &pass = passes_[i];
+        uint32_t w, h;
+        if (pass.scaleType == 1) { // viewport
+            w = (uint32_t)(vpW_ * pass.scaleX);
+            h = (uint32_t)(vpH_ * pass.scaleY);
+        } else { // source
+            w = (uint32_t)(frameWidth_ * pass.scaleX);
+            h = (uint32_t)(frameHeight_ * pass.scaleY);
+        }
+        if (w < 1) w = 1;
+        if (h < 1) h = 1;
+        if (pass.width != w || pass.height != h) {
+            if (pass.framebuffer) {
+                vkDeviceWaitIdle(device_);
+                vkDestroyFramebuffer(device_, pass.framebuffer, nullptr);
+                vkDestroyImageView(device_, pass.view, nullptr);
+                vkDestroyImage(device_, pass.image, nullptr);
+                vkFreeMemory(device_, pass.memory, nullptr);
+                pass.framebuffer = VK_NULL_HANDLE;
+            }
+            createPassFbo(pass, w, h);
+        }
+    }
+
+    // Build push constant data
+    struct PushData {
+        float sourceSize[4];
+        float originalSize[4];
+        float outputSize[4];
+        uint32_t frameCount;
+        float params[9]; // curvature, scanline, mask_dark, vignette, glow_strength, sweep, sweep_bright, crt_brightness, noise_amount
+    } push{};
+
+    push.originalSize[0] = (float)frameWidth_;
+    push.originalSize[1] = (float)frameHeight_;
+    push.originalSize[2] = 1.0f / frameWidth_;
+    push.originalSize[3] = 1.0f / frameHeight_;
+    push.frameCount = (uint32_t)frameCount_;
+
+    const char *paramNames[] = {"curvature", "scanline", "mask_dark", "vignette", "glow_strength", "sweep", "sweep_bright", "crt_brightness", "noise_amount"};
+    float paramDefaults[] = {1.7f, 0.75f, 0.3f, 0.85f, 0.25f, 1.0f, 0.35f, 1.0f, 0.15f};
+    for (int i = 0; i < 9; i++) {
+        auto it = params_.find(paramNames[i]);
+        push.params[i] = (it != params_.end()) ? it->second : paramDefaults[i];
+    }
+
+    VkCommandBuffer cmd = commandBuffers_[0];
+
+    for (size_t i = 0; i < passes_.size(); i++) {
+        auto &pass = passes_[i];
+        bool isLast = (i + 1 == passes_.size());
+
+        // Update source size for this pass
+        if (i == 0) {
+            push.sourceSize[0] = (float)frameWidth_;
+            push.sourceSize[1] = (float)frameHeight_;
+        } else {
+            push.sourceSize[0] = (float)passes_[i-1].width;
+            push.sourceSize[1] = (float)passes_[i-1].height;
+        }
+        push.sourceSize[2] = 1.0f / push.sourceSize[0];
+        push.sourceSize[3] = 1.0f / push.sourceSize[1];
+
+        if (isLast) {
+            push.outputSize[0] = (float)vpW_;
+            push.outputSize[1] = (float)vpH_;
+        } else {
+            push.outputSize[0] = (float)pass.width;
+            push.outputSize[1] = (float)pass.height;
+        }
+        push.outputSize[2] = 1.0f / push.outputSize[0];
+        push.outputSize[3] = 1.0f / push.outputSize[1];
+
+        // Update descriptor: binding 0 = Source (previous pass or frame), binding 1 = Original
+        VkDescriptorImageInfo sourceInfo{};
+        sourceInfo.sampler = frameSampler_; // TODO: per-pass sampler
+        sourceInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        if (i == 0) {
+            sourceInfo.imageView = frameView_;
+        } else {
+            sourceInfo.imageView = passes_[i-1].view;
+        }
+
+        VkDescriptorImageInfo origInfo{};
+        origInfo.sampler = frameSampler_;
+        origInfo.imageView = frameView_;
+        origInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet writes[2]{};
+        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[0].dstSet = pass.descriptorSet;
+        writes[0].dstBinding = 0;
+        writes[0].descriptorCount = 1;
+        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[0].pImageInfo = &sourceInfo;
+        writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1].dstSet = pass.descriptorSet;
+        writes[1].dstBinding = 1;
+        writes[1].descriptorCount = 1;
+        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[1].pImageInfo = &origInfo;
+        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+
+        // Begin render pass
+        VkClearValue clear = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+        VkRenderPassBeginInfo rpBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        rpBegin.clearValueCount = 1;
+        rpBegin.pClearValues = &clear;
+
+        if (isLast) {
+            // Render to current swapchain image — handled by caller
+            // We break here and let renderFrame do the last pass to the swapchain
+            // Actually, we handle it inline
+            rpBegin.renderPass = renderPass_;
+            // We need the swapchain framebuffer — this is passed in from renderFrame
+            // For now, store the last pass index and handle in renderFrame
+            break; // handled in renderFrame
+        } else {
+            rpBegin.renderPass = intermediateRenderPass_;
+            rpBegin.framebuffer = pass.framebuffer;
+            rpBegin.renderArea.extent = {pass.width, pass.height};
+        }
+
+        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pass.pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, multiPassPipelineLayout_, 0, 1, &pass.descriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, multiPassPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+
+        VkViewport vp{0, 0, (float)pass.width, (float)pass.height, 0, 1};
+        vkCmdSetViewport(cmd, 0, 1, &vp);
+        VkRect2D sc{{0, 0}, {pass.width, pass.height}};
+        vkCmdSetScissor(cmd, 0, 1, &sc);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    }
+
+    // Last pass renders to swapchain — done inline in renderFrame
 }
 
 void VulkanRenderer::destroy() {
