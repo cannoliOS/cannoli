@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import dev.cannoli.scorza.libretro.shader.PresetParser
 import dev.cannoli.scorza.ui.theme.CannoliColors
 import dev.cannoli.scorza.ui.theme.CannoliTheme
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
@@ -57,18 +58,12 @@ class LibretroActivity : ComponentActivity() {
     private var debugHud by mutableStateOf(false)
     private var maxFfSpeed by mutableIntStateOf(4)
 
-    private var crtCurvature by mutableStateOf(1.7f)
-    private var crtScanline by mutableStateOf(0.75f)
-    private var crtMaskDark by mutableStateOf(0.3f)
-    private var crtVignette by mutableStateOf(0.85f)
-    private var crtGlow by mutableStateOf(0.25f)
-    private var crtSweep by mutableStateOf(1.0f)
-    private var crtSweepBright by mutableStateOf(0.35f)
-    private var crtBrightness by mutableStateOf(1.0f)
-    private var crtNoise by mutableStateOf(0.15f)
-
     private var overlay by mutableStateOf("")
     private var overlayImages = emptyList<String>()
+
+    private var shaderPreset by mutableStateOf("")
+    private var shaderPresets = emptyList<String>()
+    private var shaderParams by mutableStateOf(emptyList<ShaderParamItem>())
 
     private var coreOptions by mutableStateOf(emptyList<LibretroRunner.CoreOption>())
     private var coreCategories by mutableStateOf(emptyList<LibretroRunner.CoreOptionCategory>())
@@ -137,6 +132,11 @@ class LibretroActivity : ComponentActivity() {
             diskLabels = (0 until diskCount).map { runner.getDiskLabel(it) ?: "" }
         }
     }
+
+    data class ShaderParamItem(
+        val id: String, val description: String,
+        val value: Float, val min: Float, val max: Float, val step: Float
+    )
 
     companion object {
         private val FF_SPEEDS = listOf(2, 3, 4, 6, 8)
@@ -267,6 +267,8 @@ class LibretroActivity : ComponentActivity() {
                 overrideManager = OverrideManager(cannoliRoot, platformTag, gameBaseName, coreBaseName)
                 loadOverrides()
                 scanOverlayImages()
+                copyBundledShaders()
+                scanShaderPresets()
 
                 audioSampleRate = avInfo.sampleRate
                 audio = LibretroAudio(avInfo.sampleRate)
@@ -279,20 +281,12 @@ class LibretroActivity : ComponentActivity() {
                     it.sharpness = sharpness
                     it.screenEffect = screenEffect
                     it.debugHud = debugHud
-                    it.crtCurvature = crtCurvature
-                    it.crtScanline = crtScanline
-                    it.crtMaskDark = crtMaskDark
-                    it.crtVignette = crtVignette
-                    it.crtGlow = crtGlow
-                    it.crtSweep = crtSweep
-                    it.crtSweepBright = crtSweepBright
-                    it.crtBrightness = crtBrightness
-                    it.crtNoise = crtNoise
                     it.overlayPath = resolveOverlayPath()
+                    it.shaderPresetPath = resolveShaderPresetPath()
                 }
 
                 glSurfaceView = GLSurfaceView(this).apply {
-                    setEGLContextClientVersion(2)
+                    setEGLContextClientVersion(3)
                     setRenderer(renderer)
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
@@ -316,7 +310,7 @@ class LibretroActivity : ComponentActivity() {
             is IGMScreen.Menu -> handleMenuInput(screen, resolved)
             is IGMScreen.Settings -> handleCategoryInput(screen, resolved)
             is IGMScreen.Frontend -> handleFrontendInput(screen, resolved)
-            is IGMScreen.CrtSettings -> handleCrtSettingsInput(screen, resolved)
+            is IGMScreen.ShaderSettings -> handleShaderSettingsInput(screen, resolved)
             is IGMScreen.Emulator -> handleEmulatorInput(screen, resolved)
             is IGMScreen.EmulatorCategory -> handleEmulatorCategoryInput(screen, resolved)
             is IGMScreen.Controls -> handleControlsInput(screen, keyCode, resolved)
@@ -410,6 +404,7 @@ class LibretroActivity : ComponentActivity() {
                     val effects = ScreenEffect.entries
                     screenEffect = effects[(screenEffect.ordinal + 1) % effects.size]
                     renderer.screenEffect = screenEffect
+                    renderer.shaderPresetPath = resolveShaderPresetPath()
                     showOsd("Effect: ${effectLabel()}")
                 }
                 ShortcutAction.TOGGLE_FF -> {
@@ -624,9 +619,7 @@ class LibretroActivity : ComponentActivity() {
 
     private fun effectLabel() = when (screenEffect) {
         ScreenEffect.NONE -> "None"
-
-        ScreenEffect.LCD -> "LCD"
-        ScreenEffect.CRT -> "CRT"
+        ScreenEffect.SHADER -> "Shader"
     }
 
     private fun sharpnessLabel() = when (sharpness) {
@@ -648,6 +641,69 @@ class LibretroActivity : ComponentActivity() {
             ?.sortedBy { it.name }
             ?.map { it.name }
             ?: emptyList()
+    }
+
+    private fun copyBundledShaders() {
+        val destDir = File(cannoliRoot, "Shaders")
+        copyAssetDir("shaders", destDir)
+    }
+
+    private fun copyAssetDir(assetPath: String, destDir: File) {
+        val entries = try { assets.list(assetPath) } catch (_: Exception) { return }
+        if (entries.isNullOrEmpty()) return
+        for (entry in entries) {
+            val src = "$assetPath/$entry"
+            val dest = File(destDir, entry)
+            val subEntries = try { assets.list(src) } catch (_: Exception) { null }
+            if (!subEntries.isNullOrEmpty()) {
+                copyAssetDir(src, dest)
+            } else {
+                dest.parentFile?.mkdirs()
+                assets.open(src).use { input -> dest.outputStream().use { input.copyTo(it) } }
+            }
+        }
+    }
+
+    private fun scanShaderPresets() {
+        val dir = File(cannoliRoot, "Shaders")
+        val exts = setOf("glslp", "slangp")
+        shaderPresets = dir.walk()
+            .filter { it.isFile && it.extension.lowercase() in exts }
+            .map { it.relativeTo(dir).path }
+            .sorted()
+            .toList()
+    }
+
+    private fun resolveShaderPresetPath(): String? =
+        if (shaderPreset.isEmpty()) null
+        else File(cannoliRoot, "Shaders/$shaderPreset").absolutePath
+
+    private fun shaderPresetLabel(): String =
+        if (shaderPreset.isEmpty()) "None"
+        else File(shaderPreset).nameWithoutExtension
+
+    private fun cycleShaderPreset(direction: Int) {
+        if (shaderPresets.isEmpty()) { shaderPreset = ""; return }
+        val currentIndex = shaderPresets.indexOf(shaderPreset)
+        val newIndex = if (currentIndex == -1) {
+            if (direction > 0) 0 else shaderPresets.lastIndex
+        } else {
+            val raw = currentIndex + direction
+            if (raw < 0 || raw >= shaderPresets.size) -1 else raw
+        }
+        shaderPreset = if (newIndex < 0) "" else shaderPresets[newIndex]
+        renderer.shaderPresetPath = resolveShaderPresetPath()
+        refreshShaderParams()
+    }
+
+    private fun refreshShaderParams() {
+        val path = resolveShaderPresetPath()
+        if (path.isNullOrEmpty()) { shaderParams = emptyList(); return }
+        val preset = PresetParser.parse(File(path))
+        if (preset == null) { shaderParams = emptyList(); return }
+        shaderParams = preset.parameters.values.map { p ->
+            ShaderParamItem(p.id, p.description, p.default, p.min, p.max, p.step)
+        }
     }
 
     private fun cycleOverlay(direction: Int) {
@@ -675,8 +731,9 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_LEFT -> { cycleFrontendValue(screen.selectedIndex, -1); true }
             KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleFrontendValue(screen.selectedIndex, 1); true }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (screenEffect == ScreenEffect.CRT && screen.selectedIndex == 3) {
-                    push(IGMScreen.CrtSettings())
+                val subIdx = frontendSubScreenIndex()
+                if (subIdx >= 0 && screen.selectedIndex == subIdx) {
+                    if (screenEffect == ScreenEffect.SHADER) push(IGMScreen.ShaderSettings())
                 }
                 true
             }
@@ -685,11 +742,25 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
-    private fun frontendItemCount() = if (screenEffect == ScreenEffect.CRT) 7 else 6
+    private fun frontendHasSubScreen() = screenEffect == ScreenEffect.SHADER
+    private fun frontendHasPresetRow() = screenEffect == ScreenEffect.SHADER
+    private fun frontendSubScreenIndex() = if (frontendHasSubScreen()) (if (frontendHasPresetRow()) 4 else 3) else -1
+    private fun frontendItemCount(): Int {
+        var count = 6
+        if (frontendHasSubScreen()) count++
+        if (frontendHasPresetRow()) count++
+        return count
+    }
 
     private fun cycleFrontendValue(index: Int, direction: Int) {
-        val crtOff = if (screenEffect == ScreenEffect.CRT) 1 else 0
-        val crtSettingsIdx = if (screenEffect == ScreenEffect.CRT) 3 else -1
+        // Row layout:
+        // 0: Scaling, 1: Sharpness, 2: Effect
+        // 3: Shader Preset (if SHADER)
+        // 3 or 4: CRT Settings / Shader Settings (sub-screen, no cycling)
+        // next: Overlay, Debug HUD, Max FF Speed
+        val presetRow = if (frontendHasPresetRow()) 3 else -1
+        val subRow = frontendSubScreenIndex()
+        val base = if (frontendHasPresetRow()) 5 else if (frontendHasSubScreen()) 4 else 3
         when (index) {
             0 -> {
                 val modes = ScalingMode.entries
@@ -709,16 +780,23 @@ class LibretroActivity : ComponentActivity() {
                 val effects = ScreenEffect.entries
                 screenEffect = effects[(screenEffect.ordinal + direction + effects.size) % effects.size]
                 renderer.screenEffect = screenEffect
+                renderer.shaderPresetPath = resolveShaderPresetPath()
+                if (screenEffect == ScreenEffect.SHADER) refreshShaderParams()
             }
-            crtSettingsIdx -> {}
-            3 + crtOff -> cycleOverlay(direction)
-            4 + crtOff -> { debugHud = !debugHud; renderer.debugHud = debugHud }
-            5 + crtOff -> { cycleFfSpeed(direction) }
+            presetRow -> cycleShaderPreset(direction)
+            subRow -> {}
+            base -> cycleOverlay(direction)
+            base + 1 -> { debugHud = !debugHud; renderer.debugHud = debugHud }
+            base + 2 -> { cycleFfSpeed(direction) }
         }
     }
 
-    private fun handleCrtSettingsInput(screen: IGMScreen.CrtSettings, keyCode: Int): Boolean {
-        val count = 9
+    private fun handleShaderSettingsInput(screen: IGMScreen.ShaderSettings, keyCode: Int): Boolean {
+        val count = shaderParams.size
+        if (count == 0) return when (keyCode) {
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            else -> true
+        }
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
@@ -726,25 +804,20 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
             }
-            KeyEvent.KEYCODE_DPAD_LEFT -> { cycleCrtValue(screen.selectedIndex, -1); true }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleCrtValue(screen.selectedIndex, 1); true }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { cycleShaderParam(screen.selectedIndex, -1); true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleShaderParam(screen.selectedIndex, 1); true }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
             else -> true
         }
     }
 
-    private fun cycleCrtValue(index: Int, direction: Int) {
-        when (index) {
-            0 -> { crtCurvature = cycleFloat(crtCurvature, direction, 0f, 2f, 0.1f); renderer.crtCurvature = crtCurvature }
-            1 -> { crtScanline = cycleFloat(crtScanline, direction, 0f, 1f, 0.05f); renderer.crtScanline = crtScanline }
-            2 -> { crtMaskDark = cycleFloat(crtMaskDark, direction, 0f, 0.5f, 0.05f); renderer.crtMaskDark = crtMaskDark }
-            3 -> { crtVignette = cycleFloat(crtVignette, direction, 0f, 2f, 0.05f); renderer.crtVignette = crtVignette }
-            4 -> { crtGlow = cycleFloat(crtGlow, direction, 0f, 1f, 0.05f); renderer.crtGlow = crtGlow }
-            5 -> { crtSweep = cycleFloat(crtSweep, direction, 0f, 1f, 0.05f); renderer.crtSweep = crtSweep }
-            6 -> { crtSweepBright = cycleFloat(crtSweepBright, direction, 0f, 1f, 0.05f); renderer.crtSweepBright = crtSweepBright }
-            7 -> { crtBrightness = cycleFloat(crtBrightness, direction, 0.5f, 1.5f, 0.05f); renderer.crtBrightness = crtBrightness }
-            8 -> { crtNoise = cycleFloat(crtNoise, direction, 0f, 1f, 0.05f); renderer.crtNoise = crtNoise }
+    private fun cycleShaderParam(index: Int, direction: Int) {
+        val param = shaderParams.getOrNull(index) ?: return
+        val newValue = cycleFloat(param.value, direction, param.min, param.max, param.step)
+        shaderParams = shaderParams.toMutableList().also {
+            it[index] = param.copy(value = newValue)
         }
+        renderer.setShaderParameter(param.id, newValue)
     }
 
     private fun cycleFloat(current: Float, direction: Int, min: Float, max: Float, step: Float): Float {
@@ -1073,24 +1146,20 @@ class LibretroActivity : ComponentActivity() {
             add(IGMSettingsItem("Screen Scaling", scalingLabel()))
             add(IGMSettingsItem("Screen Sharpness", sharpnessLabel()))
             add(IGMSettingsItem("Screen Effect", effectLabel()))
-            if (screenEffect == ScreenEffect.CRT) {
-                add(IGMSettingsItem("CRT Settings"))
+            if (screenEffect == ScreenEffect.SHADER) {
+                add(IGMSettingsItem("Shader Preset", shaderPresetLabel()))
+                add(IGMSettingsItem("Shader Settings"))
             }
             add(IGMSettingsItem("Overlay", overlayLabel()))
             add(IGMSettingsItem("Debug HUD", if (debugHud) "On" else "Off"))
             add(IGMSettingsItem("Max FF Speed", "${maxFfSpeed}x"))
         }
-        is IGMScreen.CrtSettings -> listOf(
-            IGMSettingsItem("Curvature", "%.1f".format(crtCurvature)),
-            IGMSettingsItem("Scanlines", "%d%%".format((crtScanline * 100).toInt())),
-            IGMSettingsItem("Mask", "%d%%".format((crtMaskDark * 100).toInt())),
-            IGMSettingsItem("Vignette", "%d%%".format((crtVignette * 100).toInt())),
-            IGMSettingsItem("Glow", "%d%%".format((crtGlow * 100).toInt())),
-            IGMSettingsItem("Sweep", "%d%%".format((crtSweep * 100).toInt())),
-            IGMSettingsItem("Sweep Brightness", "%d%%".format((crtSweepBright * 100).toInt())),
-            IGMSettingsItem("Brightness", "%d%%".format((crtBrightness * 100).toInt())),
-            IGMSettingsItem("Noise", "%d%%".format((crtNoise * 100).toInt()))
-        )
+        is IGMScreen.ShaderSettings -> {
+            if (shaderParams.isEmpty()) listOf(IGMSettingsItem("No parameters"))
+            else shaderParams.map { p ->
+                IGMSettingsItem(p.description, "%.2f".format(p.value))
+            }
+        }
         is IGMScreen.Emulator -> {
             if (emulatorHasCategories()) {
                 val usedCategories = coreCategories.filter { cat -> coreOptions.any { it.category == cat.key } }
@@ -1143,15 +1212,7 @@ class LibretroActivity : ComponentActivity() {
             sharpness = sharpness,
             debugHud = debugHud,
             maxFfSpeed = maxFfSpeed,
-            crtCurvature = crtCurvature,
-            crtScanline = crtScanline,
-            crtMaskDark = crtMaskDark,
-            crtVignette = crtVignette,
-            crtGlow = crtGlow,
-            crtSweep = crtSweep,
-            crtSweepBright = crtSweepBright,
-            crtBrightness = crtBrightness,
-            crtNoise = crtNoise,
+            shaderPreset = shaderPreset,
             overlay = overlay,
             coreOptions = optionMap
         )
@@ -1182,15 +1243,7 @@ class LibretroActivity : ComponentActivity() {
         sharpness = settings.sharpness
         debugHud = settings.debugHud
         maxFfSpeed = settings.maxFfSpeed
-        crtCurvature = settings.crtCurvature
-        crtScanline = settings.crtScanline
-        crtMaskDark = settings.crtMaskDark
-        crtVignette = settings.crtVignette
-        crtGlow = settings.crtGlow
-        crtSweep = settings.crtSweep
-        crtSweepBright = settings.crtSweepBright
-        crtBrightness = settings.crtBrightness
-        crtNoise = settings.crtNoise
+        shaderPreset = settings.shaderPreset
         overlay = settings.overlay
         controlSource = settings.controlSource
         shortcutSource = settings.shortcutSource
