@@ -14,9 +14,9 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
         }
 
         fun isAvailable(): Boolean = try {
-            Class.forName("dev.cannoli.scorza.libretro.VulkanBackend")
+            System.loadLibrary("vulkan_renderer")
             true
-        } catch (_: Exception) { false }
+        } catch (_: UnsatisfiedLinkError) { false }
     }
 
     @Volatile override var paused = false
@@ -30,6 +30,7 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
     @Volatile override var shaderPresetPath: String? = null
     override var onFrameRendered: (() -> Unit)? = null
 
+    override val backendName = "Vulkan"
     @Volatile override var fps = 0f; private set
     @Volatile override var frameTimeMs = 0f; private set
     @Volatile override var viewportWidth = 0; private set

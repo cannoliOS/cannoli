@@ -55,6 +55,7 @@ class LibretroActivity : ComponentActivity() {
     private var slotOccupied by mutableStateOf(emptyList<Boolean>())
     private var cleaned = false
 
+    private var graphicsBackendPref by mutableStateOf(GraphicsBackendPref.GLES)
     private var scalingMode by mutableStateOf(ScalingMode.CORE_REPORTED)
     private var screenEffect by mutableStateOf(ScreenEffect.NONE)
     private var sharpness by mutableStateOf(Sharpness.SHARP)
@@ -283,10 +284,6 @@ class LibretroActivity : ComponentActivity() {
                 ShaderPipeline.cacheDir = shaderCacheDir
                 SlangTranspiler.cacheDir = shaderCacheDir
 
-                val backendPref = GraphicsBackendPref.GLES // TODO: load from settings
-                val useVulkan = backendPref == GraphicsBackendPref.VULKAN ||
-                    (backendPref == GraphicsBackendPref.AUTO && false) // AUTO defaults to GLES for now
-
                 fun configureBackend(backend: GraphicsBackend) {
                     backend.coreAspectRatio = runner.getAspectRatio()
                     backend.scalingMode = scalingMode
@@ -297,17 +294,23 @@ class LibretroActivity : ComponentActivity() {
                     backend.shaderPresetPath = resolveShaderPresetPath()
                 }
 
-                if (useVulkan) {
-                    val vkBackend = VulkanBackend(runner)
-                    configureBackend(vkBackend)
-                    renderer = vkBackend
+                var vulkanOk = false
+                if (graphicsBackendPref == GraphicsBackendPref.VULKAN && VulkanBackend.isAvailable()) {
+                    try {
+                        val vkBackend = VulkanBackend(runner)
+                        configureBackend(vkBackend)
+                        renderer = vkBackend
 
-                    val surfaceView = android.view.SurfaceView(this).apply {
-                        setZOrderMediaOverlay(true)
-                    }
-                    vkBackend.attachToSurface(surfaceView)
-                    gameView = surfaceView
-                } else {
+                        val surfaceView = android.view.SurfaceView(this).apply {
+                            setZOrderMediaOverlay(true)
+                        }
+                        vkBackend.attachToSurface(surfaceView)
+                        gameView = surfaceView
+                        vulkanOk = true
+                    } catch (_: Exception) { }
+                }
+
+                if (!vulkanOk) {
                     val glesBackend = LibretroRenderer(runner)
                     configureBackend(glesBackend)
                     renderer = glesBackend
@@ -639,6 +642,12 @@ class LibretroActivity : ComponentActivity() {
 
     // --- Frontend ---
 
+    private fun backendLabel() = when (graphicsBackendPref) {
+        GraphicsBackendPref.GLES -> "OpenGL ES"
+        GraphicsBackendPref.VULKAN -> "Vulkan"
+        GraphicsBackendPref.AUTO -> "Auto"
+    }
+
     private fun scalingLabel() = when (scalingMode) {
         ScalingMode.CORE_REPORTED -> "Core Reported"
         ScalingMode.INTEGER -> "Integer"
@@ -740,7 +749,7 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_LEFT -> { cycleFrontendValue(screen.selectedIndex, -1); true }
             KeyEvent.KEYCODE_DPAD_RIGHT -> { cycleFrontendValue(screen.selectedIndex, 1); true }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (frontendHasShaderSettings() && screen.selectedIndex == 3) {
+                if (frontendHasShaderSettings() && screen.selectedIndex == 4) {
                     push(IGMScreen.ShaderSettings())
                 }
                 true
@@ -752,18 +761,22 @@ class LibretroActivity : ComponentActivity() {
 
     private fun frontendHasShaderSettings() =
         screenEffect == ScreenEffect.SHADER && shaderParams.isNotEmpty()
-    private fun frontendItemCount() = if (frontendHasShaderSettings()) 7 else 6
+    private fun frontendItemCount() = if (frontendHasShaderSettings()) 8 else 7
 
     private fun cycleFrontendValue(index: Int, direction: Int) {
-        val settingsRow = if (frontendHasShaderSettings()) 3 else -1
-        val base = if (frontendHasShaderSettings()) 4 else 3
+        val settingsRow = if (frontendHasShaderSettings()) 4 else -1
+        val base = if (frontendHasShaderSettings()) 5 else 4
         when (index) {
             0 -> {
+                val prefs = GraphicsBackendPref.entries
+                graphicsBackendPref = prefs[(graphicsBackendPref.ordinal + direction + prefs.size) % prefs.size]
+            }
+            1 -> {
                 val modes = ScalingMode.entries
                 scalingMode = modes[(scalingMode.ordinal + direction + modes.size) % modes.size]
                 renderer.scalingMode = scalingMode
             }
-            1 -> {
+            2 -> {
                 val vals = Sharpness.entries
                 sharpness = vals[(sharpness.ordinal + direction + vals.size) % vals.size]
                 renderer.sharpness = sharpness
@@ -772,7 +785,7 @@ class LibretroActivity : ComponentActivity() {
                     renderer.scalingMode = scalingMode
                 }
             }
-            2 -> cycleShader(direction)
+            3 -> cycleShader(direction)
             settingsRow -> {}
             base -> cycleOverlay(direction)
             base + 1 -> { debugHud = !debugHud; renderer.debugHud = debugHud }
@@ -1162,6 +1175,7 @@ class LibretroActivity : ComponentActivity() {
     private fun buildSettingsItems(): List<IGMSettingsItem> = when (val screen = currentScreen) {
         is IGMScreen.Settings -> IGMSettings.CATEGORIES.map { IGMSettingsItem(it) }
         is IGMScreen.Frontend -> buildList {
+            add(IGMSettingsItem("Renderer", backendLabel()))
             add(IGMSettingsItem("Screen Scaling", scalingLabel()))
             add(IGMSettingsItem("Screen Sharpness", sharpnessLabel()))
             add(IGMSettingsItem("Shader", shaderLabel()))
@@ -1225,6 +1239,7 @@ class LibretroActivity : ComponentActivity() {
         for (opt in coreOptions) optionMap[opt.key] = opt.selected
 
         return OverrideManager.Settings(
+            graphicsBackend = graphicsBackendPref,
             scalingMode = scalingMode,
             screenEffect = screenEffect,
             sharpness = sharpness,
@@ -1256,6 +1271,7 @@ class LibretroActivity : ComponentActivity() {
 
     private fun loadOverrides() {
         val settings = overrideManager.load()
+        graphicsBackendPref = settings.graphicsBackend
         scalingMode = settings.scalingMode
         screenEffect = settings.screenEffect
         sharpness = settings.sharpness

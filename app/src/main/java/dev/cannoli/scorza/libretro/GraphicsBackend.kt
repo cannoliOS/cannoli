@@ -12,6 +12,7 @@ interface GraphicsBackend {
     var shaderPresetPath: String?
     var onFrameRendered: (() -> Unit)?
 
+    val backendName: String
     val fps: Float
     val frameTimeMs: Float
     val viewportWidth: Int

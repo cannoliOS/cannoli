@@ -26,7 +26,8 @@ data class DebugHudState(
     val viewportHeight: Int = 0,
     val pixelFormat: String = "",
     val coreName: String = "",
-    val audioSampleRate: Int = 0
+    val audioSampleRate: Int = 0,
+    val backendName: String = ""
 )
 
 @Composable
@@ -50,7 +51,8 @@ fun DebugHud(
                 viewportHeight = renderer.viewportHeight,
                 pixelFormat = if (pf == LibretroRunner.PIXEL_FORMAT_XRGB8888) "XRGB8888" else "RGB565",
                 coreName = coreName,
-                audioSampleRate = audioSampleRate
+                audioSampleRate = audioSampleRate,
+                backendName = renderer.backendName
             )
             delay(500)
         }
@@ -69,7 +71,7 @@ fun DebugHud(
             .padding(8.dp)
     ) {
         Text("%.1f fps  %.1f ms".format(state.fps, state.frameTimeMs), style = textStyle)
-        Text("Core: ${state.coreWidth}x${state.coreHeight}  ${state.pixelFormat}", style = textStyle)
+        Text("${state.backendName}  ${state.coreWidth}x${state.coreHeight}  ${state.pixelFormat}", style = textStyle)
         Text("Viewport: ${state.viewportWidth}x${state.viewportHeight}", style = textStyle)
         Text("Audio: ${state.audioSampleRate} Hz", style = textStyle)
         Text(state.coreName, style = textStyle)

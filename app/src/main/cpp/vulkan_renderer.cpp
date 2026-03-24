@@ -38,6 +38,8 @@ static uint64_t nowNanos() {
 }
 
 bool VulkanRenderer::init(ANativeWindow *window) {
+    if (!resolveFrameBufferFns()) return false;
+    if (!createInstance()) return false;
     if (!createSurface(window)) return false;
     if (!selectPhysicalDevice()) return false;
     if (!createDevice()) return false;

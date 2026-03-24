@@ -47,6 +47,7 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
     private var overlayTextureId = 0
     private var overlayLoaded = false
 
+    override val backendName = "GLES 3.0"
     @Volatile override var fps = 0f; private set
     @Volatile override var frameTimeMs = 0f; private set
     @Volatile override var viewportWidth = 0; private set
