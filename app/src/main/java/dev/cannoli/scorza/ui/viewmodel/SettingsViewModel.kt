@@ -426,11 +426,6 @@ class SettingsViewModel(
         )
         "kitchen" -> emptyList()
         "advanced" -> listOf(
-            SettingsItem("graphics_backend", R.string.setting_graphics_backend, valueText = when (settings.graphicsBackend) {
-                "VULKAN" -> "Vulkan"
-                "AUTO" -> "Auto"
-                else -> "OpenGL ES"
-            }),
             SettingsItem("core_mapping", R.string.setting_core_mapping, isEditable = true),
             SettingsItem("sd_root", R.string.setting_sd_root, valueText = settings.sdCardRoot, isEditable = true),
             SettingsItem("ra_package", R.string.setting_ra_package, valueText = settings.retroArchPackage)

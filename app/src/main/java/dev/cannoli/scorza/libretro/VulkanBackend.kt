@@ -25,6 +25,7 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
     }
 
     var debugPath: String? = null
+    var pipelineCachePath: String? = null
     private var surfaceViewRef: SurfaceView? = null
 
     @Volatile override var paused = false
@@ -55,43 +56,42 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
             return
         }
         renderHandler?.post {
-            val dbg = debugPath?.let { java.io.File(it) }
-            dbg?.writeText("loadShaderPreset: path=$path effect=$screenEffect\n")
-
+            try {
+            // Stop render loop during swap
+            val wasRunning = running
+            running = false
+            vkWaitIdle()
             nativeUnloadPreset()
             if (path.isNullOrEmpty() || screenEffect == ScreenEffect.NONE) {
-                dbg?.appendText("SKIP: path empty or effect NONE\n")
+                if (wasRunning) { running = true; renderLoopGen++; postRenderFrame() }
+                return@post
+            }
+            val singlePath = path.split("|").firstOrNull { it.isNotEmpty() }
+            if (singlePath == null) {
+                if (wasRunning) { running = true; renderLoopGen++; postRenderFrame() }
                 return@post
             }
 
-            val file = java.io.File(path)
-            val preset = PresetParser.parse(file)
-            if (preset == null) { dbg?.appendText("SKIP: preset parse failed\n"); return@post }
-            dbg?.appendText("Parsed ${preset.passes.size} passes\n")
+            val file = java.io.File(singlePath)
+            val preset = PresetParser.parse(file) ?: return@post
 
             val spirvData = mutableListOf<ByteArray>()
             val configData = mutableListOf<Int>()
             val scaleData = mutableListOf<Float>()
 
-            for ((i, pass) in preset.passes.withIndex()) {
+            for (pass in preset.passes) {
                 val shaderFile = java.io.File(preset.basePath, pass.shaderPath)
-                if (!shaderFile.exists()) { dbg?.appendText("SKIP: shader file not found: ${shaderFile.absolutePath}\n"); return@post }
+                if (!shaderFile.exists()) return@post
                 val source = shaderFile.readText()
-
-                if (!SlangTranspiler.isVulkanGLSL(source)) { dbg?.appendText("SKIP: pass $i not Vulkan GLSL\n"); return@post }
+                if (!SlangTranspiler.isVulkanGLSL(source)) return@post
 
                 val (rawVs, rawFs) = SlangTranspiler.splitSlangStages(source)
                 val basePath = shaderFile.parent
-                val resolved_vs = basePath?.let { SlangTranspiler.resolveIncludesPublic(rawVs, it) } ?: rawVs
-                val resolved_fs = basePath?.let { SlangTranspiler.resolveIncludesPublic(rawFs, it) } ?: rawFs
+                val resolvedVs = basePath?.let { SlangTranspiler.resolveIncludesPublic(rawVs, it) } ?: rawVs
+                val resolvedFs = basePath?.let { SlangTranspiler.resolveIncludesPublic(rawFs, it) } ?: rawFs
 
-                val vertSpirv = SlangTranspiler.compileToSpirv(resolved_vs, isVertex = true)
-                val fragSpirv = SlangTranspiler.compileToSpirv(resolved_fs, isVertex = false)
-                if (vertSpirv == null || fragSpirv == null) {
-                    dbg?.appendText("SKIP: SPIR-V compile failed pass $i: ${SlangTranspiler.getLastError()}\n")
-                    return@post
-                }
-                dbg?.appendText("Pass $i: vert=${vertSpirv.size}B frag=${fragSpirv.size}B\n")
+                val vertSpirv = SlangTranspiler.compileToSpirv(resolvedVs, isVertex = true) ?: return@post
+                val fragSpirv = SlangTranspiler.compileToSpirv(resolvedFs, isVertex = false) ?: return@post
 
                 spirvData.add(vertSpirv)
                 spirvData.add(fragSpirv)
@@ -102,14 +102,21 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
                 scaleData.add(pass.scaleY)
             }
 
-            val ok = nativeLoadPreset(
+            nativeLoadPreset(
                 spirvData.toTypedArray(),
                 configData.toIntArray(),
                 scaleData.toFloatArray(),
                 preset.passes.size
             )
-            dbg?.appendText("nativeLoadPreset result: $ok\n")
+            if (wasRunning) { running = true; renderLoopGen++; postRenderFrame() }
+            } catch (_: Exception) {
+                if (!running && initialized) { running = true; renderLoopGen++; postRenderFrame() }
+            }
         }
+    }
+
+    private fun vkWaitIdle() {
+        if (initialized) nativeWaitIdle()
     }
 
     private fun loadOverlayImage(path: String?) {
@@ -139,6 +146,7 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
     private var renderHandler: Handler? = null
     private var initialized = false
     private var running = false
+    private var renderLoopGen = 0
 
     override fun setShaderParameter(id: String, value: Float) {
         shaderParamOverrides[id] = value
@@ -158,7 +166,7 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
         renderThread = HandlerThread("VulkanRender").also { it.start() }
         renderHandler = Handler(renderThread!!.looper)
         renderHandler?.post {
-            initialized = nativeInit(holder.surface)
+            initialized = nativeInit(holder.surface, pipelineCachePath)
             if (initialized) {
                 nativeSetScaling(scalingMode.ordinal, coreAspectRatio, sharpness.ordinal)
                 // Load shader preset and overlay now that native is ready
@@ -193,8 +201,9 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
     }
 
     private fun postRenderFrame() {
+        val gen = renderLoopGen
         renderHandler?.post {
-            if (!running || !initialized) return@post
+            if (!running || !initialized || gen != renderLoopGen) return@post
 
             if (!paused) {
                 runner.run()
@@ -212,7 +221,7 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
         }
     }
 
-    private external fun nativeInit(surface: Surface): Boolean
+    private external fun nativeInit(surface: Surface, cachePath: String?): Boolean
     private external fun nativeRenderFrame()
     private external fun nativeSurfaceChanged(width: Int, height: Int)
     private external fun nativeDestroy()
@@ -225,4 +234,5 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
     private external fun nativeUnloadOverlay()
     private external fun nativeLoadPreset(passData: Array<ByteArray>, configData: IntArray, scales: FloatArray, passCount: Int): Boolean
     private external fun nativeUnloadPreset()
+    private external fun nativeWaitIdle()
 }

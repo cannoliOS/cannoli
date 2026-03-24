@@ -113,7 +113,7 @@ void main() {
     float vy = smoothstep(0.0, vigE, xy.y) * smoothstep(1.0, 1.0 - vigE, xy.y);
     colour *= mix(1.0, vx * vy, vignette);
 
-    float sweepPhase = mod(float(params.FrameCount), 480.0) / 480.0;
+    float sweepPhase = 1.0 - mod(float(params.FrameCount), 480.0) / 480.0;
     float band = smoothstep(0.04, 0.0, abs(xy.y - sweepPhase));
     colour *= 1.0 + band * sweep_bright * sweep;
 

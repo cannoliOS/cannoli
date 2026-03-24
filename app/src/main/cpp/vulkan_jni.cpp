@@ -8,12 +8,17 @@ extern "C" {
 
 JNIEXPORT jboolean JNICALL
 Java_dev_cannoli_scorza_libretro_VulkanBackend_nativeInit(
-    JNIEnv *env, jobject, jobject surface)
+    JNIEnv *env, jobject, jobject surface, jstring jcachePath)
 {
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     if (!window) return JNI_FALSE;
 
     g_renderer = new VulkanRenderer();
+    if (jcachePath) {
+        const char *cp = env->GetStringUTFChars(jcachePath, nullptr);
+        g_renderer->setCachePath(cp);
+        env->ReleaseStringUTFChars(jcachePath, cp);
+    }
     bool ok = g_renderer->init(window);
     ANativeWindow_release(window);
 
@@ -145,6 +150,12 @@ JNIEXPORT void JNICALL
 Java_dev_cannoli_scorza_libretro_VulkanBackend_nativeUnloadPreset(JNIEnv *, jobject)
 {
     if (g_renderer) g_renderer->unloadPreset();
+}
+
+JNIEXPORT void JNICALL
+Java_dev_cannoli_scorza_libretro_VulkanBackend_nativeWaitIdle(JNIEnv *, jobject)
+{
+    if (g_renderer) vkDeviceWaitIdle(g_renderer->getDevice());
 }
 
 }

@@ -34,6 +34,7 @@ struct VkPassResources {
 
 class VulkanRenderer {
 public:
+    void setCachePath(const std::string &path) { cachePath_ = path; }
     bool init(ANativeWindow *window);
     void destroy();
     void surfaceChanged(int width, int height);
@@ -48,6 +49,7 @@ public:
     void renderFrame();
 
     float getFps() const { return fps_; }
+    VkDevice getDevice() const { return device_; }
     int getViewportWidth() const { return vpW_; }
     int getViewportHeight() const { return vpH_; }
 
@@ -86,6 +88,9 @@ private:
     std::vector<VkFramebuffer> swapchainFramebuffers_;
     VkFormat swapchainFormat_ = VK_FORMAT_UNDEFINED;
     VkExtent2D swapchainExtent_ = {0, 0};
+
+    VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
+    std::string cachePath_;
 
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
     VkRenderPass overlayRenderPass_ = VK_NULL_HANDLE;

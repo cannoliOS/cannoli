@@ -46,6 +46,24 @@ bool VulkanRenderer::init(ANativeWindow *window) {
     if (!createSwapchain()) return false;
     if (!createRenderPass()) return false;
 
+    // Pipeline cache — load from disk if available
+    VkPipelineCacheCreateInfo cacheInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    if (!cachePath_.empty()) {
+        FILE *f = fopen(cachePath_.c_str(), "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            size_t sz = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            std::vector<uint8_t> data(sz);
+            fread(data.data(), 1, sz, f);
+            fclose(f);
+            cacheInfo.initialDataSize = sz;
+            cacheInfo.pInitialData = data.data();
+            LOGI("Loaded pipeline cache: %zu bytes", sz);
+        }
+    }
+    vkCreatePipelineCache(device_, &cacheInfo, nullptr, &pipelineCache_);
+
     // Swapchain framebuffers
     swapchainFramebuffers_.resize(swapchainViews_.size());
     for (size_t i = 0; i < swapchainViews_.size(); i++) {
@@ -424,18 +442,19 @@ void VulkanRenderer::updateFrameTexture() {
         createFrameTexture();
     }
 
-    // Copy frame data to staging buffer (convert to RGBA if needed)
+    // Copy frame data to staging buffer with Y-flip (match GLES convention)
     size_t rowBytes = fb->width * 4;
     uint8_t *dst = (uint8_t *)stagingMapped_;
+    unsigned h = fb->height;
 
-    if (fb->pixel_format == 1) { // XRGB8888 - already ABGR from bridge conversion
-        for (unsigned y = 0; y < fb->height; y++) {
-            memcpy(dst + y * rowBytes, fb->data + y * fb->pitch, rowBytes);
+    if (fb->pixel_format == 1) { // XRGB8888
+        for (unsigned y = 0; y < h; y++) {
+            memcpy(dst + (h - 1 - y) * rowBytes, fb->data + y * fb->pitch, rowBytes);
         }
     } else { // RGB565 - expand to RGBA
-        for (unsigned y = 0; y < fb->height; y++) {
+        for (unsigned y = 0; y < h; y++) {
             const uint16_t *src16 = (const uint16_t *)(fb->data + y * fb->pitch);
-            uint32_t *dst32 = (uint32_t *)(dst + y * rowBytes);
+            uint32_t *dst32 = (uint32_t *)(dst + (h - 1 - y) * rowBytes);
             for (unsigned x = 0; x < fb->width; x++) {
                 uint16_t px = src16[x];
                 uint32_t r = (px >> 11) & 0x1F;
@@ -761,7 +780,7 @@ bool VulkanRenderer::createPassthroughPipeline() {
     pipelineInfo.layout = pipelineLayout_;
     pipelineInfo.renderPass = renderPass_;
 
-    VkResult res = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &passthroughPipeline_);
+    VkResult res = vkCreateGraphicsPipelines(device_, pipelineCache_, 1, &pipelineInfo, nullptr, &passthroughPipeline_);
     vkDestroyShaderModule(device_, vertModule, nullptr);
     vkDestroyShaderModule(device_, fragModule, nullptr);
 
@@ -986,7 +1005,7 @@ void VulkanRenderer::loadOverlay(const uint8_t *pixels, int width, int height) {
         pInfo.pDynamicState = &dynamicState;
         pInfo.layout = pipelineLayout_;
         pInfo.renderPass = renderPass_;
-        vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pInfo, nullptr, &overlayPipeline_);
+        vkCreateGraphicsPipelines(device_, pipelineCache_, 1, &pInfo, nullptr, &overlayPipeline_);
 
         vkDestroyShaderModule(device_, vertModule, nullptr);
         vkDestroyShaderModule(device_, fragModule, nullptr);
@@ -1287,7 +1306,7 @@ bool VulkanRenderer::createPassPipeline(VkPassResources &pass) {
     // Last pass renders to swapchain, others to intermediate
     pInfo.renderPass = (&pass == &passes_.back()) ? renderPass_ : intermediateRenderPass_;
 
-    return vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pInfo, nullptr, &pass.pipeline) == VK_SUCCESS;
+    return vkCreateGraphicsPipelines(device_, pipelineCache_, 1, &pInfo, nullptr, &pass.pipeline) == VK_SUCCESS;
 }
 
 bool VulkanRenderer::createPassFbo(VkPassResources &pass, uint32_t w, uint32_t h) {
@@ -1542,6 +1561,19 @@ void VulkanRenderer::renderMultiPass() {
 void VulkanRenderer::destroy() {
     if (device_ == VK_NULL_HANDLE) return;
     vkDeviceWaitIdle(device_);
+
+    // Save pipeline cache to disk
+    if (pipelineCache_ && !cachePath_.empty()) {
+        size_t sz = 0;
+        vkGetPipelineCacheData(device_, pipelineCache_, &sz, nullptr);
+        if (sz > 0) {
+            std::vector<uint8_t> data(sz);
+            vkGetPipelineCacheData(device_, pipelineCache_, &sz, data.data());
+            FILE *f = fopen(cachePath_.c_str(), "wb");
+            if (f) { fwrite(data.data(), 1, sz, f); fclose(f); }
+        }
+    }
+    if (pipelineCache_) vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
 
     unloadOverlay();
     unloadPreset();

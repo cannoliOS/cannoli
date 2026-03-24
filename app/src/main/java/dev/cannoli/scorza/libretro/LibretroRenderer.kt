@@ -287,17 +287,11 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
         if (path.isNullOrEmpty() || screenEffect == ScreenEffect.NONE) return
         val file = File(path)
         val preset = PresetParser.parse(file)
-        if (preset == null) {
-            Log.w("LibretroRenderer", "Failed to parse shader preset: $path")
-            return
-        }
+        if (preset == null) { Log.w("LibretroRenderer", "Failed to parse: $path"); return }
         pipeline = ShaderPipeline.compile(preset)
-        if (pipeline == null) {
-            Log.w("LibretroRenderer", "Failed to compile shader pipeline: $path")
-        } else {
-            for ((key, value) in shaderParamOverrides) {
-                pipeline!!.parameters[key] = value
-            }
+        if (pipeline == null) { Log.w("LibretroRenderer", "Failed to compile: $path"); return }
+        for ((key, value) in shaderParamOverrides) {
+            pipeline!!.parameters[key] = value
         }
     }
 
