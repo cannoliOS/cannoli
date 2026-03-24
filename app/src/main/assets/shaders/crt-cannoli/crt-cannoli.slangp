@@ -1,0 +1,27 @@
+shaders = 5
+
+shader0 = shaders/kawase-blur-d0.slang
+filter_linear0 = true
+scale_type0 = source
+scale0 = 1.0
+
+shader1 = shaders/kawase-blur-d1.slang
+filter_linear1 = true
+scale_type1 = source
+scale1 = 1.0
+
+shader2 = shaders/kawase-blur-d2.slang
+filter_linear2 = true
+scale_type2 = source
+scale2 = 1.0
+
+shader3 = shaders/kawase-blur-d3.slang
+filter_linear3 = true
+scale_type3 = source
+scale3 = 1.0
+alias3 = GlowPass
+
+shader4 = shaders/crt-composite.slang
+filter_linear4 = false
+scale_type4 = viewport
+scale4 = 1.0
