@@ -35,3 +35,8 @@ target_include_directories(slang_transpiler PRIVATE
     third_party/glslang
     third_party/spirv-cross
     third_party/spirv-cross/include)
+
+# --- vulkan_renderer (Vulkan rendering backend) ---
+add_library(vulkan_renderer SHARED vulkan_renderer.cpp vulkan_jni.cpp)
+target_link_libraries(vulkan_renderer vulkan android ${log-lib})
+target_include_directories(vulkan_renderer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

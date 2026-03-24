@@ -8,6 +8,7 @@
 #include <vector>
 #include <android/log.h>
 #include "libretro.h"
+#include "frame_buffer.h"
 
 #define LOG_TAG "LibretroBridge"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -781,3 +782,19 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeGetDiskLabel(JNIEnv *env, 
 }
 
 } // extern "C"
+
+static FrameBuffer g_shared_frame;
+
+extern "C" FrameBuffer *getFrameBuffer() {
+    g_shared_frame.data = g_frame_buf;
+    g_shared_frame.width = g_frame_width;
+    g_shared_frame.height = g_frame_height;
+    g_shared_frame.pitch = g_frame_pitch;
+    g_shared_frame.pixel_format = g_pixel_format;
+    g_shared_frame.ready = g_frame_ready;
+    return &g_shared_frame;
+}
+
+extern "C" void markFrameConsumed() {
+    g_frame_ready = false;
+}

@@ -17,6 +17,7 @@ import javax.microedition.khronos.opengles.GL10
 enum class ScalingMode { CORE_REPORTED, INTEGER, FULLSCREEN }
 enum class Sharpness { SHARP, CRISP, SOFT }
 enum class ScreenEffect { NONE, SHADER }
+enum class GraphicsBackendPref { AUTO, GLES, VULKAN }
 
 class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Renderer, GraphicsBackend {
 

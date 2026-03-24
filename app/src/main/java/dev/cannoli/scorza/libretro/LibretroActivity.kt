@@ -43,6 +43,7 @@ class LibretroActivity : ComponentActivity() {
     private lateinit var overrideManager: OverrideManager
     private var audio: LibretroAudio? = null
     private var glSurfaceView: GLSurfaceView? = null
+    private var gameView: android.view.View? = null
     private var loading by mutableStateOf(true)
 
     private val inputMask = AtomicInteger(0)
@@ -196,7 +197,7 @@ class LibretroActivity : ComponentActivity() {
                     } else {
                         val screen = currentScreen
                         LibretroScreen(
-                            glSurfaceView = glSurfaceView!!,
+                            glSurfaceView = gameView!!,
                             gameTitle = gameTitle,
                             screen = screen,
                             menuOptions = menuOptions(),
@@ -281,21 +282,42 @@ class LibretroActivity : ComponentActivity() {
                 val shaderCacheDir = File(cacheDir, "shader_cache")
                 ShaderPipeline.cacheDir = shaderCacheDir
                 SlangTranspiler.cacheDir = shaderCacheDir
-                val glesBackend = LibretroRenderer(runner).also {
-                    it.coreAspectRatio = runner.getAspectRatio()
-                    it.scalingMode = scalingMode
-                    it.sharpness = sharpness
-                    it.screenEffect = screenEffect
-                    it.debugHud = debugHud
-                    it.overlayPath = resolveOverlayPath()
-                    it.shaderPresetPath = resolveShaderPresetPath()
-                }
-                renderer = glesBackend
 
-                glSurfaceView = GLSurfaceView(this).apply {
-                    setEGLContextClientVersion(3)
-                    setRenderer(glesBackend)
-                    renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                val backendPref = GraphicsBackendPref.GLES // TODO: load from settings
+                val useVulkan = backendPref == GraphicsBackendPref.VULKAN ||
+                    (backendPref == GraphicsBackendPref.AUTO && false) // AUTO defaults to GLES for now
+
+                fun configureBackend(backend: GraphicsBackend) {
+                    backend.coreAspectRatio = runner.getAspectRatio()
+                    backend.scalingMode = scalingMode
+                    backend.sharpness = sharpness
+                    backend.screenEffect = screenEffect
+                    backend.debugHud = debugHud
+                    backend.overlayPath = resolveOverlayPath()
+                    backend.shaderPresetPath = resolveShaderPresetPath()
+                }
+
+                if (useVulkan) {
+                    val vkBackend = VulkanBackend(runner)
+                    configureBackend(vkBackend)
+                    renderer = vkBackend
+
+                    val surfaceView = android.view.SurfaceView(this).apply {
+                        setZOrderMediaOverlay(true)
+                    }
+                    vkBackend.attachToSurface(surfaceView)
+                    gameView = surfaceView
+                } else {
+                    val glesBackend = LibretroRenderer(runner)
+                    configureBackend(glesBackend)
+                    renderer = glesBackend
+
+                    glSurfaceView = GLSurfaceView(this).apply {
+                        setEGLContextClientVersion(3)
+                        setRenderer(glesBackend)
+                        renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                    }
+                    gameView = glSurfaceView
                 }
 
                 loading = false

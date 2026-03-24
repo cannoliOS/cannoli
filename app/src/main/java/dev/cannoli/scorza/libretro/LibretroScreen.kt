@@ -39,7 +39,7 @@ data class GameInfo(
 
 @Composable
 fun LibretroScreen(
-    glSurfaceView: GLSurfaceView,
+    glSurfaceView: android.view.View,
     gameTitle: String,
     screen: IGMScreen?,
     menuOptions: InGameMenuOptions,
