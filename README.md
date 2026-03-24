@@ -7,6 +7,13 @@ Cannoli
 
 <h4 style="font-size:18px; padding-top:0px; margin-top:0px;">A frontend with just the right amount of filling!</h4>
 
+<a href="LICENSE"><img src="https://img.shields.io/github/license/CannoliHQ/cannoli?style=for-the-badge&color=0AB9E6" alt="License"></a>
+<a href="https://github.com/CannoliHQ/cannoli/stargazers"><img src="https://img.shields.io/github/stars/CannoliHQ/cannoli?style=for-the-badge&color=0AB9E6" alt="Stars"></a>
+<a href="https://github.com/CannoliHQ/cannoli/releases"><img src="https://img.shields.io/github/downloads/CannoliHQ/cannoli/total?style=for-the-badge&color=0AB9E6" alt="Downloads"></a>
+<br>
+<a href="https://cannoli.dev"><img src="https://img.shields.io/badge/Docs-cannoli.dev-0AB9E6?style=for-the-badge" alt="Docs"></a>
+<a href="AI_DISCLOSURE.md"><img src="https://img.shields.io/badge/AI_Disclosure-0AB9E6?style=for-the-badge" alt="AI Disclosure"></a>
+
 </div>
 
 ---
@@ -105,20 +112,6 @@ If that is the case don't switch. Sorry for being dismissive!
 It has become a meme in this hobby to spend all this time curating to never play anything.
 
 (Yes I understand the irony of building a custom launcher rather than playing games. I'm a hypocrite.)
-
----
-
-# The question every project is asked. How is AI used?
-
-I've been working AI into my development workflow as of late both professionally and for fun.
-
-There is a stigma against vibe-coded projects and rightfully so.
-
-My personal opinion is that it is only a problem for mission-critical stuff and when it is not disclosed.
-
-My promise to you is I will disclose how AI was used in each project.
-
-You can find this detailed disclosure in [AI_DISCLOSURE.md](AI_DISCLOSURE.md)
 
 ---
 
