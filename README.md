@@ -7,8 +7,6 @@ Cannoli
 
 <h4 style="font-size:18px; padding-top:0px; margin-top:0px;">A frontend with just the right amount of filling!</h4>
 
-<video src="https://github.com/user-attachments/assets/84ef99a6-faeb-487d-93ad-6fbeaf607b75" width="600" autoplay loop muted playsinline></video>
-
 </div>
 
 ---
@@ -48,8 +46,8 @@ Since purchasing a Retroid Pocket Classic I've been yearning for MinUI's simplic
 - Basic creature comforts right in the UI
   - Rename
   - Delete
-  - Collections
   - Favorites
+  - Collections, with nesting
   - Platform Reordering
   - Collection Reordering
   - Search in Collection / Platform
@@ -57,11 +55,12 @@ Since purchasing a Retroid Pocket Classic I've been yearning for MinUI's simplic
 - Background Wallpaper (non-dynamic)
 - Accent Colors
 - Associating each platform with a particular emulator
+- [RomM Integration](https://romm.app) - Download games and sync saves
 
-## Built-In Core Runner (experimental)
+## Built-In Core Runner
 Cannoli comes with a built-in libretro core runner that is a shameless rip-off of minarch from MinUI.
 
-Here's the plan, if you are a grizzled vet use Cannoli as a launcher.
+Here's the plan, Do if you are a grizzled vet use Cannoli as a launcher.
 
 If you are a beginner, use the built-in core runner. When you are ready for more features and complexity use the external emulators.
 
@@ -87,16 +86,17 @@ The best news is the opinionated directory structure is compatible with both app
 - Art Scraper
 - Game Time Tracker
 - LED Control
-- Menu Music (yuck, but I respect that you might like it)
+- Menu Music (yuck)
 - Themes
-- Video Previews (yuck x2, but I don't respect that you might like them)
+- Video Previews (yuck x1000)
 
 ## In the built-in core runner
-- GLSL / Slang Shaders
 - Netplay
 - RetroAchievements
 
-For all of these just use RetroArch. You can choose to use RetroArch by platform or by individual game.
+If you need either of these just use RetroArch. 
+
+Remember, you can choose to use RetroArch by platform or by individual game.
 
 ## But I need that feature!
 
@@ -154,8 +154,6 @@ You can find this detailed disclosure in [AI_DISCLOSURE.md](AI_DISCLOSURE.md)
 | SwanStation                 | Core            | GPLv3          |
 | vecx                        | Core            | GPLv3          |
 | Virtual Jaguar              | Core            | GPLv3          |
-| lcd3x by Gigaherz           | Shader          | Public domain  |
-| zfast_crt_geo by Greg Hogan | Shader          | GPLv2          |
 
 ---
 
