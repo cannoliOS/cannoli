@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import android.os.Handler
 import android.os.Looper
+import dev.cannoli.scorza.input.CannoliAccessibilityService
 import dev.cannoli.scorza.input.InputHandler
 import dev.cannoli.scorza.launcher.ApkLauncher
 import dev.cannoli.scorza.launcher.EmuLauncher
@@ -33,6 +34,7 @@ import dev.cannoli.scorza.launcher.LaunchManager
 import dev.cannoli.scorza.launcher.RetroArchLauncher
 import dev.cannoli.scorza.navigation.AppNavGraph
 import dev.cannoli.scorza.navigation.LauncherScreen
+import dev.cannoli.scorza.libretro.LibretroActivity
 import dev.cannoli.scorza.libretro.LibretroInput
 import dev.cannoli.scorza.libretro.ShortcutAction
 import dev.cannoli.scorza.scanner.FileScanner
@@ -408,6 +410,17 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         hideSystemUI()
+        if (LibretroActivity.isRunning) {
+            val intent = Intent(this, LibretroActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+            return
+        }
+        if (::inputHandler.isInitialized) {
+            CannoliAccessibilityService.onMenuKey = { action ->
+                if (action == KeyEvent.ACTION_DOWN) runOnUiThread { inputHandler.onSelect() }
+            }
+        }
         if (::systemListViewModel.isInitialized) {
             rescanSystemList()
             if (screenStack.lastOrNull() is LauncherScreen.GameList) {
@@ -415,6 +428,11 @@ class MainActivity : ComponentActivity() {
                 scanResumableGames()
             }
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        CannoliAccessibilityService.onMenuKey = null
     }
 
     override fun onDestroy() {

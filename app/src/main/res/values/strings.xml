@@ -92,4 +92,7 @@
     <string name="context_rename">Rename</string>
     <string name="context_delete">Delete</string>
     <string name="context_add_to_collection">Add to Collection</string>
+
+    <!-- Accessibility -->
+    <string name="accessibility_service_description">Intercepts Home and Select buttons on controllers so they work correctly in Cannoli.</string>
 </resources>

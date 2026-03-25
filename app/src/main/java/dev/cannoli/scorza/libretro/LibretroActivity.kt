@@ -1,5 +1,6 @@
 package dev.cannoli.scorza.libretro
 
+import dev.cannoli.scorza.input.CannoliAccessibilityService
 import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
 import android.os.Bundle
@@ -72,6 +73,7 @@ class LibretroActivity : ComponentActivity() {
     private var coreOptions by mutableStateOf(emptyList<LibretroRunner.CoreOption>())
     private var coreCategories by mutableStateOf(emptyList<LibretroRunner.CoreOptionCategory>())
     private var controlSource by mutableStateOf(OverrideSource.GLOBAL)
+    private var controlsSnapshot: Map<String, Int> = emptyMap()
     private var shortcutSource by mutableStateOf(OverrideSource.GLOBAL)
     private var shortcuts by mutableStateOf(mapOf<ShortcutAction, Set<Int>>())
     private val shortcutChordKeys = mutableSetOf<Int>()
@@ -145,6 +147,7 @@ class LibretroActivity : ComponentActivity() {
 
     companion object {
         private val FF_SPEEDS = listOf(2, 3, 4, 6, 8)
+        @Volatile var isRunning = false
     }
 
     private fun push(screen: IGMScreen) { screenStack.add(screen) }
@@ -159,6 +162,7 @@ class LibretroActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        isRunning = true
         goFullscreen()
 
         gameTitle = (intent.getStringExtra("game_title") ?: "").removePrefix("★ ")
@@ -317,6 +321,14 @@ class LibretroActivity : ComponentActivity() {
 
     private val pressedKeys = mutableSetOf<Int>()
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_MENU) {
+            if (event.action == KeyEvent.ACTION_DOWN) onKeyDown(event.keyCode, event)
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (loading) return true
         val screen = currentScreen ?: return handleGameplayInput(keyCode, event)
@@ -370,7 +382,7 @@ class LibretroActivity : ComponentActivity() {
 
     private fun handleGameplayInput(keyCode: Int, event: KeyEvent): Boolean {
         val menuCode = globalControls["btn_menu"] ?: KeyEvent.KEYCODE_BUTTON_MODE
-        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == menuCode) { openMenu(); return true }
+        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_MENU || keyCode == menuCode) { openMenu(); return true }
         val isNewPress = pressedKeys.add(keyCode)
         if (isNewPress) checkShortcuts()
         val mask = input.keyCodeToRetroMask(keyCode) ?: return super.onKeyDown(keyCode, event)
@@ -607,7 +619,10 @@ class LibretroActivity : ComponentActivity() {
                         coreCategories = runner.getCoreCategories()
                         push(IGMScreen.Emulator())
                     }
-                    IGMSettings.CONTROLS -> push(IGMScreen.Controls())
+                    IGMSettings.CONTROLS -> {
+                        controlsSnapshot = input.buttons.associate { it.prefKey to input.getKeyCodeFor(it) }
+                        push(IGMScreen.Controls())
+                    }
                     IGMSettings.SHORTCUTS -> push(IGMScreen.Shortcuts())
                     IGMSettings.ADVANCED -> push(IGMScreen.Advanced())
                 }
@@ -800,17 +815,14 @@ class LibretroActivity : ComponentActivity() {
         } else {
             val currentIndex = if (screenEffect == ScreenEffect.NONE || shaderPreset.isEmpty()) -1
                 else shaderPresets.indexOf(shaderPreset)
-            val count = shaderPresets.size
-            val newIndex = currentIndex + direction
-            if (newIndex in 0 until count) {
+            val total = shaderPresets.size + 1
+            val newIndex = ((currentIndex + 1 + direction) % total + total) % total - 1
+            if (newIndex in 0 until shaderPresets.size) {
                 screenEffect = ScreenEffect.SHADER
                 shaderPreset = shaderPresets[newIndex]
-            } else if (newIndex >= count) {
+            } else {
                 screenEffect = ScreenEffect.NONE
                 shaderPreset = ""
-            } else {
-                screenEffect = ScreenEffect.SHADER
-                shaderPreset = shaderPresets[count - 1]
             }
         }
         shaderParamsDirty = true
@@ -1023,7 +1035,13 @@ class LibretroActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_BUTTON_X -> {
                 input.resetDefaults()
+                for ((key, kc) in controlsSnapshot) {
+                    val btn = input.buttons.find { it.prefKey == key } ?: continue
+                    input.assign(btn, kc)
+                }
                 saveCurrentControls()
+                screenStack.removeAt(screenStack.lastIndex)
+                screenStack.add(IGMScreen.Controls(selectedIndex = screen.selectedIndex))
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
@@ -1346,15 +1364,27 @@ class LibretroActivity : ComponentActivity() {
         runner.deinit()
     }
 
-    private fun quit() { cleanup(); finish() }
+    private fun quit() { isRunning = false; cleanup(); finish() }
 
     override fun onPause() {
         super.onPause()
+        CannoliAccessibilityService.onHomeKey = null
+        CannoliAccessibilityService.onMenuKey = null
         glSurfaceView?.onPause()
         if (!loading && !cleaned && sramPath.isNotEmpty()) { File(sramPath).parentFile?.mkdirs(); runner.saveSRAM(sramPath) }
     }
 
-    override fun onResume() { super.onResume(); glSurfaceView?.onResume(); goFullscreen() }
+    override fun onResume() {
+        super.onResume(); glSurfaceView?.onResume(); goFullscreen()
+        CannoliAccessibilityService.onHomeKey = { runOnUiThread { openMenu() } }
+        CannoliAccessibilityService.onMenuKey = { action ->
+            runOnUiThread {
+                val event = KeyEvent(action, KeyEvent.KEYCODE_BUTTON_SELECT)
+                if (action == KeyEvent.ACTION_DOWN) onKeyDown(KeyEvent.KEYCODE_BUTTON_SELECT, event)
+                else if (action == KeyEvent.ACTION_UP) onKeyUp(KeyEvent.KEYCODE_BUTTON_SELECT, event)
+            }
+        }
+    }
     override fun onDestroy() { super.onDestroy(); cleanup() }
 
 
