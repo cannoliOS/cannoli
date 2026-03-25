@@ -44,19 +44,27 @@ import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.GrayText
 
 
-class InGameMenuOptions(hasDiscs: Boolean, val discLabel: String) {
+class InGameMenuOptions(hasDiscs: Boolean, val discLabel: String, hasAchievements: Boolean = false) {
     val options: List<String>
     val resumeIndex = 0
     val saveStateIndex = 1
     val loadStateIndex = 2
-    val settingsIndex = 3
+    val achievementsIndex: Int
+    val settingsIndex: Int
     val switchDiscIndex: Int
     val resetIndex: Int
-    val infoIndex: Int
     val quitIndex: Int
 
     init {
-        val list = mutableListOf("Resume", "Save State", "Load State", "Settings")
+        val list = mutableListOf("Resume", "Save State", "Load State")
+        if (hasAchievements) {
+            achievementsIndex = list.size
+            list.add("Achievements")
+        } else {
+            achievementsIndex = -1
+        }
+        settingsIndex = list.size
+        list.add("Settings")
         if (hasDiscs) {
             switchDiscIndex = list.size
             list.add("Switch Disc")
@@ -65,8 +73,6 @@ class InGameMenuOptions(hasDiscs: Boolean, val discLabel: String) {
         }
         resetIndex = list.size
         list.add("Reset")
-        infoIndex = list.size
-        list.add("Info")
         quitIndex = list.size
         list.add("Quit")
         options = list
@@ -79,8 +85,9 @@ object IGMSettings {
     const val CONTROLS = 2
     const val SHORTCUTS = 3
     const val ADVANCED = 4
+    const val INFO = 5
 
-    val CATEGORIES = listOf("Video", "Emulator", "Controls", "Shortcuts", "Advanced")
+    val CATEGORIES = listOf("Video", "Emulator", "Controls", "Shortcuts", "Advanced", "Info")
 }
 
 enum class ShortcutAction(val label: String) {

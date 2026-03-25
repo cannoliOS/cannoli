@@ -798,3 +798,11 @@ extern "C" FrameBuffer *getFrameBuffer() {
 extern "C" void markFrameConsumed() {
     g_frame_ready = false;
 }
+
+extern "C" void *bridge_get_memory_data(unsigned id) {
+    return core.get_memory_data ? core.get_memory_data(id) : nullptr;
+}
+
+extern "C" size_t bridge_get_memory_size(unsigned id) {
+    return core.get_memory_size ? core.get_memory_size(id) : 0;
+}

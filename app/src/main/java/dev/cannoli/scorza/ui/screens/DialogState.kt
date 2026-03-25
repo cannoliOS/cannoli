@@ -31,6 +31,7 @@ sealed interface DialogState {
     data class HexColorInput(val settingKey: String, val currentHex: String = "", val selectedIndex: Int = 0) : DialogState
     data object About : DialogState
     data class Kitchen(val url: String, val pin: String) : DialogState
+    data class RAAccount(val username: String, val score: Int = 0) : DialogState
 }
 
 fun DialogState.asKeyboardState(): KeyboardInputState? = this as? KeyboardInputState
@@ -105,6 +106,7 @@ val DialogState.isFullScreen: Boolean
         is DialogState.NewCollectionInput,
         is DialogState.CollectionRenameInput,
         is DialogState.About,
-        is DialogState.Kitchen -> true
+        is DialogState.Kitchen,
+        is DialogState.RAAccount -> true
         else -> false
     }

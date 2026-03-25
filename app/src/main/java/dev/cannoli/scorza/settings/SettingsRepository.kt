@@ -180,6 +180,14 @@ class SettingsRepository(context: Context) {
         get() = jsonRead { optString(KEY_COLOR_ACCENT, "#FFFFFF") }
         set(value) = jsonWrite { put(KEY_COLOR_ACCENT, value) }
 
+    var raUsername: String
+        get() = jsonRead { optString(KEY_RA_USERNAME, "") }
+        set(value) = jsonWrite { if (value.isEmpty()) remove(KEY_RA_USERNAME) else put(KEY_RA_USERNAME, value) }
+
+    var raToken: String
+        get() = jsonRead { optString(KEY_RA_TOKEN, "") }
+        set(value) = jsonWrite { if (value.isEmpty()) remove(KEY_RA_TOKEN) else put(KEY_RA_TOKEN, value) }
+
     companion object {
         const val DEFAULT_ROOT = "/storage/emulated/0/Cannoli/"
         const val DEFAULT_RA_PACKAGE = "com.retroarch.aarch64"
@@ -213,6 +221,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_TOOLS_NAME = "tools_name"
         private const val KEY_PORTS_NAME = "ports_name"
         private const val KEY_GRAPHICS_BACKEND = "graphics_backend"
+        private const val KEY_RA_USERNAME = "ra_username"
+        private const val KEY_RA_TOKEN = "ra_token"
     }
 }
 

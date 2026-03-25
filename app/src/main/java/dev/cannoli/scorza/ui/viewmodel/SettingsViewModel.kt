@@ -92,6 +92,7 @@ class SettingsViewModel(
         Category("status_bar", R.string.settings_status_bar),
         Category("input", R.string.settings_input),
         Category("kitchen", R.string.settings_kitchen),
+        Category("retroachievements", R.string.settings_retroachievements),
         Category("advanced", R.string.settings_advanced),
         Category("about", R.string.settings_about)
     )
@@ -426,6 +427,10 @@ class SettingsViewModel(
             SettingsItem("platform_switching", R.string.setting_platform_switching, valueRes = onOff(settings.platformSwitching))
         )
         "kitchen" -> emptyList()
+        "retroachievements" -> listOf(
+            SettingsItem("ra_username", R.string.setting_ra_username, valueText = settings.raUsername.ifEmpty { "Not set" }, isEditable = true),
+            SettingsItem("ra_password", R.string.setting_ra_password, isEditable = true)
+        )
         "advanced" -> listOf(
             SettingsItem("core_mapping", R.string.setting_core_mapping, isEditable = true),
             SettingsItem("sd_root", R.string.setting_sd_root, valueText = settings.sdCardRoot, isEditable = true),

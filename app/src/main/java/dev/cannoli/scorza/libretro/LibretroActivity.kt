@@ -88,6 +88,8 @@ class LibretroActivity : ComponentActivity() {
     private var currentDiskIndex by mutableIntStateOf(0)
     private var diskLabels = emptyList<String>()
 
+    private var raManager: RetroAchievementsManager? = null
+
     private var audioSampleRate = 0
     private var fastForwarding by mutableStateOf(false)
     private var holdingFf = false
@@ -130,7 +132,9 @@ class LibretroActivity : ComponentActivity() {
     private fun diskLabel(index: Int): String =
         diskLabels.getOrNull(index)?.takeIf { it.isNotEmpty() } ?: "Disc ${index + 1}"
 
-    private fun menuOptions() = InGameMenuOptions(hasDiscs, diskLabel(currentDiskIndex))
+    private var raHasAchievements = false
+
+    private fun menuOptions() = InGameMenuOptions(hasDiscs, diskLabel(currentDiskIndex), raHasAchievements)
 
     private fun refreshDiskInfo() {
         diskCount = runner.getDiskCount()
@@ -311,6 +315,29 @@ class LibretroActivity : ComponentActivity() {
 
                 loading = false
                 runOnUiThread { applyLowLatency() }
+
+                val raUser = intent.getStringExtra("ra_username") ?: ""
+                val raToken = intent.getStringExtra("ra_token") ?: ""
+                val consoleId = RetroAchievementsManager.CONSOLE_MAP[platformTag]
+                if (consoleId != null && raUser.isNotEmpty() && raToken.isNotEmpty()) {
+                    val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
+                        showOsd("\uD83C\uDFC6 $title")
+                    })
+                    ra.init()
+                    ra.loginWithToken(raUser, raToken)
+                    ra.loadGame(romPath, consoleId)
+                    var idleCounter = 0
+                    renderer.onCoreRan = {
+                        if (!renderer.paused) {
+                            ra.doFrame()
+                            idleCounter = 0
+                        } else if (++idleCounter >= 60) {
+                            ra.idle()
+                            idleCounter = 0
+                        }
+                    }
+                    raManager = ra
+                }
             }
         }.start()
 
@@ -347,6 +374,8 @@ class LibretroActivity : ComponentActivity() {
             is IGMScreen.Info -> {
                 if (resolved == KeyEvent.KEYCODE_BUTTON_B || resolved == KeyEvent.KEYCODE_BUTTON_A) { pop(); true } else true
             }
+            is IGMScreen.Achievements -> handleAchievementsInput(screen, resolved)
+            is IGMScreen.AchievementDetail -> handleAchievementDetailInput(screen, resolved)
         }
     }
 
@@ -404,6 +433,7 @@ class LibretroActivity : ComponentActivity() {
                 ShortcutAction.LOAD_STATE -> {
                     if (stateBasePath.isNotEmpty() && slotManager.stateExists(currentSlot)) {
                         slotManager.loadState(runner, currentSlot)
+                        raManager?.reset()
                         showOsd("Loaded ${currentSlot.label}")
                     }
                 }
@@ -456,6 +486,7 @@ class LibretroActivity : ComponentActivity() {
         renderer.paused = true
         refreshSlotInfo()
         refreshDiskInfo()
+        raManager?.let { ra -> raHasAchievements = ra.isLoggedIn && ra.getAchievements().isNotEmpty() }
     }
 
     private fun closeAll() {
@@ -577,6 +608,7 @@ class LibretroActivity : ComponentActivity() {
                     undoSlot = null
                     startUndoTimer()
                     slotManager.loadState(runner, slot)
+                    raManager?.reset()
                     showOsd("Loaded ${slot.label}")
                 }
                 closeAll()
@@ -598,7 +630,10 @@ class LibretroActivity : ComponentActivity() {
                 runner.reset()
                 closeAll()
             }
-            menu.infoIndex -> push(IGMScreen.Info())
+            menu.achievementsIndex -> {
+                val achievements = raManager?.getAchievements() ?: emptyList()
+                push(IGMScreen.Achievements(achievements = achievements))
+            }
             menu.quitIndex -> quit()
         }
     }
@@ -628,6 +663,7 @@ class LibretroActivity : ComponentActivity() {
                     }
                     IGMSettings.SHORTCUTS -> push(IGMScreen.Shortcuts())
                     IGMSettings.ADVANCED -> push(IGMScreen.Advanced())
+                    IGMSettings.INFO -> push(IGMScreen.Info())
                 }
                 true
             }
@@ -833,6 +869,49 @@ class LibretroActivity : ComponentActivity() {
         renderer.screenEffect = screenEffect
         renderer.shaderPresetPath = resolveShaderPresetPath()
         refreshShaderParams()
+    }
+
+    private fun handleAchievementsInput(screen: IGMScreen.Achievements, keyCode: Int): Boolean {
+        val count = screen.achievements.size
+        if (count == 0) return when (keyCode) {
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            else -> true
+        }
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
+            }
+            KeyEvent.KEYCODE_BUTTON_A -> {
+                val ach = screen.achievements.getOrNull(screen.selectedIndex)
+                if (ach != null) push(IGMScreen.AchievementDetail(achievement = ach, parentIndex = screen.selectedIndex))
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            else -> true
+        }
+    }
+
+    private fun handleAchievementDetailInput(screen: IGMScreen.AchievementDetail, keyCode: Int): Boolean {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_BUTTON_X -> {
+                if (!screen.achievement.unlocked && pressedKeys.contains(KeyEvent.KEYCODE_BUTTON_L2) && pressedKeys.contains(KeyEvent.KEYCODE_BUTTON_R2)) {
+                    raManager?.manualUnlock(screen.achievement.id)
+                    showOsd("Unlocked: ${screen.achievement.title}")
+                    pop()
+                    val top = currentScreen
+                    if (top is IGMScreen.Achievements) {
+                        val updated = raManager?.getAchievements() ?: top.achievements
+                        replaceTop(top.copy(achievements = updated))
+                    }
+                }
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            else -> true
+        }
     }
 
     private fun handleShaderSettingsInput(screen: IGMScreen.ShaderSettings, keyCode: Int): Boolean {
@@ -1361,6 +1440,10 @@ class LibretroActivity : ComponentActivity() {
     private fun cleanup() {
         if (cleaned || loading) return
         cleaned = true
+        raManager?.unloadGame()
+        raManager?.destroy()
+        raManager = null
+        renderer.onCoreRan = null
         if (sramPath.isNotEmpty()) { File(sramPath).parentFile?.mkdirs(); runner.saveSRAM(sramPath) }
         audio?.stop()
         runner.unloadGame()

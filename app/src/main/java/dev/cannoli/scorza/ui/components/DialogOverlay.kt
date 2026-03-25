@@ -116,6 +116,10 @@ fun DialogOverlay(
             KitchenOverlay(url = dialogState.url, pin = dialogState.pin)
         }
 
+        is DialogState.RAAccount -> {
+            RAAccountOverlay(username = dialogState.username)
+        }
+
         else -> {}
     }
 }

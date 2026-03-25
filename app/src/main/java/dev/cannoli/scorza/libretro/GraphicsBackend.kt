@@ -12,6 +12,7 @@ interface GraphicsBackend {
     var shaderPresetPath: String?
     var lowLatency: Boolean
     var onFrameRendered: (() -> Unit)?
+    var onCoreRan: (() -> Unit)?
 
     val backendName: String
     val fps: Float

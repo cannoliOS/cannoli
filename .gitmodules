@@ -4,3 +4,6 @@
 [submodule "app/src/main/cpp/third_party/spirv-cross"]
 	path = app/src/main/cpp/third_party/spirv-cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+[submodule "app/src/main/cpp/third_party/rcheevos"]
+	path = app/src/main/cpp/third_party/rcheevos
+	url = https://github.com/RetroAchievements/rcheevos.git

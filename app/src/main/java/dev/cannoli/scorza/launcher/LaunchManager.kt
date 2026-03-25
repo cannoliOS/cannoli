@@ -204,6 +204,8 @@ class LaunchManager(
             putExtra("use_24h", settings.timeFormat == TimeFormat.TWENTY_FOUR_HOUR)
             putExtra("swap_start_select", settings.swapStartSelect)
             putExtra("graphics_backend", settings.graphicsBackend)
+            putExtra("ra_username", settings.raUsername)
+            putExtra("ra_token", settings.raToken)
             if (resumeSlot >= 0) putExtra("resume_slot", resumeSlot)
         }
         context.startActivity(intent)

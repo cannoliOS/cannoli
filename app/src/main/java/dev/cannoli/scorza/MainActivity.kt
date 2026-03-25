@@ -36,6 +36,7 @@ import dev.cannoli.scorza.navigation.AppNavGraph
 import dev.cannoli.scorza.navigation.LauncherScreen
 import dev.cannoli.scorza.libretro.LibretroActivity
 import dev.cannoli.scorza.libretro.LibretroInput
+import dev.cannoli.scorza.libretro.RetroAchievementsManager
 import dev.cannoli.scorza.libretro.ShortcutAction
 import dev.cannoli.scorza.scanner.FileScanner
 import dev.cannoli.scorza.scanner.PlatformResolver
@@ -102,6 +103,14 @@ class MainActivity : ComponentActivity() {
     private val controlButtons = LibretroInput().buttons
     private val controlButtonCount = controlButtons.size
     @Volatile private var navigating = false
+    private var loginManager: RetroAchievementsManager? = null
+    private val loginPollHandler = Handler(Looper.getMainLooper())
+    private val loginPollRunnable: Runnable = object : Runnable {
+        override fun run() {
+            loginManager?.idle()
+            if (loginManager != null) loginPollHandler.postDelayed(this, 100)
+        }
+    }
     private var currentFirstVisible = 0
     private var currentPageSize = 10
     private var inSetup by mutableStateOf(false)
@@ -877,6 +886,8 @@ class MainActivity : ComponentActivity() {
                             val cat = settingsViewModel.state.value.categories.getOrNull(settingsViewModel.state.value.categoryIndex)
                             if (cat?.key == "about") {
                                 dialogState.value = DialogState.About
+                            } else if (cat?.key == "retroachievements" && settings.raToken.isNotEmpty()) {
+                                dialogState.value = DialogState.RAAccount(username = settings.raUsername)
                             } else if (cat?.key == "kitchen") {
                                 val root = File(settings.sdCardRoot)
                                 val km = dev.cannoli.scorza.server.KitchenManager
@@ -901,6 +912,25 @@ class MainActivity : ComponentActivity() {
                                 ))
                                 "manage_tools" -> openAppPicker("tools")
                                 "manage_ports" -> openAppPicker("ports")
+                                "ra_username" -> {
+                                    val current = settings.raUsername
+                                    dialogState.value = DialogState.RenameInput(
+                                        gameName = "ra_username",
+                                        currentName = current,
+                                        cursorPos = current.length
+                                    )
+                                }
+                                "ra_password" -> {
+                                    if (settings.raUsername.isEmpty()) {
+                                        android.widget.Toast.makeText(this, "Set username first", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        dialogState.value = DialogState.RenameInput(
+                                            gameName = "ra_password",
+                                            currentName = "",
+                                            cursorPos = 0
+                                        )
+                                    }
+                                }
                                 null -> {}
                                 else -> {
                                     if (key.startsWith("color_")) {
@@ -1030,7 +1060,8 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = DialogState.None
                 }
                 DialogState.About,
-                is DialogState.Kitchen -> {
+                is DialogState.Kitchen,
+                is DialogState.RAAccount -> {
                     dialogState.value = DialogState.None
                     rescanSystemList()
                 }
@@ -1229,6 +1260,12 @@ class MainActivity : ComponentActivity() {
                     dev.cannoli.scorza.server.KitchenManager.stop()
                     dialogState.value = DialogState.None
                     rescanSystemList()
+                }
+                is DialogState.RAAccount -> {
+                    settings.raUsername = ""
+                    settings.raToken = ""
+                    settingsViewModel.load()
+                    dialogState.value = DialogState.None
                 }
                 is DialogState.ColorPicker -> {
                     val currentHex = settingsViewModel.getColorHex(ds.settingKey).removePrefix("#")
@@ -1905,6 +1942,39 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onRenameConfirm(state: DialogState.RenameInput) {
+        if (state.gameName == "ra_username") {
+            settings.raUsername = state.currentName.trim()
+            settingsViewModel.load()
+            dialogState.value = DialogState.None
+            return
+        }
+        if (state.gameName == "ra_password") {
+            val password = state.currentName.trim()
+            if (password.isNotEmpty()) {
+                val ra = RetroAchievementsManager(
+                    onLogin = { success, nameOrError, token ->
+                        if (success && token != null) {
+                            settings.raUsername = nameOrError
+                            settings.raToken = token
+                            android.widget.Toast.makeText(this@MainActivity, "Logged in as $nameOrError", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(this@MainActivity, "Login failed: $nameOrError", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        settingsViewModel.load()
+                        loginPollHandler.removeCallbacks(loginPollRunnable)
+                        loginManager?.destroy()
+                        loginManager = null
+                    }
+                )
+                ra.init()
+                ra.loginWithPassword(settings.raUsername, password)
+                loginManager = ra
+                loginPollHandler.postDelayed(loginPollRunnable, 100)
+                android.widget.Toast.makeText(this, "Logging in...", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            dialogState.value = DialogState.None
+            return
+        }
         if (currentScreen == LauncherScreen.SystemList) {
             onSystemListRename(state)
             return

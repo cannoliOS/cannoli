@@ -17,11 +17,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
+import dev.cannoli.scorza.ui.theme.GrayText
+import dev.cannoli.scorza.ui.theme.MPlus1Code
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.cannoli.scorza.ui.components.BottomBar
 import dev.cannoli.scorza.ui.components.ScreenBackground
@@ -204,6 +210,108 @@ fun LibretroScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 InfoRow("Save", stripRoot(gameInfo.savePath))
                             }
+                        }
+                        BottomBar(
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                            leftItems = listOf("B" to "BACK"),
+                            rightItems = emptyList()
+                        )
+                    }
+                }
+            }
+            is IGMScreen.Achievements -> {
+                IGMSettingsScreen(
+                    title = "Achievements",
+                    items = screen.achievements.map { ach ->
+                        IGMSettingsItem(
+                            label = "${if (ach.unlocked) "●" else "○"} ${ach.title}",
+                            value = "${ach.points}pts"
+                        )
+                    },
+                    selectedIndex = screen.selectedIndex,
+                    coreInfo = coreInfo,
+                    bottomBarRight = listOf("A" to "DETAILS")
+                )
+            }
+            is IGMScreen.AchievementDetail -> {
+                val ach = screen.achievement
+                val badgeBitmap = if (ach.badgeUrl.isNotEmpty()) {
+                    androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, ach.badgeUrl) {
+                        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                val conn = java.net.URL(ach.badgeUrl).openConnection()
+                                conn.connectTimeout = 5000
+                                conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+                            } catch (_: Exception) { null }
+                        }
+                    }.value
+                } else null
+
+                val unlockText = if (ach.unlocked && ach.unlockTime > 0) {
+                    val date = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
+                        .format(java.util.Date(ach.unlockTime * 1000))
+                    "Unlocked $date"
+                } else if (ach.unlocked) "Unlocked" else "Locked"
+
+                ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(screenPadding),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth(0.8f)
+                        ) {
+                            if (badgeBitmap != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = badgeBitmap.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .height(96.dp)
+                                        .padding(bottom = 12.dp)
+                                )
+                            }
+                            Text(
+                                text = ach.title,
+                                style = TextStyle(
+                                    fontFamily = MPlus1Code,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 24.sp,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = unlockText,
+                                style = TextStyle(
+                                    fontFamily = MPlus1Code,
+                                    fontSize = 16.sp,
+                                    color = if (ach.unlocked) LocalCannoliColors.current.accent else GrayText
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${ach.points} points",
+                                style = TextStyle(
+                                    fontFamily = MPlus1Code,
+                                    fontSize = 16.sp,
+                                    color = GrayText
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = ach.description,
+                                style = TextStyle(
+                                    fontFamily = MPlus1Code,
+                                    fontSize = 18.sp,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                            )
                         }
                         BottomBar(
                             modifier = Modifier.align(Alignment.BottomCenter),

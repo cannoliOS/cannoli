@@ -46,6 +46,7 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
         set(value) { field = value; loadShaderPreset(value) }
     @Volatile override var lowLatency = false
     @Volatile override var onFrameRendered: (() -> Unit)? = null
+    @Volatile override var onCoreRan: (() -> Unit)? = null
 
     override val backendName = "Vulkan"
     @Volatile override var fps = 0f; private set

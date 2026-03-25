@@ -3,9 +3,25 @@ project(cannoli_native)
 
 find_library(log-lib log)
 
+# --- rcheevos (RetroAchievements client library) ---
+file(GLOB RCHEEVOS_SRC
+    third_party/rcheevos/src/rcheevos/*.c
+    third_party/rcheevos/src/rapi/*.c
+    third_party/rcheevos/src/rhash/*.c
+    third_party/rcheevos/src/rc_client.c
+    third_party/rcheevos/src/rc_compat.c
+    third_party/rcheevos/src/rc_util.c
+    third_party/rcheevos/src/rc_version.c)
+add_library(rcheevos STATIC ${RCHEEVOS_SRC})
+target_include_directories(rcheevos PUBLIC third_party/rcheevos/include)
+target_include_directories(rcheevos PRIVATE third_party/rcheevos/src ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(rcheevos PRIVATE RC_DISABLE_LUA)
+target_compile_definitions(rcheevos PUBLIC RC_CLIENT_SUPPORTS_HASH)
+
 # --- retro_bridge (libretro core runner) ---
-add_library(retro_bridge SHARED libretro_bridge.cpp)
-target_link_libraries(retro_bridge ${log-lib})
+add_library(retro_bridge SHARED libretro_bridge.cpp ra_integration.c)
+target_link_libraries(retro_bridge rcheevos ${log-lib})
+target_include_directories(retro_bridge PRIVATE third_party/rcheevos/include)
 
 # --- glslang (Vulkan GLSL → SPIR-V) ---
 set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
