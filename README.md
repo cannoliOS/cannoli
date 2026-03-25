@@ -41,7 +41,7 @@ Since purchasing a Retroid Pocket Classic I've been yearning for MinUI's simplic
 - Minimal Configuration
 - Easy to add new games
 - Basic features baked in
-- Judicious addition of additional features
+- Judicious addition of new features
 
 ---
 
