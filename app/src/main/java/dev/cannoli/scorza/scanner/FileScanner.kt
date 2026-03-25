@@ -614,10 +614,28 @@ class FileScanner(
 
     fun getChildCollections(parentName: String): List<String> {
         val allParents = loadCollectionParents()
-        return allParents.entries
+        val children = allParents.entries
             .filter { parentName in it.value }
             .map { it.key }
-            .sortedNatural { it }
+        val order = loadChildOrder(parentName)
+        if (order.isEmpty()) return children.sortedNatural { it }
+        val byName = children.toSet()
+        val ordered = order.filter { it in byName }
+        val remaining = children.filter { it !in order }.sortedNatural { it }
+        return ordered + remaining
+    }
+
+    fun loadChildOrder(parentName: String): List<String> {
+        val file = File(configDir, "child_order_$parentName.txt")
+        if (!file.exists()) return emptyList()
+        return file.readLines().map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    fun saveChildOrder(parentName: String, names: List<String>) {
+        configDir.mkdirs()
+        val file = File(configDir, "child_order_$parentName.txt")
+        if (names.isEmpty()) { file.delete(); return }
+        file.writeText(names.joinToString("\n") + "\n")
     }
 
     fun isTopLevelCollection(name: String): Boolean {

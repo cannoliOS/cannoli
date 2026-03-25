@@ -336,9 +336,12 @@ class GameListViewModel(
         _state.update { it.copy(multiSelectMode = false, checkedIndices = emptySet()) }
     }
 
+    fun hasChildCollections(): Boolean = _state.value.games.any { it.isChildCollection }
+
     fun enterReorderMode() {
         _state.update { current ->
-            if (!current.isCollectionsList || current.games.isEmpty()) return@update current
+            val canReorder = current.isCollectionsList || (current.isCollection && current.games.any { it.isChildCollection })
+            if (!canReorder || current.games.isEmpty()) return@update current
             current.copy(reorderMode = true, reorderOriginalIndex = current.selectedIndex)
         }
     }
@@ -350,8 +353,11 @@ class GameListViewModel(
             if (!current.reorderMode) return@update current
             val idx = current.selectedIndex
             if (idx <= 0) return@update current
+            val item = current.games[idx]
+            val target = current.games[idx - 1]
+            if (item.isChildCollection != target.isChildCollection) return@update current
             val games = current.games.toMutableList()
-            games[idx] = games[idx - 1].also { games[idx - 1] = games[idx] }
+            games[idx] = target; games[idx - 1] = item
             current.copy(games = games, selectedIndex = idx - 1)
         }
     }
@@ -361,8 +367,11 @@ class GameListViewModel(
             if (!current.reorderMode) return@update current
             val idx = current.selectedIndex
             if (idx >= current.games.lastIndex) return@update current
+            val item = current.games[idx]
+            val target = current.games[idx + 1]
+            if (item.isChildCollection != target.isChildCollection) return@update current
             val games = current.games.toMutableList()
-            games[idx] = games[idx + 1].also { games[idx + 1] = games[idx] }
+            games[idx] = target; games[idx + 1] = item
             current.copy(games = games, selectedIndex = idx + 1)
         }
     }
@@ -370,9 +379,12 @@ class GameListViewModel(
     fun confirmReorder() {
         val current = _state.value
         if (!current.reorderMode) return
-        val names = current.games.map { it.displayName }
-        viewModelScope.launch(Dispatchers.IO) {
-            scanner.saveCollectionOrder(names)
+        if (current.isCollectionsList) {
+            val names = current.games.map { it.displayName }
+            viewModelScope.launch(Dispatchers.IO) { scanner.saveCollectionOrder(names) }
+        } else if (current.isCollection && current.collectionName != null) {
+            val childNames = current.games.filter { it.isChildCollection }.map { it.displayName.removePrefix("/") }
+            viewModelScope.launch(Dispatchers.IO) { scanner.saveChildOrder(current.collectionName, childNames) }
         }
         _state.update { it.copy(reorderMode = false, reorderOriginalIndex = -1) }
     }
@@ -380,7 +392,11 @@ class GameListViewModel(
     fun cancelReorder() {
         val current = _state.value
         if (!current.reorderMode) return
-        loadCollectionsList()
+        if (current.isCollectionsList) {
+            loadCollectionsList()
+        } else if (current.isCollection && current.collectionName != null) {
+            loadCollectionInternal(current.collectionName)
+        }
     }
 
     private fun loadGames(tags: List<String>, subfolder: String?, preserveIndex: Int = 0, preserveScroll: Int = 0, prevCount: Int = -1) {

@@ -140,7 +140,7 @@ fun GameListScreen(
                                     viewModel.firstVisibleIndex = first
                                     onVisibleRangeChanged(first, count, full)
                                 },
-                                key = { _, game -> game.file.absolutePath }
+                                key = if (state.reorderMode) null else { _, game -> game.file.absolutePath }
                             ) { index, game ->
                                 GameRow(
                                     game = game,
@@ -188,7 +188,8 @@ fun GameListScreen(
                 !state.isCollectionsList && selectedGame?.isSubfolder != true &&
                 state.platformTag != "tools" && state.platformTag != "ports"
             val rightItems = if (state.games.isEmpty()) {
-                emptyList()
+                if (state.isCollectionsList) listOf("X" to stringResource(R.string.label_new))
+                else emptyList()
             } else if (state.multiSelectMode) {
                 listOf("A" to actionLabel, "▶" to stringResource(R.string.label_confirm))
             } else {
@@ -198,7 +199,8 @@ fun GameListScreen(
                             (state.isCollection && state.collectionName == "Favorites")
                         add("Y" to if (isFav) "UNFAVORITE" else "FAVORITE")
                     }
-                    if (hasResumeState) add("X" to "RESUME")
+                    if (state.isCollectionsList) add("X" to stringResource(R.string.label_new))
+                    else if (hasResumeState) add("X" to "RESUME")
                     add("A" to actionLabel)
                 }
             }
