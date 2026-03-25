@@ -12,6 +12,7 @@ fun ListScrollEffect(
     selectedIndex: Int,
     itemCount: Int,
     scrollTarget: Int = -1,
+    reorderMode: Boolean = false,
     onVisibleRangeChanged: ((firstVisible: Int, visibleCount: Int, isViewportFull: Boolean) -> Unit)? = null
 ) {
     LaunchedEffect(itemCount, scrollTarget) {
@@ -38,14 +39,13 @@ fun ListScrollEffect(
     }
 
     LaunchedEffect(selectedIndex, itemCount) {
-        if (itemCount == 0) return@LaunchedEffect
+        if (itemCount == 0 || reorderMode) return@LaunchedEffect
         if (listState.layoutInfo.visibleItemsInfo.isEmpty()) return@LaunchedEffect
 
         val index = selectedIndex.coerceAtLeast(0)
         val viewportHeight = listState.layoutInfo.viewportEndOffset
         val fullyVisible = listState.layoutInfo.visibleItemsInfo.filter { info ->
-            info.offset >= 0 &&
-                info.offset + info.size <= viewportHeight
+            info.offset >= 0 && info.offset + info.size <= viewportHeight
         }
 
         if (fullyVisible.size >= itemCount) {

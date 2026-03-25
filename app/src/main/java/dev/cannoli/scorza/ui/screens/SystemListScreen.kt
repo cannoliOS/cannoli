@@ -74,6 +74,7 @@ fun SystemListScreen(
                 selectedIndex = state.selectedIndex,
                 itemHeight = itemHeight,
                 scrollTarget = state.scrollTarget,
+                reorderMode = state.reorderMode,
                 onVisibleRangeChanged = { first, count, full ->
                     viewModel.firstVisibleIndex = first
                     onVisibleRangeChanged(first, count, full)
@@ -81,7 +82,7 @@ fun SystemListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 48.dp),
-                key = { _, item ->
+                key = if (state.reorderMode) null else { _, item ->
                     when (item) {
                         is ListItem.FavoritesItem -> "favorites"
                         is ListItem.CollectionsFolder -> "collections"

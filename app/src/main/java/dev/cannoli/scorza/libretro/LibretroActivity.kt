@@ -460,6 +460,9 @@ class LibretroActivity : ComponentActivity() {
 
     private fun closeAll() {
         screenStack.clear()
+        pressedKeys.clear()
+        inputMask.set(0)
+        runner.setInput(0)
         renderer.paused = false
     }
 

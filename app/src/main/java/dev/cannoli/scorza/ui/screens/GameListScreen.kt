@@ -135,6 +135,7 @@ fun GameListScreen(
                                 selectedIndex = state.selectedIndex,
                                 itemHeight = itemHeight,
                                 scrollTarget = state.scrollTarget,
+                                reorderMode = state.reorderMode,
                                 onVisibleRangeChanged = { first, count, full ->
                                     viewModel.firstVisibleIndex = first
                                     onVisibleRangeChanged(first, count, full)

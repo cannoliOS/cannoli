@@ -19,11 +19,12 @@ fun <T> List(
     itemHeight: Dp = Dp.Unspecified,
     scrollTarget: Int = 0,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = scrollTarget),
+    reorderMode: Boolean = false,
     onVisibleRangeChanged: ((firstVisible: Int, visibleCount: Int, isViewportFull: Boolean) -> Unit)? = null,
     key: ((index: Int, item: T) -> Any)? = null,
     itemContent: @Composable (index: Int, item: T) -> Unit
 ) {
-    ListScrollEffect(listState, selectedIndex, items.size, scrollTarget, onVisibleRangeChanged)
+    ListScrollEffect(listState, selectedIndex, items.size, scrollTarget, reorderMode, onVisibleRangeChanged)
 
     val listModifier = if (itemHeight != Dp.Unspecified) {
         modifier.layout { measurable, constraints ->
