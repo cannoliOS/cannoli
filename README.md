@@ -122,6 +122,12 @@ It has become a meme in this hobby to spend all this time curating to never play
 | M+ Fonts Project            | M PLUS 1 Code   | OFL            |
 | Nerd Fonts                  | NerdSymbols     | OFL            |
 | ZXing                       | QR Code Library | Apache 2.0     |
+| EasyMode                    | crt-easymode    | GPL            |
+| Themaister                  | sharp-bilinear  | Public domain  |
+| hunterk                     | scanline-fract  | Public domain  |
+| SoltanGris42 / metallic77   | zfast-crt       | GPLv2          |
+| SoltanGris42                | zfast-lcd       | GPLv2          |
+| Gigaherz                    | lcd3x           | Public domain  |
 | Atari800                    | Core            | GPLv2          |
 | Beetle NeoPop               | Core            | GPLv2          |
 | Beetle PCE FAST             | Core            | GPLv2          |
