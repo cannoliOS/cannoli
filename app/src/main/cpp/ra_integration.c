@@ -76,34 +76,8 @@ static void ra_get_core_memory(unsigned id, rc_libretro_core_memory_info_t *info
 
 static uint32_t ra_read_memory(uint32_t address, uint8_t *buffer, uint32_t num_bytes, rc_client_t *client) {
     (void)client;
-
-    /* rcheevos uses virtual addresses matching the console's CPU address space.
-       Map them to the core's exposed memory regions. */
-    uint8_t *sys_ram = (uint8_t *)bridge_get_memory_data(2); /* RETRO_MEMORY_SYSTEM_RAM */
-    size_t sys_size = bridge_get_memory_size(2);
-    uint8_t *save_ram = (uint8_t *)bridge_get_memory_data(0); /* RETRO_MEMORY_SAVE_RAM */
-    size_t save_size = bridge_get_memory_size(0);
-
-    /* For cores that expose flat system RAM, rcheevos addresses map directly.
-       The rc_client internally handles console-specific address translation
-       before calling this callback, so we just need to provide the raw data. */
-
-    /* First try: treat address as offset into system RAM */
-    if (sys_ram && sys_size > 0 && address + num_bytes <= sys_size) {
-        memcpy(buffer, sys_ram + address, num_bytes);
-        return num_bytes;
-    }
-
-    /* Second try: address might be in save RAM region */
-    if (save_ram && save_size > 0) {
-        uint32_t save_offset = (sys_size > 0) ? address - (uint32_t)sys_size : address;
-        if (save_offset + num_bytes <= save_size) {
-            memcpy(buffer, save_ram + save_offset, num_bytes);
-            return num_bytes;
-        }
-    }
-
-    return 0;
+    if (!g_memory_initialized) return 0;
+    return rc_libretro_memory_read(&g_memory_regions, address, buffer, num_bytes);
     return num_bytes;
 }
 
