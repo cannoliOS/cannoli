@@ -868,9 +868,16 @@ class LibretroActivity : ComponentActivity() {
         refreshShaderParams()
     }
 
+    private fun filteredAchievements(screen: IGMScreen.Achievements): List<RetroAchievementsManager.Achievement> = when (screen.filter) {
+        1 -> screen.achievements.filter { !it.unlocked }
+        2 -> screen.achievements.filter { it.unlocked }
+        else -> screen.achievements
+    }
+
     private fun handleAchievementsInput(screen: IGMScreen.Achievements, keyCode: Int): Boolean {
-        val count = screen.achievements.size
-        if (count == 0) return when (keyCode) {
+        val filtered = filteredAchievements(screen)
+        val count = filtered.size
+        if (count == 0 && keyCode != KeyEvent.KEYCODE_BUTTON_Y) return when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
             else -> true
         }
@@ -882,8 +889,13 @@ class LibretroActivity : ComponentActivity() {
                 replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
             }
             KeyEvent.KEYCODE_BUTTON_A -> {
-                val ach = screen.achievements.getOrNull(screen.selectedIndex)
+                val ach = filtered.getOrNull(screen.selectedIndex)
                 if (ach != null) push(IGMScreen.AchievementDetail(achievement = ach, parentIndex = screen.selectedIndex))
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_Y -> {
+                val newFilter = (screen.filter + 1) % 3
+                replaceTop(screen.copy(filter = newFilter, selectedIndex = 0))
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
@@ -891,22 +903,31 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
+    private val detailHeldKeys = mutableSetOf<Int>()
+
     private fun handleAchievementDetailInput(screen: IGMScreen.AchievementDetail, keyCode: Int): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_L1 || keyCode == KeyEvent.KEYCODE_BUTTON_R1) {
+            detailHeldKeys.add(keyCode)
+        }
         return when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_X -> {
-                if (!screen.achievement.unlocked && pressedKeys.contains(KeyEvent.KEYCODE_BUTTON_L2) && pressedKeys.contains(KeyEvent.KEYCODE_BUTTON_R2)) {
+                if (!screen.achievement.unlocked && detailHeldKeys.contains(KeyEvent.KEYCODE_BUTTON_L1) && detailHeldKeys.contains(KeyEvent.KEYCODE_BUTTON_R1)) {
                     raManager?.manualUnlock(screen.achievement.id)
                     showOsd("Unlocked: ${screen.achievement.title}")
+                    val unlockedAch = screen.achievement.copy(unlocked = true)
+                    detailHeldKeys.clear()
                     pop()
                     val top = currentScreen
                     if (top is IGMScreen.Achievements) {
-                        val updated = raManager?.getAchievements() ?: top.achievements
+                        val updated = top.achievements.map {
+                            if (it.id == unlockedAch.id) unlockedAch else it
+                        }
                         replaceTop(top.copy(achievements = updated))
                     }
                 }
                 true
             }
-            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { detailHeldKeys.clear(); pop(); true }
             else -> true
         }
     }

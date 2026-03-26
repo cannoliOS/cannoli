@@ -15,6 +15,6 @@ sealed class IGMScreen {
     data class ShaderSettings(override val selectedIndex: Int = 0) : IGMScreen()
     data class SavePrompt(override val selectedIndex: Int = 0) : IGMScreen()
     data class Info(override val selectedIndex: Int = 0) : IGMScreen()
-    data class Achievements(override val selectedIndex: Int = 0, val achievements: List<RetroAchievementsManager.Achievement> = emptyList()) : IGMScreen()
+    data class Achievements(override val selectedIndex: Int = 0, val achievements: List<RetroAchievementsManager.Achievement> = emptyList(), val filter: Int = 0) : IGMScreen()
     data class AchievementDetail(override val selectedIndex: Int = 0, val achievement: RetroAchievementsManager.Achievement, val parentIndex: Int = 0) : IGMScreen()
 }

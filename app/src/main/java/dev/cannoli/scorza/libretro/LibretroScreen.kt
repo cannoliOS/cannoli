@@ -220,17 +220,23 @@ fun LibretroScreen(
                 }
             }
             is IGMScreen.Achievements -> {
+                val filterLabel = when (screen.filter) { 0 -> "ALL"; 1 -> "LOCKED"; else -> "UNLOCKED" }
+                val filtered = when (screen.filter) {
+                    1 -> screen.achievements.filter { !it.unlocked }
+                    2 -> screen.achievements.filter { it.unlocked }
+                    else -> screen.achievements
+                }
                 IGMSettingsScreen(
                     title = "Achievements",
-                    items = screen.achievements.map { ach ->
+                    items = filtered.map { ach ->
                         IGMSettingsItem(
                             label = "${if (ach.unlocked) "●" else "○"} ${ach.title}",
                             value = "${ach.points}pts"
                         )
                     },
-                    selectedIndex = screen.selectedIndex,
+                    selectedIndex = screen.selectedIndex.coerceAtMost((filtered.size - 1).coerceAtLeast(0)),
                     coreInfo = coreInfo,
-                    bottomBarRight = listOf("A" to "DETAILS")
+                    bottomBarRight = listOf("Y" to filterLabel, "A" to "DETAILS")
                 )
             }
             is IGMScreen.AchievementDetail -> {
