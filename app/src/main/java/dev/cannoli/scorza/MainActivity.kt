@@ -936,8 +936,7 @@ class MainActivity : ComponentActivity() {
                                                 settingsViewModel.raPassword = ""
                                                 dialogState.value = DialogState.RAAccount(username = nameOrError)
                                             } else {
-                                                dialogState.value = DialogState.None
-                                                android.widget.Toast.makeText(this@MainActivity, "Login failed: $nameOrError", android.widget.Toast.LENGTH_LONG).show()
+                                                dialogState.value = DialogState.RALoggingIn(message = "Invalid username or password")
                                             }
                                             loginPollHandler.removeCallbacks(loginPollRunnable)
                                             loginManager?.destroy()
@@ -948,7 +947,7 @@ class MainActivity : ComponentActivity() {
                                     ra.loginWithPassword(settings.raUsername, settingsViewModel.raPassword)
                                     loginManager = ra
                                     loginPollHandler.postDelayed(loginPollRunnable, 100)
-                                    android.widget.Toast.makeText(this, "Logging in...", android.widget.Toast.LENGTH_SHORT).show()
+                                    dialogState.value = DialogState.RALoggingIn()
                                 }
                                 null -> {}
                                 else -> {
@@ -1086,6 +1085,9 @@ class MainActivity : ComponentActivity() {
                 is DialogState.RAAccount -> {
                     dialogState.value = DialogState.None
                     if (settingsViewModel.state.value.inSubList) settingsViewModel.exitSubList()
+                }
+                is DialogState.RALoggingIn -> {
+                    dialogState.value = DialogState.None
                 }
                 DialogState.None -> when (val screen = currentScreen) {
                     LauncherScreen.SystemList -> {

@@ -32,6 +32,7 @@ sealed interface DialogState {
     data object About : DialogState
     data class Kitchen(val url: String, val pin: String) : DialogState
     data class RAAccount(val username: String, val score: Int = 0) : DialogState
+    data class RALoggingIn(val message: String = "Logging in...") : DialogState
 }
 
 fun DialogState.asKeyboardState(): KeyboardInputState? = this as? KeyboardInputState
@@ -107,6 +108,7 @@ val DialogState.isFullScreen: Boolean
         is DialogState.CollectionRenameInput,
         is DialogState.About,
         is DialogState.Kitchen,
-        is DialogState.RAAccount -> true
+        is DialogState.RAAccount,
+        is DialogState.RALoggingIn -> true
         else -> false
     }

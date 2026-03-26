@@ -25,6 +25,7 @@ static jobject g_manager = NULL;
 static jmethodID g_onServerCall = NULL;
 static jmethodID g_onEvent = NULL;
 static jmethodID g_onLoginResult = NULL;
+static jmethodID g_onAwardResult = NULL;
 static pthread_mutex_t g_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static char *g_pending_rom_path = NULL;
@@ -93,7 +94,7 @@ static void ra_server_call(const rc_api_request_t *request,
 
     /* Intercept game data fetch when we have a game ID override — replace fake hash with game ID */
     if (g_pending_game_id && request->post_data && strstr(request->post_data, "CANNOLI_")) {
-        LOGE("Intercepting request, replacing hash with game ID %u", g_pending_game_id);
+        LOGI("Intercepting request, replacing hash with game ID %u", g_pending_game_id);
         /* Rebuild post data: replace m=CANNOLI_xxx with g=GAMEID */
         char new_post[512];
         const char *p = request->post_data;
@@ -161,12 +162,14 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
     const char *title = "";
     const char *desc = "";
     int points = 0;
+    int achId = 0;
     int type = event->type;
 
     if (event->achievement) {
         title = event->achievement->title;
         desc = event->achievement->description;
         points = event->achievement->points;
+        achId = (int)event->achievement->id;
     }
 
     JNIEnv *env;
@@ -178,7 +181,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
     jstring jTitle = (*env)->NewStringUTF(env, title);
     jstring jDesc = (*env)->NewStringUTF(env, desc);
-    (*env)->CallVoidMethod(env, g_manager, g_onEvent, type, jTitle, jDesc, points);
+    (*env)->CallVoidMethod(env, g_manager, g_onEvent, type, achId, jTitle, jDesc, points);
     (*env)->DeleteLocalRef(env, jTitle);
     (*env)->DeleteLocalRef(env, jDesc);
 
@@ -199,7 +202,7 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeInit(JNIEnv *env
 
     jclass cls = (*env)->GetObjectClass(env, thiz);
     g_onServerCall = (*env)->GetMethodID(env, cls, "onServerCall", "(Ljava/lang/String;Ljava/lang/String;J)V");
-    g_onEvent = (*env)->GetMethodID(env, cls, "onAchievementEvent", "(ILjava/lang/String;Ljava/lang/String;I)V");
+    g_onEvent = (*env)->GetMethodID(env, cls, "onAchievementEvent", "(IILjava/lang/String;Ljava/lang/String;I)V");
     g_onLoginResult = (*env)->GetMethodID(env, cls, "onLoginResult", "(ZLjava/lang/String;Ljava/lang/String;)V");
 
     g_client = rc_client_create(ra_read_memory, ra_server_call);
@@ -426,7 +429,8 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeGetAchievementDa
         for (uint32_t a = 0; a < bucket->num_achievements; a++) {
             const rc_client_achievement_t *ach = bucket->achievements[a];
             if (ach->points == 0 && ach->id == 0) continue;
-            int softcore = (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_SOFTCORE) ? 1 : 0;
+            int softcore = (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_SOFTCORE) ||
+                           ach->state == RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED ? 1 : 0;
             if (!softcore && (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_HARDCORE)) continue;
 
             if (pos + 512 > cap) { cap *= 2; buf = (char *)realloc(buf, cap); }
@@ -446,10 +450,22 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeGetAchievementDa
     return result;
 }
 
-static void ra_award_callback(int result, const char *error_message, rc_client_t *client, void *userdata) {
-    (void)client; (void)userdata;
-    if (result == RC_OK) LOGI("Achievement manually awarded");
-    else LOGE("Manual award failed: %s", error_message ? error_message : "unknown");
+static void ra_award_response(const rc_api_server_response_t *response, void *userdata) {
+    int achId = (int)(intptr_t)userdata;
+    int success = (response->http_status_code == 200 && response->body && strstr(response->body, "\"Success\":true"));
+    if (success) LOGI("Achievement %d awarded", achId);
+    else LOGE("Award %d failed (http=%d)", achId, response->http_status_code);
+
+    if (g_jvm && g_manager && g_onAwardResult) {
+        JNIEnv *env;
+        int attached = 0;
+        if ((*g_jvm)->GetEnv(g_jvm, (void **)&env, JNI_VERSION_1_6) != JNI_OK) {
+            (*g_jvm)->AttachCurrentThread(g_jvm, &env, NULL);
+            attached = 1;
+        }
+        (*env)->CallVoidMethod(env, g_manager, g_onAwardResult, achId, success ? JNI_TRUE : JNI_FALSE);
+        if (attached) (*g_jvm)->DetachCurrentThread(g_jvm);
+    }
 }
 
 JNIEXPORT void JNICALL
@@ -458,8 +474,9 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeManualUnlock(JNI
     if (!g_client) return;
 
     const rc_client_user_t *user = rc_client_get_user_info(g_client);
+    if (!user || !user->token[0]) return;
+
     const rc_client_game_t *game = rc_client_get_game_info(g_client);
-    if (!user || !game) return;
 
     LOGI("Manual unlock: achievement %d", achievementId);
 
@@ -469,7 +486,7 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeManualUnlock(JNI
     params.api_token = user->token;
     params.achievement_id = (uint32_t)achievementId;
     params.hardcore = 0;
-    params.game_hash = game->hash;
+    params.game_hash = game ? game->hash : "";
 
     rc_api_request_t request;
     if (rc_api_init_award_achievement_request(&request, &params) == RC_OK) {

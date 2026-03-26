@@ -321,10 +321,15 @@ class LibretroActivity : ComponentActivity() {
                 val consoleId = RetroAchievementsManager.CONSOLE_MAP[platformTag]
                 if (consoleId != null && raUser.isNotEmpty() && raToken.isNotEmpty()) {
                     val raGameIdOverride = intent.getIntExtra("ra_game_id", 0)
-                    val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
-                        raHasAchievements = true
-                        showOsd("\uDB81\uDD38 $title")
-                    })
+                    val ra = RetroAchievementsManager(
+                        context = this,
+                        cacheDir = java.io.File(cacheDir, "ra_cache"),
+                        onEvent = { _, title, _, _ ->
+                            raHasAchievements = true
+                            showOsd("\uDB81\uDD38 $title")
+                        },
+                        onSyncStatus = { msg -> showOsd(msg) }
+                    )
                     ra.init()
                     ra.loginWithToken(raUser, raToken)
                     if (raGameIdOverride > 0) {
@@ -629,8 +634,17 @@ class LibretroActivity : ComponentActivity() {
                 closeAll()
             }
             menu.achievementsIndex -> {
-                val achievements = raManager?.getAchievements() ?: emptyList()
-                push(IGMScreen.Achievements(achievements = achievements))
+                val ra = raManager ?: return
+                val pending = ra.pendingSyncIds
+                val local = ra.localUnlocks
+                val achievements = ra.getAchievements().map {
+                    when {
+                        it.id in pending -> it.copy(unlocked = true, pendingSync = true)
+                        it.id in local -> it.copy(unlocked = true)
+                        else -> it
+                    }
+                }
+                push(IGMScreen.Achievements(achievements = achievements, status = ra.getStatus()))
             }
             menu.quitIndex -> quit()
         }
@@ -870,8 +884,7 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun filteredAchievements(screen: IGMScreen.Achievements): List<RetroAchievementsManager.Achievement> = when (screen.filter) {
-        1 -> screen.achievements.filter { !it.unlocked }
-        2 -> screen.achievements.filter { it.unlocked }
+        1 -> screen.achievements.filter { it.unlocked }
         else -> screen.achievements
     }
 
@@ -890,12 +903,19 @@ class LibretroActivity : ComponentActivity() {
                 replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
             }
             KeyEvent.KEYCODE_BUTTON_A -> {
-                val ach = filtered.getOrNull(screen.selectedIndex)
-                if (ach != null) push(IGMScreen.AchievementDetail(achievement = ach, parentIndex = screen.selectedIndex))
+                var ach = filtered.getOrNull(screen.selectedIndex)
+                if (ach != null) {
+                    val ra = raManager
+                    if (ra != null) {
+                        if (ach.id in ra.pendingSyncIds) ach = ach.copy(unlocked = true, pendingSync = true)
+                        else if (ach.id in ra.localUnlocks) ach = ach.copy(unlocked = true)
+                    }
+                    push(IGMScreen.AchievementDetail(achievement = ach, parentIndex = screen.selectedIndex))
+                }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_Y -> {
-                val newFilter = (screen.filter + 1) % 3
+                val newFilter = (screen.filter + 1) % 2
                 replaceTop(screen.copy(filter = newFilter, selectedIndex = 0))
                 true
             }

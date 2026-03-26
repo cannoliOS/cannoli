@@ -219,28 +219,34 @@ fun LibretroScreen(
                 }
             }
             is IGMScreen.Achievements -> {
-                val filterLabel = when (screen.filter) { 0 -> "ALL"; 1 -> "LOCKED"; else -> "UNLOCKED" }
+                val filterLabel = when (screen.filter) { 0 -> "ALL"; else -> "UNLOCKED" }
                 val filtered = when (screen.filter) {
-                    1 -> screen.achievements.filter { !it.unlocked }
-                    2 -> screen.achievements.filter { it.unlocked }
+                    1 -> screen.achievements.filter { it.unlocked }
                     else -> screen.achievements
                 }
                 IGMSettingsScreen(
                     title = "Achievements (${screen.achievements.count { it.unlocked }}/${screen.achievements.size})",
                     items = filtered.map { ach ->
+                        val prefix = when {
+                            ach.pendingSync -> "◐"
+                            ach.unlocked -> "●"
+                            else -> "○"
+                        }
                         IGMSettingsItem(
-                            label = "${if (ach.unlocked) "●" else "○"} ${ach.title}",
+                            label = "$prefix ${ach.title}",
                             value = "${ach.points}pts"
                         )
                     },
                     selectedIndex = screen.selectedIndex.coerceAtMost((filtered.size - 1).coerceAtLeast(0)),
-                    coreInfo = coreInfo,
+                    coreInfo = screen.status,
                     bottomBarRight = listOf("Y" to filterLabel, "A" to "DETAILS")
                 )
             }
             is IGMScreen.AchievementDetail -> {
                 val ach = screen.achievement
-                val unlockText = if (ach.unlocked && ach.unlockTime > 0) {
+                val unlockText = if (ach.pendingSync) {
+                    "Unlocked \u2022 Pending Sync"
+                } else if (ach.unlocked && ach.unlockTime > 0) {
                     val date = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
                         .format(java.util.Date(ach.unlockTime * 1000))
                     "Unlocked $date"
@@ -274,7 +280,7 @@ fun LibretroScreen(
                                 style = TextStyle(
                                     fontFamily = MPlus1Code,
                                     fontSize = 16.sp,
-                                    color = if (ach.unlocked) LocalCannoliColors.current.accent else GrayText
+                                    color = Color.White
                                 )
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -283,7 +289,7 @@ fun LibretroScreen(
                                 style = TextStyle(
                                     fontFamily = MPlus1Code,
                                     fontSize = 16.sp,
-                                    color = GrayText
+                                    color = Color.White
                                 )
                             )
                             Spacer(modifier = Modifier.height(16.dp))

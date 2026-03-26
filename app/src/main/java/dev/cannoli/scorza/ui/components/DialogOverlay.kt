@@ -120,6 +120,10 @@ fun DialogOverlay(
             RAAccountOverlay(username = dialogState.username)
         }
 
+        is DialogState.RALoggingIn -> {
+            RALoggingInOverlay(message = dialogState.message)
+        }
+
         else -> {}
     }
 }
