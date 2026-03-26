@@ -5,14 +5,16 @@
 #include <android/log.h>
 #include "rc_client.h"
 #include "rc_consoles.h"
+#include "rc_libretro.h"
 
 #define LOG_TAG "RA"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 /* Bridge functions from libretro_bridge.cpp */
 extern void *bridge_get_memory_data(unsigned id);
 extern size_t bridge_get_memory_size(unsigned id);
+extern const struct retro_memory_map *bridge_get_memory_map(void);
 
 /* ---- state ---- */
 static rc_client_t *g_client = NULL;
@@ -22,6 +24,13 @@ static jmethodID g_onServerCall = NULL;
 static jmethodID g_onEvent = NULL;
 static jmethodID g_onLoginResult = NULL;
 static pthread_mutex_t g_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static char *g_pending_rom_path = NULL;
+static uint32_t g_pending_console_id = 0;
+static rc_libretro_memory_regions_t g_memory_regions;
+static int g_memory_initialized = 0;
+
+static void ra_load_game_callback(int result, const char *error_message, rc_client_t *client, void *userdata);
 
 /* ---- HTTP response queue ---- */
 typedef struct QueuedResponse {
@@ -59,24 +68,42 @@ static void process_queued_responses(void) {
 
 /* ---- rcheevos callbacks ---- */
 
+static void ra_get_core_memory(unsigned id, rc_libretro_core_memory_info_t *info) {
+    info->data = (uint8_t *)bridge_get_memory_data(id);
+    info->size = bridge_get_memory_size(id);
+    LOGI("get_core_memory(%u): data=%p size=%zu", id, info->data, info->size);
+}
+
 static uint32_t ra_read_memory(uint32_t address, uint8_t *buffer, uint32_t num_bytes, rc_client_t *client) {
     (void)client;
-    /* Try system RAM first, then save RAM */
-    unsigned ids[] = {0 /* RETRO_MEMORY_SAVE_RAM */, 1 /* RETRO_MEMORY_SYSTEM_RAM */};
-    /* rcheevos addresses are typically absolute within the console's address space.
-       For most cores, system RAM (id=0 in some cores) is what we want.
-       We'll use rc_libretro memory mapping for proper support. */
-    uint8_t *data = (uint8_t *)bridge_get_memory_data(0); /* RETRO_MEMORY_SAVE_RAM */
-    size_t size = bridge_get_memory_size(0);
 
-    if (!data || address + num_bytes > size) {
-        data = (uint8_t *)bridge_get_memory_data(1); /* RETRO_MEMORY_SYSTEM_RAM */
-        size = bridge_get_memory_size(1);
-        if (!data || address + num_bytes > size)
-            return 0;
+    /* rcheevos uses virtual addresses matching the console's CPU address space.
+       Map them to the core's exposed memory regions. */
+    uint8_t *sys_ram = (uint8_t *)bridge_get_memory_data(2); /* RETRO_MEMORY_SYSTEM_RAM */
+    size_t sys_size = bridge_get_memory_size(2);
+    uint8_t *save_ram = (uint8_t *)bridge_get_memory_data(0); /* RETRO_MEMORY_SAVE_RAM */
+    size_t save_size = bridge_get_memory_size(0);
+
+    /* For cores that expose flat system RAM, rcheevos addresses map directly.
+       The rc_client internally handles console-specific address translation
+       before calling this callback, so we just need to provide the raw data. */
+
+    /* First try: treat address as offset into system RAM */
+    if (sys_ram && sys_size > 0 && address + num_bytes <= sys_size) {
+        memcpy(buffer, sys_ram + address, num_bytes);
+        return num_bytes;
     }
 
-    memcpy(buffer, data + address, num_bytes);
+    /* Second try: address might be in save RAM region */
+    if (save_ram && save_size > 0) {
+        uint32_t save_offset = (sys_size > 0) ? address - (uint32_t)sys_size : address;
+        if (save_offset + num_bytes <= save_size) {
+            memcpy(buffer, save_ram + save_offset, num_bytes);
+            return num_bytes;
+        }
+    }
+
+    return 0;
     return num_bytes;
 }
 
@@ -97,6 +124,7 @@ static void ra_server_call(const rc_api_request_t *request,
     qr->callback = callback;
     qr->callback_data = callback_data;
 
+    LOGI("server_call: %s", request->url);
     /* Call Kotlin to execute HTTP */
     JNIEnv *env;
     int attached = 0;
@@ -208,6 +236,21 @@ static void ra_login_callback(int result, const char *error_message, rc_client_t
         (*env)->CallVoidMethod(env, g_manager, g_onLoginResult, JNI_TRUE, jName, jToken);
         (*env)->DeleteLocalRef(env, jName);
         (*env)->DeleteLocalRef(env, jToken);
+
+        if (g_pending_rom_path) {
+            LOGI("Loading pending game: %s (console %u)", g_pending_rom_path, g_pending_console_id);
+            const struct retro_memory_map *mmap = bridge_get_memory_map();
+            LOGI("Memory map: %s (%u descriptors)", mmap ? "present" : "NULL", mmap ? mmap->num_descriptors : 0);
+            int mem_result = rc_libretro_memory_init(&g_memory_regions, mmap, ra_get_core_memory, g_pending_console_id);
+            g_memory_initialized = 1;
+            LOGI("Memory regions initialized for console %u, result=%d, count=%u, total=%u",
+                g_pending_console_id, mem_result,
+                g_memory_regions.count, g_memory_regions.total_size);
+            rc_client_begin_identify_and_load_game(g_client, g_pending_console_id,
+                g_pending_rom_path, NULL, 0, ra_load_game_callback, NULL);
+            free(g_pending_rom_path);
+            g_pending_rom_path = NULL;
+        }
     } else {
         LOGE("Login failed: %s", error_message ? error_message : "unknown error");
         jstring jErr = (*env)->NewStringUTF(env, error_message ? error_message : "Login failed");
@@ -258,19 +301,23 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeLoadGame(JNIEnv 
     (void)thiz;
     if (!g_client) return;
     const char *path = (*env)->GetStringUTFChars(env, romPath, NULL);
-    rc_client_begin_identify_and_load_game(g_client, (uint32_t)consoleId, path, NULL, 0, ra_load_game_callback, NULL);
+    free(g_pending_rom_path);
+    g_pending_rom_path = strdup(path);
+    g_pending_console_id = (uint32_t)consoleId;
     (*env)->ReleaseStringUTFChars(env, romPath, path);
 }
 
 JNIEXPORT void JNICALL
 Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeUnloadGame(JNIEnv *env, jobject thiz) {
     (void)env; (void)thiz;
+    if (g_memory_initialized) {
+        rc_libretro_memory_destroy(&g_memory_regions);
+        g_memory_initialized = 0;
+    }
     if (g_client) rc_client_unload_game(g_client);
 }
 
-JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeDoFrame(JNIEnv *env, jobject thiz) {
-    (void)env; (void)thiz;
+void ra_process_frame(void) {
     if (!g_client) return;
     process_queued_responses();
     if (rc_client_is_game_loaded(g_client))
@@ -278,11 +325,16 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeDoFrame(JNIEnv *
 }
 
 JNIEXPORT void JNICALL
+Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeDoFrame(JNIEnv *env, jobject thiz) {
+    (void)env; (void)thiz;
+    ra_process_frame();
+}
+
+JNIEXPORT void JNICALL
 Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeIdle(JNIEnv *env, jobject thiz) {
     (void)env; (void)thiz;
     if (!g_client) return;
     process_queued_responses();
-    rc_client_idle(g_client);
 }
 
 JNIEXPORT void JNICALL
@@ -352,6 +404,7 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeGetAchievements(
         const rc_client_achievement_bucket_t *bucket = &list->buckets[b];
         for (uint32_t a = 0; a < bucket->num_achievements; a++) {
             const rc_client_achievement_t *ach = bucket->achievements[a];
+            if (ach->points == 0 && ach->id == 0) continue;
             int softcore = (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_SOFTCORE) ? 1 : 0;
             int hardcore_only = (!softcore && (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_HARDCORE)) ? 1 : 0;
             if (hardcore_only) continue;

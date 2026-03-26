@@ -86,6 +86,11 @@ static struct retro_disk_control_callback g_disk_control = {0};
 static bool g_has_disk_control = false;
 static const char *(*g_get_image_label)(unsigned index) = nullptr;
 
+// Memory map (for RetroAchievements)
+static struct retro_memory_map g_memory_map = {0};
+static struct retro_memory_descriptor *g_memory_descriptors = nullptr;
+static unsigned g_memory_descriptor_count = 0;
+
 // --- Libretro callbacks ---
 
 static void core_log(enum retro_log_level level, const char *fmt, ...) {
@@ -278,6 +283,20 @@ static bool environment_cb(unsigned cmd, void *data) {
         case RETRO_ENVIRONMENT_GET_LANGUAGE:
             *(unsigned *)data = 0; // RETRO_LANGUAGE_ENGLISH
             return true;
+
+        case RETRO_ENVIRONMENT_SET_MEMORY_MAPS: {
+            const struct retro_memory_map *mmap = (const struct retro_memory_map *)data;
+            free(g_memory_descriptors);
+            g_memory_descriptor_count = mmap->num_descriptors;
+            g_memory_descriptors = (struct retro_memory_descriptor *)calloc(
+                mmap->num_descriptors, sizeof(struct retro_memory_descriptor));
+            memcpy(g_memory_descriptors, mmap->descriptors,
+                mmap->num_descriptors * sizeof(struct retro_memory_descriptor));
+            g_memory_map.descriptors = g_memory_descriptors;
+            g_memory_map.num_descriptors = g_memory_descriptor_count;
+            LOGI("Memory map set: %u descriptors", g_memory_descriptor_count);
+            return true;
+        }
 
         default:
             LOGI("Unhandled env cmd: %u", cmd);
@@ -521,9 +540,13 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobj
     return result;
 }
 
+/* ra_integration.c */
+extern "C" void ra_process_frame(void);
+
 JNIEXPORT void JNICALL
 Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeRun(JNIEnv *, jobject) {
     core.run();
+    ra_process_frame();
 }
 
 JNIEXPORT void JNICALL
@@ -797,6 +820,10 @@ extern "C" FrameBuffer *getFrameBuffer() {
 
 extern "C" void markFrameConsumed() {
     g_frame_ready = false;
+}
+
+extern "C" const struct retro_memory_map *bridge_get_memory_map(void) {
+    return g_memory_descriptor_count > 0 ? &g_memory_map : nullptr;
 }
 
 extern "C" void *bridge_get_memory_data(unsigned id) {

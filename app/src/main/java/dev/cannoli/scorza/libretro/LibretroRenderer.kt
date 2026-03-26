@@ -71,7 +71,6 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
     }
 
     @Volatile override var onFrameRendered: (() -> Unit)? = null
-    @Volatile override var onCoreRan: (() -> Unit)? = null
 
     private var textureId = 0
     private var programNone = 0
@@ -148,7 +147,6 @@ class LibretroRenderer(private val runner: LibretroRunner) : GLSurfaceView.Rende
                 for (i in 1 until extraFrames) runner.run()
             }
         }
-        onCoreRan?.invoke()
 
         val w = runner.getFrameWidth()
         val h = runner.getFrameHeight()

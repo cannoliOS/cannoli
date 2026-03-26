@@ -319,24 +319,21 @@ class LibretroActivity : ComponentActivity() {
                 val raUser = intent.getStringExtra("ra_username") ?: ""
                 val raToken = intent.getStringExtra("ra_token") ?: ""
                 val consoleId = RetroAchievementsManager.CONSOLE_MAP[platformTag]
+                android.util.Log.e("RA", "RA init check: user=$raUser token=${raToken.take(4)}... tag=$platformTag consoleId=$consoleId")
                 if (consoleId != null && raUser.isNotEmpty() && raToken.isNotEmpty()) {
-                    val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
-                        showOsd("\uD83C\uDFC6 $title")
-                    })
-                    ra.init()
-                    ra.loginWithToken(raUser, raToken)
-                    ra.loadGame(romPath, consoleId)
-                    var idleCounter = 0
-                    renderer.onCoreRan = {
-                        if (!renderer.paused) {
-                            ra.doFrame()
-                            idleCounter = 0
-                        } else if (++idleCounter >= 60) {
-                            ra.idle()
-                            idleCounter = 0
-                        }
+                    try {
+                        val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
+                            showOsd("\uD83C\uDFC6 $title")
+                        })
+                        ra.init()
+                        android.util.Log.e("RA", "RA native init done")
+                        ra.loginWithToken(raUser, raToken)
+                        ra.loadGame(romPath, consoleId)
+                        raManager = ra
+                        android.util.Log.e("RA", "RA fully initialized")
+                    } catch (e: Exception) {
+                        android.util.Log.e("RA", "RA init failed", e)
                     }
-                    raManager = ra
                 }
             }
         }.start()
@@ -1443,7 +1440,6 @@ class LibretroActivity : ComponentActivity() {
         raManager?.unloadGame()
         raManager?.destroy()
         raManager = null
-        renderer.onCoreRan = null
         if (sramPath.isNotEmpty()) { File(sramPath).parentFile?.mkdirs(); runner.saveSRAM(sramPath) }
         audio?.stop()
         runner.unloadGame()

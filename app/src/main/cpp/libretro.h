@@ -205,6 +205,27 @@ struct retro_disk_control_ext_callback {
     const char *(*get_image_label)(unsigned index);
 };
 
+// Memory types
+#define RETRO_MEMORY_SYSTEM_RAM  2
+#define RETRO_MEMORY_VIDEO_RAM   3
+
+// Memory descriptor for rc_libretro
+struct retro_memory_descriptor {
+    uint64_t flags;
+    void *ptr;
+    size_t offset;
+    size_t start;
+    size_t select;
+    size_t disconnect;
+    size_t len;
+    const char *addrspace;
+};
+
+struct retro_memory_map {
+    const struct retro_memory_descriptor *descriptors;
+    unsigned num_descriptors;
+};
+
 #ifdef __cplusplus
 }
 #endif

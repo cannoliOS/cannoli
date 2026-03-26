@@ -10,6 +10,7 @@ file(GLOB RCHEEVOS_SRC
     third_party/rcheevos/src/rhash/*.c
     third_party/rcheevos/src/rc_client.c
     third_party/rcheevos/src/rc_compat.c
+    third_party/rcheevos/src/rc_libretro.c
     third_party/rcheevos/src/rc_util.c
     third_party/rcheevos/src/rc_version.c)
 add_library(rcheevos STATIC ${RCHEEVOS_SRC})
@@ -21,7 +22,7 @@ target_compile_definitions(rcheevos PUBLIC RC_CLIENT_SUPPORTS_HASH)
 # --- retro_bridge (libretro core runner) ---
 add_library(retro_bridge SHARED libretro_bridge.cpp ra_integration.c)
 target_link_libraries(retro_bridge rcheevos ${log-lib})
-target_include_directories(retro_bridge PRIVATE third_party/rcheevos/include)
+target_include_directories(retro_bridge PRIVATE third_party/rcheevos/include third_party/rcheevos/src)
 
 # --- glslang (Vulkan GLSL → SPIR-V) ---
 set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)

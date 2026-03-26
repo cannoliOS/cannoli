@@ -70,7 +70,7 @@ class RetroAchievementsManager(
                     badgeUrl = obj.optString("badge", ""),
                     unlockTime = obj.optLong("unlock_time", 0)
                 )
-            }.filter { it.id > 0 }
+            }.filter { it.id > 0 && !it.title.startsWith("Warning:") }
         } catch (_: Exception) { emptyList() }
     }
 
