@@ -323,7 +323,7 @@ class LibretroActivity : ComponentActivity() {
                     val raGameIdOverride = intent.getIntExtra("ra_game_id", 0)
                     val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
                         raHasAchievements = true
-                        showOsd("\uDB81\uDD52 $title")
+                        showOsd("\uDB81\uDD38 $title")
                     })
                     ra.init()
                     ra.loginWithToken(raUser, raToken)
