@@ -322,6 +322,7 @@ class LibretroActivity : ComponentActivity() {
                 if (consoleId != null && raUser.isNotEmpty() && raToken.isNotEmpty()) {
                     val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
                         showOsd("\uD83C\uDFC6 $title")
+                        raHasAchievements = true
                     })
                     ra.init()
                     ra.loginWithToken(raUser, raToken)

@@ -921,15 +921,34 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 "ra_password" -> {
-                                    if (settings.raUsername.isEmpty()) {
-                                        android.widget.Toast.makeText(this, "Set username first", android.widget.Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        dialogState.value = DialogState.RenameInput(
-                                            gameName = "ra_password",
-                                            currentName = "",
-                                            cursorPos = 0
-                                        )
-                                    }
+                                    dialogState.value = DialogState.RenameInput(
+                                        gameName = "ra_password",
+                                        currentName = settingsViewModel.raPassword,
+                                        cursorPos = settingsViewModel.raPassword.length
+                                    )
+                                }
+                                "ra_login" -> {
+                                    val ra = RetroAchievementsManager(
+                                        onLogin = { success, nameOrError, token ->
+                                            if (success && token != null) {
+                                                settings.raUsername = nameOrError
+                                                settings.raToken = token
+                                                settingsViewModel.raPassword = ""
+                                                dialogState.value = DialogState.RAAccount(username = nameOrError)
+                                            } else {
+                                                dialogState.value = DialogState.None
+                                                android.widget.Toast.makeText(this@MainActivity, "Login failed: $nameOrError", android.widget.Toast.LENGTH_LONG).show()
+                                            }
+                                            loginPollHandler.removeCallbacks(loginPollRunnable)
+                                            loginManager?.destroy()
+                                            loginManager = null
+                                        }
+                                    )
+                                    ra.init()
+                                    ra.loginWithPassword(settings.raUsername, settingsViewModel.raPassword)
+                                    loginManager = ra
+                                    loginPollHandler.postDelayed(loginPollRunnable, 100)
+                                    android.widget.Toast.makeText(this, "Logging in...", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                                 null -> {}
                                 else -> {
@@ -1060,10 +1079,13 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = DialogState.None
                 }
                 DialogState.About,
-                is DialogState.Kitchen,
-                is DialogState.RAAccount -> {
+                is DialogState.Kitchen -> {
                     dialogState.value = DialogState.None
                     rescanSystemList()
+                }
+                is DialogState.RAAccount -> {
+                    dialogState.value = DialogState.None
+                    if (settingsViewModel.state.value.inSubList) settingsViewModel.exitSubList()
                 }
                 DialogState.None -> when (val screen = currentScreen) {
                     LauncherScreen.SystemList -> {
@@ -1949,28 +1971,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (state.gameName == "ra_password") {
-            val password = state.currentName.trim()
-            if (password.isNotEmpty()) {
-                val ra = RetroAchievementsManager(
-                    onLogin = { success, nameOrError, token ->
-                        if (success && token != null) {
-                            settings.raUsername = nameOrError
-                            settings.raToken = token
-                            dialogState.value = DialogState.RAAccount(username = nameOrError)
-                        } else {
-                            dialogState.value = DialogState.CollectionCreated("Login failed")
-                        }
-                        loginPollHandler.removeCallbacks(loginPollRunnable)
-                        loginManager?.destroy()
-                        loginManager = null
-                    }
-                )
-                ra.init()
-                ra.loginWithPassword(settings.raUsername, password)
-                loginManager = ra
-                loginPollHandler.postDelayed(loginPollRunnable, 100)
-            }
-            dialogState.value = if (password.isNotEmpty()) DialogState.CollectionCreated("Logging in...") else DialogState.None
+            settingsViewModel.raPassword = state.currentName.trim()
+            settingsViewModel.refreshSubList()
+            dialogState.value = DialogState.None
             return
         }
         if (currentScreen == LauncherScreen.SystemList) {

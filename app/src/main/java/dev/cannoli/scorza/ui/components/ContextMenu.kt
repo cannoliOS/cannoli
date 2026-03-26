@@ -33,7 +33,7 @@ fun OverlayScrim(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f))
+            .background(Color.Black)
     ) {
         Column(
             modifier = Modifier

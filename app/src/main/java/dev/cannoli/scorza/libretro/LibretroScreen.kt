@@ -227,7 +227,7 @@ fun LibretroScreen(
                     else -> screen.achievements
                 }
                 IGMSettingsScreen(
-                    title = "Achievements",
+                    title = "Achievements (${screen.achievements.count { it.unlocked }}/${screen.achievements.size})",
                     items = filtered.map { ach ->
                         IGMSettingsItem(
                             label = "${if (ach.unlocked) "●" else "○"} ${ach.title}",
