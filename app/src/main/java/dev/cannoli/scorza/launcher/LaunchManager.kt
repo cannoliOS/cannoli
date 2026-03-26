@@ -206,6 +206,13 @@ class LaunchManager(
             putExtra("graphics_backend", settings.graphicsBackend)
             putExtra("ra_username", settings.raUsername)
             putExtra("ra_token", settings.raToken)
+            val raIdFile = java.io.File(File(settings.sdCardRoot, "Config"), "ra_game_ids.txt")
+            if (raIdFile.exists()) {
+                val romAbs = game.file.absolutePath
+                raIdFile.readLines().firstOrNull { it.startsWith("$romAbs=") }
+                    ?.substringAfter('=')?.trim()?.toIntOrNull()
+                    ?.let { putExtra("ra_game_id", it) }
+            }
             if (resumeSlot >= 0) putExtra("resume_slot", resumeSlot)
         }
         context.startActivity(intent)

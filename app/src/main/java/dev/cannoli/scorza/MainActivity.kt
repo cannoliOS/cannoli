@@ -1675,9 +1675,10 @@ class MainActivity : ComponentActivity() {
         private const val MENU_EMULATOR_OVERRIDE = "Emulator Override"
         private const val MENU_REMOVE_FROM_COLLECTION = "Remove from Collection"
         private const val MENU_CHILD_COLLECTIONS = "Child Collections"
+        private const val MENU_RA_GAME_ID = "RA Game ID"
     }
 
-    private val gameContextOptions = listOf(MENU_MANAGE_COLLECTIONS, MENU_EMULATOR_OVERRIDE, MENU_RENAME, MENU_DELETE_GAME)
+    private val gameContextOptions = listOf(MENU_MANAGE_COLLECTIONS, MENU_EMULATOR_OVERRIDE, MENU_RA_GAME_ID, MENU_RENAME, MENU_DELETE_GAME)
 
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
         if (currentScreen == LauncherScreen.SystemList) {
@@ -1734,6 +1735,14 @@ class MainActivity : ComponentActivity() {
                 scanner.invalidateArtCache()
                 gameListViewModel.reload()
                 dialogState.value = DialogState.None
+            }
+            MENU_RA_GAME_ID -> {
+                val current = scanner.getRaGameId(game.file.absolutePath)?.toString() ?: ""
+                dialogState.value = DialogState.RenameInput(
+                    gameName = "ra_game_id:${game.file.absolutePath}",
+                    currentName = current,
+                    cursorPos = current.length
+                )
             }
             MENU_EMULATOR_OVERRIDE -> {
                 val tag = game.platformTag
@@ -1974,6 +1983,13 @@ class MainActivity : ComponentActivity() {
             settingsViewModel.raPassword = state.currentName.trim()
             settingsViewModel.refreshSubList()
             dialogState.value = DialogState.None
+            return
+        }
+        if (state.gameName.startsWith("ra_game_id:")) {
+            val romPath = state.gameName.removePrefix("ra_game_id:")
+            val gameId = state.currentName.trim().toIntOrNull()
+            scanner.setRaGameId(romPath, gameId)
+            restoreContextMenu()
             return
         }
         if (currentScreen == LauncherScreen.SystemList) {

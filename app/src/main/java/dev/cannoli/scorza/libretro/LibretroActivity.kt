@@ -132,7 +132,7 @@ class LibretroActivity : ComponentActivity() {
     private fun diskLabel(index: Int): String =
         diskLabels.getOrNull(index)?.takeIf { it.isNotEmpty() } ?: "Disc ${index + 1}"
 
-    private var raHasAchievements = false
+    @Volatile private var raHasAchievements = false
 
     private fun menuOptions() = InGameMenuOptions(hasDiscs, diskLabel(currentDiskIndex), raHasAchievements)
 
@@ -320,13 +320,18 @@ class LibretroActivity : ComponentActivity() {
                 val raToken = intent.getStringExtra("ra_token") ?: ""
                 val consoleId = RetroAchievementsManager.CONSOLE_MAP[platformTag]
                 if (consoleId != null && raUser.isNotEmpty() && raToken.isNotEmpty()) {
+                    val raGameIdOverride = intent.getIntExtra("ra_game_id", 0)
                     val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
-                        showOsd("\uD83C\uDFC6 $title")
                         raHasAchievements = true
+                        showOsd("\uDB81\uDC49 $title")
                     })
                     ra.init()
                     ra.loginWithToken(raUser, raToken)
-                    ra.loadGame(romPath, consoleId)
+                    if (raGameIdOverride > 0) {
+                        ra.loadGameById(raGameIdOverride, consoleId)
+                    } else {
+                        ra.loadGame(romPath, consoleId)
+                    }
                     raManager = ra
                 }
             }
@@ -477,7 +482,14 @@ class LibretroActivity : ComponentActivity() {
         renderer.paused = true
         refreshSlotInfo()
         refreshDiskInfo()
-        raManager?.let { ra -> raHasAchievements = ra.isLoggedIn && ra.getAchievements().isNotEmpty() }
+        if (!raHasAchievements) {
+            raManager?.let { ra ->
+                val loggedIn = ra.isLoggedIn
+                val achs = ra.getAchievements()
+                android.util.Log.e("RA", "openMenu: raManager=${raManager != null} loggedIn=$loggedIn achCount=${achs.size} raHasAchievements=$raHasAchievements")
+                raHasAchievements = loggedIn && achs.isNotEmpty()
+            }
+        }
     }
 
     private fun closeAll() {

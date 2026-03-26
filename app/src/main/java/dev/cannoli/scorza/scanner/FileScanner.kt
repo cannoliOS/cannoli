@@ -561,6 +561,27 @@ class FileScanner(
         File(configDir, "platform_order.txt").writeText(tags.joinToString("\n") + "\n")
     }
 
+    fun getRaGameId(romPath: String): Int? {
+        val file = File(configDir, "ra_game_ids.txt")
+        if (!file.exists()) return null
+        return try {
+            file.readLines().firstOrNull { it.startsWith("$romPath=") }
+                ?.substringAfter('=')?.trim()?.toIntOrNull()
+        } catch (_: IOException) { null }
+    }
+
+    fun setRaGameId(romPath: String, gameId: Int?) {
+        configDir.mkdirs()
+        val file = File(configDir, "ra_game_ids.txt")
+        val existing = try {
+            if (file.exists()) file.readLines().filter { !it.startsWith("$romPath=") && it.isNotEmpty() }
+            else emptyList()
+        } catch (_: IOException) { emptyList() }
+        val lines = if (gameId != null) existing + "$romPath=$gameId" else existing
+        if (lines.isEmpty()) file.delete()
+        else file.writeText(lines.joinToString("\n") + "\n")
+    }
+
     fun loadCollectionOrder(): List<String> {
         val file = File(configDir, "collection_order.txt")
         if (!file.exists()) return emptyList()

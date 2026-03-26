@@ -35,6 +35,10 @@ class RetroAchievementsManager(
         nativeLoadGame(romPath, consoleId)
     }
 
+    fun loadGameById(gameId: Int, consoleId: Int) {
+        nativeLoadGameById(gameId, consoleId)
+    }
+
     fun unloadGame() {
         nativeUnloadGame()
     }
@@ -54,24 +58,31 @@ class RetroAchievementsManager(
     val isLoggedIn: Boolean get() = nativeIsLoggedIn()
     val username: String get() = nativeGetUsername()
 
+    private var cachedAchievements: List<Achievement>? = null
+
     fun getAchievements(): List<Achievement> {
-        val json = nativeGetAchievements()
-        return try {
-            val arr = org.json.JSONArray(json)
-            (0 until arr.length()).map { i ->
-                val obj = arr.getJSONObject(i)
-                Achievement(
-                    id = obj.getInt("id"),
-                    title = obj.getString("title"),
-                    description = obj.getString("description"),
-                    points = obj.getInt("points"),
-                    unlocked = obj.getInt("unlocked") == 1,
-                    state = obj.getInt("state"),
-                    badgeUrl = obj.optString("badge", ""),
-                    unlockTime = obj.optLong("unlock_time", 0)
-                )
-            }.filter { it.id > 0 && !it.title.startsWith("Warning:") }
-        } catch (_: Exception) { emptyList() }
+        cachedAchievements?.let { return it }
+        val raw = nativeGetAchievementData()
+        if (raw.isEmpty()) return emptyList()
+        val list = raw.split('\n').mapNotNull { line ->
+            val parts = line.split('|', limit = 7)
+            if (parts.size < 7) return@mapNotNull null
+            Achievement(
+                id = parts[0].toIntOrNull() ?: return@mapNotNull null,
+                title = parts[1],
+                description = parts[2],
+                points = parts[3].toIntOrNull() ?: 0,
+                unlocked = parts[4] == "1",
+                state = parts[5].toIntOrNull() ?: 0,
+                unlockTime = parts[6].toLongOrNull() ?: 0
+            )
+        }.filter { it.id > 0 && !it.title.startsWith("Warning:") }
+        cachedAchievements = list
+        return list
+    }
+
+    fun invalidateCache() {
+        cachedAchievements = null
     }
 
     fun manualUnlock(achievementId: Int) {
@@ -85,7 +96,6 @@ class RetroAchievementsManager(
         val points: Int,
         val unlocked: Boolean,
         val state: Int,
-        val badgeUrl: String = "",
         val unlockTime: Long = 0
     )
 
@@ -118,6 +128,7 @@ class RetroAchievementsManager(
 
     @Suppress("unused")
     private fun onAchievementEvent(type: Int, title: String, description: String, points: Int) {
+        cachedAchievements = null
         mainHandler.post { onEvent(type, title, description, points) }
     }
 
@@ -131,6 +142,7 @@ class RetroAchievementsManager(
     private external fun nativeLoginWithToken(username: String, token: String)
     private external fun nativeLoginWithPassword(username: String, password: String)
     private external fun nativeLoadGame(romPath: String, consoleId: Int)
+    private external fun nativeLoadGameById(gameId: Int, consoleId: Int)
     private external fun nativeUnloadGame()
     private external fun nativeDoFrame()
     private external fun nativeIdle()
@@ -138,7 +150,7 @@ class RetroAchievementsManager(
     private external fun nativeIsLoggedIn(): Boolean
     private external fun nativeGetUsername(): String
     private external fun nativeHttpResponse(requestPtr: Long, body: String, httpStatus: Int)
-    private external fun nativeGetAchievements(): String
+    private external fun nativeGetAchievementData(): String
     private external fun nativeManualUnlock(achievementId: Int)
 
     companion object {

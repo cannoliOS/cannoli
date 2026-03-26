@@ -29,6 +29,7 @@ static pthread_mutex_t g_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static char *g_pending_rom_path = NULL;
 static uint32_t g_pending_console_id = 0;
+static uint32_t g_pending_game_id = 0;
 static rc_libretro_memory_regions_t g_memory_regions;
 static int g_memory_initialized = 0;
 
@@ -89,6 +90,22 @@ static void ra_server_call(const rc_api_request_t *request,
                            rc_client_server_callback_t callback, void *callback_data,
                            rc_client_t *client) {
     (void)client;
+
+    /* Intercept hash resolve when we have a game ID override */
+    if (g_pending_game_id && request->url && strstr(request->url, "r=gameid")) {
+        char body[64];
+        snprintf(body, sizeof(body), "{\"Success\":true,\"GameID\":%u}", g_pending_game_id);
+        LOGI("Intercepted hash resolve, returning game ID %u", g_pending_game_id);
+        g_pending_game_id = 0;
+        rc_api_server_response_t response;
+        memset(&response, 0, sizeof(response));
+        response.body = body;
+        response.body_length = strlen(body);
+        response.http_status_code = 200;
+        callback(&response, callback_data);
+        return;
+    }
+
     if (!g_jvm || !g_manager) {
         rc_api_server_response_t response;
         memset(&response, 0, sizeof(response));
@@ -215,19 +232,25 @@ static void ra_login_callback(int result, const char *error_message, rc_client_t
         (*env)->DeleteLocalRef(env, jName);
         (*env)->DeleteLocalRef(env, jToken);
 
-        if (g_pending_rom_path) {
-            LOGI("Loading pending game: %s (console %u)", g_pending_rom_path, g_pending_console_id);
+        if (g_pending_rom_path || g_pending_game_id) {
             const struct retro_memory_map *mmap = bridge_get_memory_map();
-            LOGI("Memory map: %s (%u descriptors)", mmap ? "present" : "NULL", mmap ? mmap->num_descriptors : 0);
-            int mem_result = rc_libretro_memory_init(&g_memory_regions, mmap, ra_get_core_memory, g_pending_console_id);
+            rc_libretro_memory_init(&g_memory_regions, mmap, ra_get_core_memory, g_pending_console_id);
             g_memory_initialized = 1;
-            LOGI("Memory regions initialized for console %u, result=%d, count=%u, total=%u",
-                g_pending_console_id, mem_result,
-                g_memory_regions.count, g_memory_regions.total_size);
-            rc_client_begin_identify_and_load_game(g_client, g_pending_console_id,
-                g_pending_rom_path, NULL, 0, ra_load_game_callback, NULL);
-            free(g_pending_rom_path);
-            g_pending_rom_path = NULL;
+
+            if (g_pending_game_id) {
+                LOGI("Loading game by ID: %u (console %u)", g_pending_game_id, g_pending_console_id);
+                char hash[33];
+                snprintf(hash, sizeof(hash), "CANNOLI_%010u", g_pending_game_id);
+                /* Register a fake hash→gameID mapping so rc_client can load by "hash" */
+                rc_client_begin_load_game(g_client, hash, ra_load_game_callback, NULL);
+                g_pending_game_id = 0;
+            } else {
+                LOGI("Loading pending game: %s (console %u)", g_pending_rom_path, g_pending_console_id);
+                rc_client_begin_identify_and_load_game(g_client, g_pending_console_id,
+                    g_pending_rom_path, NULL, 0, ra_load_game_callback, NULL);
+                free(g_pending_rom_path);
+                g_pending_rom_path = NULL;
+            }
         }
     } else {
         LOGE("Login failed: %s", error_message ? error_message : "unknown error");
@@ -283,6 +306,17 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeLoadGame(JNIEnv 
     g_pending_rom_path = strdup(path);
     g_pending_console_id = (uint32_t)consoleId;
     (*env)->ReleaseStringUTFChars(env, romPath, path);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeLoadGameById(JNIEnv *env, jobject thiz,
+        jint gameId, jint consoleId) {
+    (void)env; (void)thiz;
+    if (!g_client) return;
+    free(g_pending_rom_path);
+    g_pending_rom_path = NULL;
+    g_pending_console_id = (uint32_t)consoleId;
+    g_pending_game_id = (uint32_t)gameId;
 }
 
 JNIEXPORT void JNICALL
@@ -360,57 +394,39 @@ Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeHttpResponse(JNI
     pthread_mutex_unlock(&g_queue_mutex);
 }
 
-/* Build a JSON array of achievements */
+/* Returns pipe-delimited flat string: id|title|description|points|unlocked|state|unlockTime\n per achievement */
 JNIEXPORT jstring JNICALL
-Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeGetAchievements(JNIEnv *env, jobject thiz) {
+Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeGetAchievementData(JNIEnv *env, jobject thiz) {
     (void)thiz;
     if (!g_client || !rc_client_is_game_loaded(g_client))
-        return (*env)->NewStringUTF(env, "[]");
+        return (*env)->NewStringUTF(env, "");
 
     rc_client_achievement_list_t *list = rc_client_create_achievement_list(g_client,
         RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_LOCK_STATE);
-    if (!list) return (*env)->NewStringUTF(env, "[]");
+    if (!list) return (*env)->NewStringUTF(env, "");
 
-    /* estimate buffer size */
     size_t cap = 4096;
     char *buf = (char *)malloc(cap);
     size_t pos = 0;
-    buf[pos++] = '[';
 
-    int first = 1;
     for (uint32_t b = 0; b < list->num_buckets; b++) {
         const rc_client_achievement_bucket_t *bucket = &list->buckets[b];
         for (uint32_t a = 0; a < bucket->num_achievements; a++) {
             const rc_client_achievement_t *ach = bucket->achievements[a];
             if (ach->points == 0 && ach->id == 0) continue;
             int softcore = (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_SOFTCORE) ? 1 : 0;
-            int hardcore_only = (!softcore && (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_HARDCORE)) ? 1 : 0;
-            if (hardcore_only) continue;
+            if (!softcore && (ach->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_HARDCORE)) continue;
 
-            if (!first) buf[pos++] = ',';
-            first = 0;
-
-            /* ensure capacity */
             if (pos + 512 > cap) { cap *= 2; buf = (char *)realloc(buf, cap); }
-
-            const char *badge = softcore ?
-                (ach->badge_url ? ach->badge_url : "") :
-                (ach->badge_locked_url ? ach->badge_locked_url : "");
-
-            pos += snprintf(buf + pos, cap - pos,
-                "{\"id\":%u,\"title\":\"%s\",\"description\":\"%s\",\"points\":%u,\"unlocked\":%d,\"state\":%d,\"badge\":\"%s\",\"unlock_time\":%ld}",
+            pos += snprintf(buf + pos, cap - pos, "%u|%s|%s|%u|%d|%d|%ld\n",
                 ach->id,
                 ach->title ? ach->title : "",
                 ach->description ? ach->description : "",
-                ach->points,
-                softcore,
-                ach->state,
-                badge,
-                (long)ach->unlock_time);
+                ach->points, softcore, ach->state, (long)ach->unlock_time);
         }
     }
-    buf[pos++] = ']';
-    buf[pos] = '\0';
+    if (pos > 0) buf[pos - 1] = '\0'; /* trim trailing newline */
+    else buf[0] = '\0';
 
     rc_client_destroy_achievement_list(list);
     jstring result = (*env)->NewStringUTF(env, buf);
