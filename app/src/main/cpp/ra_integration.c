@@ -6,6 +6,8 @@
 #include "rc_client.h"
 #include "rc_consoles.h"
 #include "rc_libretro.h"
+#include "rc_api_runtime.h"
+#include "rc_api_user.h"
 
 #define LOG_TAG "RA"
 #define LOGI(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -54,12 +56,14 @@ static void process_queued_responses(void) {
 
     while (head) {
         QueuedResponse *next = head->next;
-        rc_api_server_response_t response;
-        memset(&response, 0, sizeof(response));
-        response.body = head->body;
-        response.body_length = head->body_len;
-        response.http_status_code = head->http_status;
-        head->callback(&response, head->callback_data);
+        if (head->callback) {
+            rc_api_server_response_t response;
+            memset(&response, 0, sizeof(response));
+            response.body = head->body;
+            response.body_length = head->body_len;
+            response.http_status_code = head->http_status;
+            head->callback(&response, head->callback_data);
+        }
         free(head->body);
         free(head);
         head = next;
@@ -422,10 +426,39 @@ static void ra_award_callback(int result, const char *error_message, rc_client_t
 
 JNIEXPORT void JNICALL
 Java_dev_cannoli_scorza_libretro_RetroAchievementsManager_nativeManualUnlock(JNIEnv *env, jobject thiz, jint achievementId) {
-    (void)env; (void)thiz;
+    (void)thiz;
     if (!g_client) return;
-    /* Use the award API to submit an unlock */
-    /* rc_client doesn't have a direct "manual unlock" — we'll need to use the web API directly.
-       For now, just mark it locally via the event system */
-    LOGI("Manual unlock requested for achievement %d", achievementId);
+
+    const rc_client_user_t *user = rc_client_get_user_info(g_client);
+    const rc_client_game_t *game = rc_client_get_game_info(g_client);
+    if (!user || !game) return;
+
+    LOGI("Manual unlock: achievement %d", achievementId);
+
+    rc_api_award_achievement_request_t params;
+    memset(&params, 0, sizeof(params));
+    params.username = user->display_name;
+    params.api_token = user->token;
+    params.achievement_id = (uint32_t)achievementId;
+    params.hardcore = 0;
+    params.game_hash = game->hash;
+
+    rc_api_request_t request;
+    if (rc_api_init_award_achievement_request(&request, &params) == RC_OK) {
+        /* Send via our HTTP mechanism */
+        if (g_jvm && g_manager) {
+            JNIEnv *jenv = env;
+            jstring jUrl = (*jenv)->NewStringUTF(jenv, request.url);
+            jstring jPost = request.post_data ? (*jenv)->NewStringUTF(jenv, request.post_data) : NULL;
+
+            QueuedResponse *qr = (QueuedResponse *)calloc(1, sizeof(QueuedResponse));
+            qr->callback = NULL;
+            qr->callback_data = NULL;
+
+            (*jenv)->CallVoidMethod(jenv, g_manager, g_onServerCall, jUrl, jPost, (jlong)(uintptr_t)qr);
+            (*jenv)->DeleteLocalRef(jenv, jUrl);
+            if (jPost) (*jenv)->DeleteLocalRef(jenv, jPost);
+        }
+        rc_api_destroy_request(&request);
+    }
 }
