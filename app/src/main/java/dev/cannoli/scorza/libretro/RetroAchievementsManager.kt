@@ -77,6 +77,7 @@ class RetroAchievementsManager(
                 unlockTime = parts[6].toLongOrNull() ?: 0
             )
         }.filter { it.id > 0 && !it.title.startsWith("Warning:") }
+            .sortedBy { if (it.points == 0) 1 else 0 }
         cachedAchievements = list
         return list
     }

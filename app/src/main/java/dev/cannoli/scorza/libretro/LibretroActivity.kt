@@ -323,7 +323,7 @@ class LibretroActivity : ComponentActivity() {
                     val raGameIdOverride = intent.getIntExtra("ra_game_id", 0)
                     val ra = RetroAchievementsManager(onEvent = { _, title, _, _ ->
                         raHasAchievements = true
-                        showOsd("\uDB81\uDC49 $title")
+                        showOsd("\uDB81\uDD52 $title")
                     })
                     ra.init()
                     ra.loginWithToken(raUser, raToken)
@@ -477,19 +477,14 @@ class LibretroActivity : ComponentActivity() {
     // --- Menu screen ---
 
     private fun openMenu() {
+        if (!raHasAchievements) {
+            raManager?.let { ra -> raHasAchievements = ra.isLoggedIn && ra.getAchievements().isNotEmpty() }
+        }
         screenStack.clear()
         push(IGMScreen.Menu())
         renderer.paused = true
         refreshSlotInfo()
         refreshDiskInfo()
-        if (!raHasAchievements) {
-            raManager?.let { ra ->
-                val loggedIn = ra.isLoggedIn
-                val achs = ra.getAchievements()
-                android.util.Log.e("RA", "openMenu: raManager=${raManager != null} loggedIn=$loggedIn achCount=${achs.size} raHasAchievements=$raHasAchievements")
-                raHasAchievements = loggedIn && achs.isNotEmpty()
-            }
-        }
     }
 
     private fun closeAll() {

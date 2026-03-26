@@ -211,15 +211,6 @@ fun GameListScreen(
             )
 
             when (dialogState) {
-                is DialogState.MissingCore -> MissingCoreDialog(dialogState.coreName)
-                is DialogState.MissingApp -> MissingAppDialog(dialogState.appName)
-                is DialogState.LaunchError -> LaunchErrorDialog(dialogState.message)
-                is DialogState.DeleteConfirm -> ConfirmOverlay(
-                    message = stringResource(R.string.dialog_delete_confirm, dialogState.gameName)
-                )
-                is DialogState.DeleteCollectionConfirm -> ConfirmOverlay(
-                    message = stringResource(R.string.dialog_delete_confirm, dialogState.collectionName)
-                )
                 is DialogState.RenameResult -> MessageOverlay(
                     message = if (dialogState.success) {
                         stringResource(R.string.dialog_rename_success)
@@ -233,6 +224,19 @@ fun GameListScreen(
                 else -> {}
             }
         }
+    }
+
+    when (dialogState) {
+        is DialogState.MissingCore -> MissingCoreDialog(dialogState.coreName)
+        is DialogState.MissingApp -> MissingAppDialog(dialogState.appName)
+        is DialogState.LaunchError -> LaunchErrorDialog(dialogState.message)
+        is DialogState.DeleteConfirm -> ConfirmOverlay(
+            message = stringResource(R.string.dialog_delete_confirm, dialogState.gameName)
+        )
+        is DialogState.DeleteCollectionConfirm -> ConfirmOverlay(
+            message = stringResource(R.string.dialog_delete_confirm, dialogState.collectionName)
+        )
+        else -> {}
     }
 
     if (dialogState.isFullScreen) {

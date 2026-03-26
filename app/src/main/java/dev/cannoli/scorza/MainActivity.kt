@@ -1209,7 +1209,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                         val game = gameListViewModel.getSelectedGame()
                         if (game != null) {
-                            val menuName = if (game.isChildCollection) game.displayName.removePrefix("/") else game.displayName
+                            val menuName = game.displayName.removePrefix("★ ").let { if (game.isChildCollection) it.removePrefix("/") else it }
                             dialogState.value = DialogState.ContextMenu(
                                 gameName = menuName,
                                 options = buildGameContextOptions(game, glState)
@@ -1719,7 +1719,7 @@ class MainActivity : ComponentActivity() {
                     val collName = if (game.isChildCollection) game.displayName.removePrefix("/") else game.displayName
                     dialogState.value = DialogState.DeleteCollectionConfirm(collectionName = collName)
                 } else {
-                    dialogState.value = DialogState.DeleteConfirm(gameName = game.displayName)
+                    dialogState.value = DialogState.DeleteConfirm(gameName = game.displayName.removePrefix("★ "))
                 }
             }
             MENU_MANAGE_COLLECTIONS -> {

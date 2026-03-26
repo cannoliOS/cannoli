@@ -91,18 +91,30 @@ static void ra_server_call(const rc_api_request_t *request,
                            rc_client_t *client) {
     (void)client;
 
-    /* Intercept hash resolve when we have a game ID override */
-    if (g_pending_game_id && request->url && strstr(request->url, "r=gameid")) {
-        char body[64];
-        snprintf(body, sizeof(body), "{\"Success\":true,\"GameID\":%u}", g_pending_game_id);
-        LOGI("Intercepted hash resolve, returning game ID %u", g_pending_game_id);
+    /* Intercept game data fetch when we have a game ID override — replace fake hash with game ID */
+    if (g_pending_game_id && request->post_data && strstr(request->post_data, "CANNOLI_")) {
+        LOGE("Intercepting request, replacing hash with game ID %u", g_pending_game_id);
+        /* Rebuild post data: replace m=CANNOLI_xxx with g=GAMEID */
+        char new_post[512];
+        const char *p = request->post_data;
+        size_t pos = 0;
+        while (*p) {
+            if (strncmp(p, "m=CANNOLI_", 10) == 0) {
+                pos += snprintf(new_post + pos, sizeof(new_post) - pos, "g=%u", g_pending_game_id);
+                p += 10;
+                while (*p && *p != '&') p++;
+            } else {
+                new_post[pos++] = *p++;
+            }
+        }
+        new_post[pos] = '\0';
         g_pending_game_id = 0;
-        rc_api_server_response_t response;
-        memset(&response, 0, sizeof(response));
-        response.body = body;
-        response.body_length = strlen(body);
-        response.http_status_code = 200;
-        callback(&response, callback_data);
+
+        rc_api_request_t patched;
+        memset(&patched, 0, sizeof(patched));
+        patched.url = request->url;
+        patched.post_data = new_post;
+        ra_server_call(&patched, callback, callback_data, client);
         return;
     }
 
