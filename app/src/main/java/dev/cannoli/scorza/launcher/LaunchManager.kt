@@ -11,6 +11,7 @@ import dev.cannoli.scorza.scanner.PlatformResolver
 import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.settings.TimeFormat
 import dev.cannoli.scorza.ui.screens.DialogState
+import dev.cannoli.scorza.util.ArchiveExtractor
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -25,6 +26,7 @@ class LaunchManager(
     private val apkLauncher: ApkLauncher,
 ) {
     private var raConfigPath: String? = null
+    private val CONFIG_VERSION = 3
 
     fun syncRetroArchConfig(root: File) {
         val configDir = File(root, "Config")
@@ -48,7 +50,7 @@ class LaunchManager(
             raConfigPath = localConfig.absolutePath
             return
         }
-        val sourceHash = sha256(sourceBytes, "${settings.raUsername}:${settings.raToken}".toByteArray())
+        val sourceHash = sha256(sourceBytes, "$CONFIG_VERSION:${settings.raUsername}:${settings.raToken}".toByteArray())
         val storedHash = if (hashFile.exists()) try { hashFile.readText().trim() } catch (_: IOException) { "" } else ""
 
         if (sourceHash != storedHash || !localConfig.exists()) {
@@ -60,12 +62,33 @@ class LaunchManager(
         raConfigPath = localConfig.absolutePath
     }
 
+    private fun buildGameConfig(game: Game, resume: Boolean = false): String? {
+        val base = raConfigPath ?: return null
+        val baseConfig = try { File(base).readText() } catch (_: IOException) { return null }
+        val cannoliRoot = File(settings.sdCardRoot)
+        val romName = normalizedRomName(game)
+        val stateDir = File(cannoliRoot, "Save States/${game.platformTag}/$romName")
+        stateDir.mkdirs()
+        val gameOverrides = buildMap {
+            put("savestate_directory", stateDir.absolutePath)
+            put("sort_savestates_by_content_enable", "false")
+            put("state_slot", "0")
+            if (resume) {
+                put("savestate_auto_load", "true")
+            }
+        }
+        val patched = applyOverrides(baseConfig, gameOverrides)
+        val launchConfig = File(cannoliRoot, "Config/retroarch_launch.cfg")
+        launchConfig.writeText(patched)
+        return launchConfig.absolutePath
+    }
+
     private fun buildMinimalConfig(rootPath: String) = buildString {
         appendLine("savefile_directory = \"$rootPath/Saves\"")
         appendLine("savestate_directory = \"$rootPath/Save States\"")
         appendLine("system_directory = \"$rootPath/BIOS\"")
         appendLine("sort_savefiles_by_content_enable = \"true\"")
-        appendLine("sort_savestates_by_content_enable = \"true\"")
+        appendLine("savestate_file_compression = \"false\"")
         appendLine("config_save_on_exit = \"false\"")
     }
 
@@ -79,7 +102,10 @@ class LaunchManager(
             put("screenshot_directory", "$rootPath/Media/Screenshots")
             put("recording_output_directory", "$rootPath/Media/Recordings")
             put("sort_savefiles_by_content_enable", "true")
-            put("sort_savestates_by_content_enable", "true")
+            put("savestate_file_compression", "false")
+            put("savestate_block_format", "false")
+            put("savestate_thumbnail_enable", "true")
+            put("savestate_auto_save", "true")
             put("config_save_on_exit", "false")
             if (raUser.isNotEmpty() && raToken.isNotEmpty()) {
                 put("cheevos_enable", "true")
@@ -87,6 +113,10 @@ class LaunchManager(
                 put("cheevos_token", raToken)
             }
         }
+        return applyOverrides(source, overrides)
+    }
+
+    private fun applyOverrides(source: String, overrides: Map<String, String>): String {
         val applied = mutableSetOf<String>()
         val lines = source.lines().map { line ->
             val trimmed = line.trimStart()
@@ -114,6 +144,14 @@ class LaunchManager(
         val m3uFile = File(m3uDir, "${game.displayName}.m3u")
         m3uFile.writeText(checkNotNull(game.discFiles).joinToString("\n") { it.absolutePath } + "\n")
         return m3uFile
+    }
+
+    fun resolveLaunchFile(game: Game): File? {
+        if (game.discFiles != null) return createTempM3u(game)
+        if (ArchiveExtractor.isArchive(game.file)) {
+            return ArchiveExtractor.extract(game.file, context.cacheDir)
+        }
+        return game.file
     }
 
     fun findEmbeddedCore(coreName: String): String? {
@@ -145,15 +183,19 @@ class LaunchManager(
             ?.index
     }
 
-    fun findResumableGames(games: List<Game>): Set<String> {
+    private fun hasAutoState(game: Game): Boolean {
         val cannoliRoot = File(settings.sdCardRoot)
+        val romName = normalizedRomName(game)
+        return File(cannoliRoot, "Save States/${game.platformTag}/$romName/$romName.state.auto").exists()
+    }
+
+    fun findResumableGames(games: List<Game>): Set<String> {
         val result = mutableSetOf<String>()
         for (game in games) {
             if (game.isSubfolder) continue
-            if (getEmbeddedCorePath(game) == null) continue
-            val romName = normalizedRomName(game)
-            val stateDir = File(cannoliRoot, "Save States/${game.platformTag}/$romName")
-            if (stateDir.exists() && stateDir.listFiles()?.any { it.extension == "state" || it.name.contains(".state.") } == true) {
+            if (!hasAutoState(game)) continue
+            val target = game.launchTarget
+            if (target is LaunchTarget.RetroArch || target is LaunchTarget.Embedded || getEmbeddedCorePath(game) != null) {
                 result.add(game.file.absolutePath)
             }
         }
@@ -161,7 +203,8 @@ class LaunchManager(
     }
 
     fun launchGame(game: Game): DialogState? {
-        val launchFile = if (game.discFiles != null) createTempM3u(game) else game.file
+        val launchFile = resolveLaunchFile(game)
+            ?: return DialogState.LaunchError("Failed to extract archive")
 
         val gameOverride = platformResolver.getGameOverride(game.file.absolutePath)
         if (gameOverride?.appPackage != null) {
@@ -184,12 +227,13 @@ class LaunchManager(
                         if (runnerPref != "RetroArch") {
                             val embeddedCorePath = findEmbeddedCore(core)
                             if (embeddedCorePath != null) {
-                                launchEmbedded(game.copy(file = launchFile), embeddedCorePath)
+                                launchEmbedded(game.copy(file = launchFile), embeddedCorePath, originalRomPath = game.file.absolutePath)
                                 return null
                             }
                         }
                         syncRetroArchConfig(File(settings.sdCardRoot))
-                        retroArchLauncher.launch(launchFile, core, raConfigPath)
+                        val launchConfig = buildGameConfig(game) ?: raConfigPath
+                        retroArchLauncher.launch(launchFile, core, launchConfig)
                     } else {
                         LaunchResult.CoreNotInstalled("unknown")
                     }
@@ -206,7 +250,7 @@ class LaunchManager(
                 }
             }
             is LaunchTarget.Embedded -> {
-                launchEmbedded(game.copy(file = launchFile), target.corePath)
+                launchEmbedded(game.copy(file = launchFile), target.corePath, originalRomPath = game.file.absolutePath)
                 return null
             }
         }
@@ -214,11 +258,30 @@ class LaunchManager(
         return toLaunchDialog(result)
     }
 
+    private fun promoteAutoState(game: Game) {
+        val cannoliRoot = File(settings.sdCardRoot)
+        val romName = normalizedRomName(game)
+        val stateDir = File(cannoliRoot, "Save States/${game.platformTag}/$romName")
+        val slot0 = File(stateDir, "$romName.state")
+        val auto = File(stateDir, "$romName.state.auto")
+        if (auto.exists() && (!slot0.exists() || auto.lastModified() > slot0.lastModified())) {
+            auto.copyTo(slot0, overwrite = true)
+        }
+    }
+
     fun resumeGame(game: Game) {
-        val corePath = getEmbeddedCorePath(game) ?: return
-        val slot = findMostRecentSlot(game) ?: return
-        val launchFile = if (game.discFiles != null) createTempM3u(game) else game.file
-        launchEmbedded(game.copy(file = launchFile), corePath, slot)
+        promoteAutoState(game)
+        val launchFile = resolveLaunchFile(game) ?: return
+        val embeddedCorePath = getEmbeddedCorePath(game)
+        if (embeddedCorePath != null) {
+            launchEmbedded(game.copy(file = launchFile), embeddedCorePath, 0, originalRomPath = game.file.absolutePath)
+            return
+        }
+        val gameOverride = platformResolver.getGameOverride(game.file.absolutePath)
+        val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag) ?: return
+        syncRetroArchConfig(File(settings.sdCardRoot))
+        val launchConfig = buildGameConfig(game, resume = true) ?: raConfigPath
+        retroArchLauncher.launch(launchFile, core, launchConfig)
     }
 
     fun toLaunchDialog(result: LaunchResult): DialogState? {
@@ -238,7 +301,7 @@ class LaunchManager(
         }
     }
 
-    fun launchEmbedded(game: Game, corePath: String, resumeSlot: Int = -1) {
+    fun launchEmbedded(game: Game, corePath: String, resumeSlot: Int = -1, originalRomPath: String? = null) {
         val cannoliRoot = File(settings.sdCardRoot)
         val romName = normalizedRomName(game)
         val saveDir = File(cannoliRoot, "Saves/${game.platformTag}")
@@ -248,6 +311,9 @@ class LaunchManager(
             putExtra("game_title", game.displayName)
             putExtra("core_path", corePath)
             putExtra("rom_path", game.file.absolutePath)
+            if (originalRomPath != null && originalRomPath != game.file.absolutePath) {
+                putExtra("original_rom_path", originalRomPath)
+            }
             putExtra("sram_path", File(saveDir, "$romName.srm").absolutePath)
             val stateDir = File(cannoliRoot, "Save States/${game.platformTag}/$romName")
             stateDir.mkdirs()
