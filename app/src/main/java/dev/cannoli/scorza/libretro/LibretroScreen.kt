@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,11 +29,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import dev.cannoli.scorza.ui.theme.GrayText
 import dev.cannoli.scorza.ui.theme.MPlus1Code
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.cannoli.scorza.ui.components.BottomBar
 import dev.cannoli.scorza.ui.components.ScreenBackground
+import dev.cannoli.scorza.ui.components.LocalStatusBarLeftEdge
 import dev.cannoli.scorza.ui.components.ScreenTitle
 import dev.cannoli.scorza.ui.components.StatusBar
+import dev.cannoli.scorza.ui.components.pillInternalH
 import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
 
@@ -78,7 +85,9 @@ fun LibretroScreen(
         else -> false
     }
     val statusBarEnabled = (showWifi || showBluetooth || showClock || showBattery) && !showDescription
+    val statusBarLeftEdge = remember { mutableIntStateOf(Int.MAX_VALUE) }
 
+    CompositionLocalProvider(LocalStatusBarLeftEdge provides statusBarLeftEdge) {
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
             factory = { glSurfaceView },
@@ -202,19 +211,20 @@ fun LibretroScreen(
                                 fontSize = 22.sp,
                                 lineHeight = 32.sp
                             )
+                            val infoModifier = Modifier.padding(start = pillInternalH)
                             Spacer(modifier = Modifier.height(16.dp))
-                            InfoRow("Core", gameInfo.coreName)
+                            InfoRow("Core", gameInfo.coreName, infoModifier)
                             Spacer(modifier = Modifier.height(12.dp))
                             if (gameInfo.originalRomPath != null) {
-                                InfoRow("ROM", stripRoot(gameInfo.originalRomPath))
+                                InfoRow("ROM", stripRoot(gameInfo.originalRomPath), infoModifier)
                                 Spacer(modifier = Modifier.height(12.dp))
-                                InfoRow("Extracted", stripRoot(gameInfo.romPath))
+                                InfoRow("Extracted", stripRoot(gameInfo.romPath), infoModifier)
                             } else {
-                                InfoRow("ROM", stripRoot(gameInfo.romPath))
+                                InfoRow("ROM", stripRoot(gameInfo.romPath), infoModifier)
                             }
                             if (gameInfo.savePath != null) {
                                 Spacer(modifier = Modifier.height(12.dp))
-                                InfoRow("Save", stripRoot(gameInfo.savePath))
+                                InfoRow("Save", stripRoot(gameInfo.savePath), infoModifier)
                             }
                         }
                         BottomBar(
@@ -430,6 +440,9 @@ fun LibretroScreen(
                     .align(Alignment.TopEnd)
                     .padding(20.dp)
                     .alpha(if (overlayVisible) 1f else 0f)
+                    .onGloballyPositioned { coords ->
+                        statusBarLeftEdge.intValue = coords.positionInWindow().x.toInt()
+                    }
             ) {
                 StatusBar(
                     use24hTime = use24h,
@@ -441,12 +454,13 @@ fun LibretroScreen(
             }
         }
     }
+    }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun InfoRow(label: String, value: String, modifier: Modifier = Modifier) {
     val colors = LocalCannoliColors.current
-    Column {
+    Column(modifier = modifier) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium.copy(
