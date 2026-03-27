@@ -35,6 +35,7 @@ struct VkPassResources {
 class VulkanRenderer {
 public:
     void setCachePath(const std::string &path) { cachePath_ = path; }
+    void setLowLatency(bool enabled);
     bool init(ANativeWindow *window);
     void destroy();
     void surfaceChanged(int width, int height);
@@ -150,5 +151,6 @@ private:
     uint32_t totalFrames_ = 0;
     uint64_t fpsTimestamp_ = 0;
 
+    bool lowLatency_ = false;
     std::map<std::string, float> params_;
 };

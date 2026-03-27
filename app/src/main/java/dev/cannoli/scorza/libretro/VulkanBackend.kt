@@ -45,6 +45,10 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
     @Volatile override var shaderPresetPath: String? = null
         set(value) { field = value; loadShaderPreset(value) }
     @Volatile override var lowLatency = false
+        set(value) {
+            field = value
+            renderHandler?.post { if (initialized) nativeSetLowLatency(value) }
+        }
     @Volatile override var onFrameRendered: (() -> Unit)? = null
 
     override val backendName = "Vulkan"
@@ -240,4 +244,5 @@ class VulkanBackend(private val runner: LibretroRunner) : GraphicsBackend, Surfa
     private external fun nativeLoadPreset(passData: Array<ByteArray>, configData: IntArray, scales: FloatArray, passCount: Int): Boolean
     private external fun nativeUnloadPreset()
     private external fun nativeWaitIdle()
+    private external fun nativeSetLowLatency(enabled: Boolean)
 }

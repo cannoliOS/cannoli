@@ -266,7 +266,18 @@ bool VulkanRenderer::createSwapchain() {
         if (caps.supportedCompositeAlpha & a) { compositeAlpha = a; break; }
     }
     swapInfo.compositeAlpha = compositeAlpha;
-    swapInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    if (lowLatency_) {
+        uint32_t modeCount = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &modeCount, nullptr);
+        std::vector<VkPresentModeKHR> modes(modeCount);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &modeCount, modes.data());
+        for (auto m : modes) {
+            if (m == VK_PRESENT_MODE_MAILBOX_KHR) { presentMode = m; break; }
+        }
+    }
+    swapInfo.presentMode = presentMode;
     swapInfo.clipped = VK_TRUE;
 
     uint32_t familyIndices[] = { graphicsFamily_, presentFamily_ };
@@ -883,6 +894,14 @@ void VulkanRenderer::recreateSwapchain() {
         fbInfo.height = swapchainExtent_.height;
         fbInfo.layers = 1;
         vkCreateFramebuffer(device_, &fbInfo, nullptr, &swapchainFramebuffers_[i]);
+    }
+}
+
+void VulkanRenderer::setLowLatency(bool enabled) {
+    if (lowLatency_ == enabled) return;
+    lowLatency_ = enabled;
+    if (device_ != VK_NULL_HANDLE && surface_ != VK_NULL_HANDLE) {
+        recreateSwapchain();
     }
 }
 

@@ -161,4 +161,10 @@ Java_dev_cannoli_scorza_libretro_VulkanBackend_nativeWaitIdle(JNIEnv *, jobject)
     if (g_renderer) vkDeviceWaitIdle(g_renderer->getDevice());
 }
 
+JNIEXPORT void JNICALL
+Java_dev_cannoli_scorza_libretro_VulkanBackend_nativeSetLowLatency(JNIEnv *, jobject, jboolean enabled)
+{
+    if (g_renderer) g_renderer->setLowLatency(enabled);
+}
+
 }
