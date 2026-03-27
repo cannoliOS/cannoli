@@ -292,7 +292,7 @@ class MainActivity : ComponentActivity() {
 
     // Tracks context menu to return to after sub-dialog actions
     private sealed interface ContextReturn {
-        data class Single(val gameName: String, val options: List<String>) : ContextReturn
+        data class Single(val gameName: String, val options: List<String>, val selectedOption: Int = 0) : ContextReturn
         data class Bulk(val gamePaths: List<String>, val options: List<String>) : ContextReturn
     }
     private var pendingContextReturn: ContextReturn? = null
@@ -1669,7 +1669,26 @@ class MainActivity : ComponentActivity() {
             (glState.isCollection && glState.collectionName == "Favorites")
         return buildList {
             add(if (isFav) MENU_REMOVE_FAVORITE else MENU_ADD_FAVORITE)
-            addAll(gameContextOptions)
+            addAll(gameContextOptions.map { item ->
+                if (item == MENU_EMULATOR_OVERRIDE) {
+                    val options = platformResolver.getCorePickerOptions(game.platformTag, packageManager)
+                    val override = platformResolver.getGameOverride(game.file.absolutePath)
+                    if (override != null) {
+                        val match = if (override.appPackage != null) {
+                            options.firstOrNull { it.appPackage == override.appPackage }
+                        } else {
+                            options.firstOrNull { it.coreId == override.coreId && (override.runner == null || it.runnerLabel == override.runner) }
+                        }
+                        if (match != null) {
+                            val desc = if (match.appPackage != null) match.displayName
+                                else "${match.runnerLabel} (${match.displayName})"
+                            "$MENU_EMULATOR_OVERRIDE\t$desc"
+                        } else item
+                    } else {
+                        "$MENU_EMULATOR_OVERRIDE\tPlatform Default"
+                    }
+                } else item
+            })
             if (game.artFile != null) {
                 val idx = indexOf(MENU_DELETE_GAME)
                 if (idx >= 0) add(idx, MENU_DELETE_ART) else add(MENU_DELETE_ART)
@@ -1684,11 +1703,11 @@ class MainActivity : ComponentActivity() {
         private const val MENU_DELETE_ART = "Delete Art"
         private const val MENU_MANAGE_COLLECTIONS = "Manage Collections"
         private const val MENU_EMULATOR_OVERRIDE = "Emulator Override"
-        private const val MENU_REMOVE_FROM_COLLECTION = "Remove from Collection"
+        private const val MENU_REMOVE_FROM_COLLECTION = "Remove From Collection"
         private const val MENU_CHILD_COLLECTIONS = "Child Collections"
         private const val MENU_RA_GAME_ID = "RA Game ID"
-        private const val MENU_ADD_FAVORITE = "Add to Favorites"
-        private const val MENU_REMOVE_FAVORITE = "Remove from Favorites"
+        private const val MENU_ADD_FAVORITE = "Add To Favorites"
+        private const val MENU_REMOVE_FAVORITE = "Remove From Favorites"
     }
 
     private val gameContextOptions = listOf(MENU_MANAGE_COLLECTIONS, MENU_EMULATOR_OVERRIDE, MENU_RA_GAME_ID, MENU_RENAME, MENU_DELETE_GAME)
@@ -1708,9 +1727,10 @@ class MainActivity : ComponentActivity() {
         }
         val game = gameListViewModel.getSelectedGame() ?: return
         val glState = gameListViewModel.state.value
-        pendingContextReturn = ContextReturn.Single(state.gameName, state.options)
-        when (state.options[state.selectedOption]) {
-            MENU_RENAME -> {
+        pendingContextReturn = ContextReturn.Single(state.gameName, state.options, state.selectedOption)
+        val selected = state.options[state.selectedOption]
+        when {
+            selected == MENU_RENAME -> {
                 if (glState.isCollectionsList || game.isChildCollection) {
                     val collName = if (game.isChildCollection) game.displayName.removePrefix("/") else game.displayName
                     dialogState.value = DialogState.CollectionRenameInput(
@@ -1727,7 +1747,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-            MENU_DELETE, MENU_DELETE_GAME -> {
+            selected == MENU_DELETE || selected == MENU_DELETE_GAME -> {
                 if (glState.isCollectionsList || game.isChildCollection) {
                     val collName = if (game.isChildCollection) game.displayName.removePrefix("/") else game.displayName
                     dialogState.value = DialogState.DeleteCollectionConfirm(collectionName = collName)
@@ -1735,21 +1755,21 @@ class MainActivity : ComponentActivity() {
                     dialogState.value = DialogState.DeleteConfirm(gameName = game.displayName.removePrefix("★ "))
                 }
             }
-            MENU_MANAGE_COLLECTIONS -> {
+            selected == MENU_MANAGE_COLLECTIONS -> {
                 openCollectionManager(listOf(game.file.absolutePath), game.displayName)
             }
-            MENU_CHILD_COLLECTIONS -> {
+            selected == MENU_CHILD_COLLECTIONS -> {
                 val collName = if (game.isChildCollection) game.displayName.removePrefix("/") else game.displayName
                 openChildPicker(collName)
             }
-            MENU_DELETE_ART -> {
+            selected == MENU_DELETE_ART -> {
                 pendingContextReturn = null
                 game.artFile?.delete()
                 scanner.invalidateArtCache()
                 gameListViewModel.reload()
                 dialogState.value = DialogState.None
             }
-            MENU_RA_GAME_ID -> {
+            selected == MENU_RA_GAME_ID -> {
                 val current = scanner.getRaGameId(game.file.absolutePath)?.toString() ?: ""
                 dialogState.value = DialogState.RenameInput(
                     gameName = "ra_game_id:${game.file.absolutePath}",
@@ -1757,12 +1777,12 @@ class MainActivity : ComponentActivity() {
                     cursorPos = current.length
                 )
             }
-            MENU_ADD_FAVORITE, MENU_REMOVE_FAVORITE -> {
+            selected == MENU_ADD_FAVORITE || selected == MENU_REMOVE_FAVORITE -> {
                 pendingContextReturn = null
                 gameListViewModel.toggleFavorite { rescanSystemList() }
                 dialogState.value = DialogState.None
             }
-            MENU_EMULATOR_OVERRIDE -> {
+            selected == MENU_EMULATOR_OVERRIDE || selected.startsWith("$MENU_EMULATOR_OVERRIDE\t") -> {
                 val tag = game.platformTag
                 val options = platformResolver.getCorePickerOptions(tag, packageManager)
                 val platformCoreId = platformResolver.getCoreMapping(tag)
@@ -1840,9 +1860,16 @@ class MainActivity : ComponentActivity() {
                 val game = gameListViewModel.getSelectedGame()
                 if (game != null) {
                     val glState = gameListViewModel.state.value
+                    val newOptions = buildGameContextOptions(game, glState)
+                    val oldSelected = ret.options.getOrNull(ret.selectedOption)
+                    val restoredIdx = if (oldSelected != null) {
+                        val key = oldSelected.substringBefore('\t')
+                        newOptions.indexOfFirst { it.startsWith(key) }.coerceAtLeast(0)
+                    } else 0
                     dialogState.value = DialogState.ContextMenu(
                         gameName = game.displayName,
-                        options = buildGameContextOptions(game, glState)
+                        selectedOption = restoredIdx,
+                        options = newOptions
                     )
                 } else {
                     pendingContextReturn = null

@@ -36,6 +36,7 @@ fun DialogOverlay(
                 title = dialogState.gameName,
                 listFontSize = listFontSize,
                 listLineHeight = listLineHeight,
+                fullWidth = dialogState.options.any { it.contains('\t') },
                 rightBottomItems = emptyList()
             ) {
                 List(
@@ -43,13 +44,25 @@ fun DialogOverlay(
                     selectedIndex = dialogState.selectedOption,
                     itemHeight = itemHeight
                 ) { index, option ->
-                    PillRowText(
-                        label = option,
-                        isSelected = dialogState.selectedOption == index,
-                        fontSize = listFontSize,
-                        lineHeight = listLineHeight,
-                        verticalPadding = listVerticalPadding
-                    )
+                    val parts = option.split("\t", limit = 2)
+                    if (parts.size == 2) {
+                        PillRowKeyValue(
+                            label = parts[0],
+                            value = parts[1],
+                            isSelected = dialogState.selectedOption == index,
+                            fontSize = listFontSize,
+                            lineHeight = listLineHeight,
+                            verticalPadding = listVerticalPadding
+                        )
+                    } else {
+                        PillRowText(
+                            label = option,
+                            isSelected = dialogState.selectedOption == index,
+                            fontSize = listFontSize,
+                            lineHeight = listLineHeight,
+                            verticalPadding = listVerticalPadding
+                        )
+                    }
                 }
             }
         }

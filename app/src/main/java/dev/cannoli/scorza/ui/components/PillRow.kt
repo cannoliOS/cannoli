@@ -61,12 +61,13 @@ fun MarqueeEffect(scrollState: ScrollState, active: Boolean, key: Any = active, 
 fun PillRow(
     isSelected: Boolean,
     verticalPadding: Dp = 8.dp,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     val colors = LocalCannoliColors.current
     if (isSelected) {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .padding(vertical = 2.dp)
                 .clip(RoundedCornerShape(50))
                 .background(colors.highlight)
@@ -76,7 +77,7 @@ fun PillRow(
         }
     } else {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .padding(vertical = 2.dp)
                 .padding(horizontal = pillInternalH, vertical = verticalPadding)
         ) {
@@ -160,8 +161,11 @@ fun PillRowKeyValue(
     val valueColor = if (isSelected) colors.highlightText.copy(alpha = 0.5f) else GrayText
     val borderColor = if (isSelected) colors.highlightText.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.3f)
 
-    PillRow(isSelected = isSelected, verticalPadding = verticalPadding) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    PillRow(isSelected = isSelected, verticalPadding = verticalPadding, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(
                 modifier = Modifier
                     .weight(1f)
