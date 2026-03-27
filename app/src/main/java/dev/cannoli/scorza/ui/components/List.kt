@@ -18,7 +18,7 @@ fun <T> List(
     modifier: Modifier = Modifier,
     itemHeight: Dp = Dp.Unspecified,
     scrollTarget: Int = 0,
-    listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = scrollTarget),
+    listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = scrollTarget.coerceAtLeast(0)),
     reorderMode: Boolean = false,
     onVisibleRangeChanged: ((firstVisible: Int, visibleCount: Int, isViewportFull: Boolean) -> Unit)? = null,
     key: ((index: Int, item: T) -> Any)? = null,
