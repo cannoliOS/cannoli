@@ -368,7 +368,7 @@ class FileServer(
                         sendJson(output, 400, """{"error":"slot param required (0-10)"}"""); return
                     }
                     val gameDir = File(statesDir, "$platformTag/$romName")
-                    val thumbFile = File(gameDir, "$romName.state.$slot.png")
+                    val thumbFile = File(gameDir, "${raStateName(romName, slot)}.png")
                     if (!isSecure(thumbFile) || !thumbFile.exists()) {
                         sendJson(output, 404, """{"error":"not found"}"""); return
                     }
@@ -383,8 +383,8 @@ class FileServer(
 
     private fun handleSlotsList(output: OutputStream, gameDir: File, romName: String) {
         val slots = (0..10).map { n ->
-            val stateFile = File(gameDir, "$romName.state.$n")
-            val thumbFile = File(gameDir, "$romName.state.$n.png")
+            val stateFile = File(gameDir, "${raStateName(romName, n)}")
+            val thumbFile = File(gameDir, "${raStateName(romName, n)}.png")
             val label = if (n == 0) "Auto" else "Slot ${n - 1}"
             val exists = stateFile.exists()
             val size = if (exists) stateFile.length() else 0
@@ -406,7 +406,7 @@ class FileServer(
     ) {
         if (!isSecure(gameDir)) { sendJson(output, 403, """{"error":"forbidden"}"""); return }
         gameDir.mkdirs()
-        val destFile = File(gameDir, "$romName.state.$slot")
+        val destFile = File(gameDir, "${raStateName(romName, slot)}")
 
         if (contentType.startsWith("multipart/form-data")) {
             val boundary = contentType.substringAfter("boundary=", "").trim()
@@ -441,8 +441,8 @@ class FileServer(
     }
 
     private fun handleSlotDelete(output: OutputStream, gameDir: File, romName: String, slot: Int) {
-        val stateFile = File(gameDir, "$romName.state.$slot")
-        val thumbFile = File(gameDir, "$romName.state.$slot.png")
+        val stateFile = File(gameDir, "${raStateName(romName, slot)}")
+        val thumbFile = File(gameDir, "${raStateName(romName, slot)}.png")
         if (!isSecure(stateFile)) { sendJson(output, 403, """{"error":"forbidden"}"""); return }
         if (!stateFile.exists()) { sendJson(output, 404, """{"error":"not found"}"""); return }
         stateFile.delete()
@@ -794,6 +794,9 @@ class FileServer(
         if (body.isNotEmpty()) output.write(body)
         output.flush()
     }
+
+    private fun raStateName(romName: String, slot: Int): String =
+        if (slot == 0) "$romName.state" else "$romName.state$slot"
 
     private fun escapeJson(s: String): String {
         val sb = StringBuilder(s.length)

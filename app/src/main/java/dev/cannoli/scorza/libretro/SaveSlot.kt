@@ -13,17 +13,16 @@ class SaveSlotManager(private val stateBasePath: String) {
     val slots = listOf(Slot(0, "Auto")) +
         (0..9).map { Slot(it + 1, "Slot $it") }
 
-    private fun numberedPath(n: Int): String = "$stateBasePath.$n"
-    private fun numberedThumbPath(n: Int): String = "$stateBasePath.$n.png"
-
     fun statePath(slot: Slot): String {
-        val n = if (slot.index == 0) 0 else slot.index - 1
-        return numberedPath(n)
+        if (slot.index == 0) return "$stateBasePath.auto"
+        val n = slot.index - 1
+        return if (n == 0) stateBasePath else "$stateBasePath$n"
     }
 
     fun thumbnailPath(slot: Slot): String {
-        val n = if (slot.index == 0) 0 else slot.index - 1
-        return numberedThumbPath(n)
+        if (slot.index == 0) return "$stateBasePath.auto.png"
+        val n = slot.index - 1
+        return if (n == 0) "$stateBasePath.png" else "$stateBasePath$n.png"
     }
 
     fun stateExists(slot: Slot): Boolean = File(statePath(slot)).exists()
@@ -56,11 +55,16 @@ class SaveSlotManager(private val stateBasePath: String) {
         return runner.loadState(path)
     }
 
+    private fun raPath(n: Int) = if (n == 0) stateBasePath else "$stateBasePath$n"
+    private fun raThumbPath(n: Int) = if (n == 0) "$stateBasePath.png" else "$stateBasePath$n.png"
+
     private fun rotateSlots() {
-        for (i in 9 downTo 0) {
-            moveFile(numberedPath(i), numberedPath(i + 1))
-            moveFile(numberedThumbPath(i), numberedThumbPath(i + 1))
+        for (i in 9 downTo 1) {
+            moveFile(raPath(i - 1), raPath(i))
+            moveFile(raThumbPath(i - 1), raThumbPath(i))
         }
+        moveFile("$stateBasePath.auto", raPath(0))
+        moveFile("$stateBasePath.auto.png", raThumbPath(0))
     }
 
     private fun moveFile(src: String, dst: String) {

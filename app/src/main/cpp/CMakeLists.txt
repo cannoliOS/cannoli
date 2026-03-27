@@ -25,7 +25,7 @@ target_compile_definitions(rcheevos PUBLIC RC_CLIENT_SUPPORTS_HASH)
 
 # --- retro_bridge (libretro core runner) ---
 add_library(retro_bridge SHARED libretro_bridge.cpp ra_integration.c)
-target_link_libraries(retro_bridge rcheevos ${log-lib})
+target_link_libraries(retro_bridge rcheevos z ${log-lib})
 target_include_directories(retro_bridge PRIVATE third_party/rcheevos/include third_party/rcheevos/src)
 
 # --- glslang (Vulkan GLSL → SPIR-V) ---

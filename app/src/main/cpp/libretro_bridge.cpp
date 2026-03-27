@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 #include <android/log.h>
+#include <zlib.h>
 #include "libretro.h"
 #include "frame_buffer.h"
 
@@ -622,6 +623,66 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSaveState(JNIEnv *env, job
     return JNI_TRUE;
 }
 
+static void *rzip_decompress(const void *src, size_t src_size, size_t *out_size) {
+    const uint8_t *data = (const uint8_t *)src;
+    if (src_size < 16 || memcmp(data, "#RZIPv", 6) != 0) return nullptr;
+
+    uint64_t uncompressed_size;
+    memcpy(&uncompressed_size, data + 8, 8);
+
+    uint32_t chunk_size = (data[6] == '2') ? 1048576 : 131072;
+
+    void *out = malloc((size_t)uncompressed_size);
+    if (!out) return nullptr;
+
+    size_t src_off = 16, dst_off = 0;
+    while (src_off + 4 <= src_size && dst_off < uncompressed_size) {
+        uint32_t comp_size;
+        memcpy(&comp_size, data + src_off, 4);
+        src_off += 4;
+
+        if (comp_size == 0) {
+            size_t raw = (uncompressed_size - dst_off < chunk_size)
+                ? (size_t)(uncompressed_size - dst_off) : chunk_size;
+            if (src_off + raw > src_size) { free(out); return nullptr; }
+            memcpy((uint8_t *)out + dst_off, data + src_off, raw);
+            dst_off += raw;
+            src_off += raw;
+        } else {
+            if (src_off + comp_size > src_size) { free(out); return nullptr; }
+            uLongf dest_len = (uLongf)(uncompressed_size - dst_off);
+            if (uncompress((Bytef *)out + dst_off, &dest_len,
+                           data + src_off, comp_size) != Z_OK) {
+                free(out); return nullptr;
+            }
+            dst_off += dest_len;
+            src_off += comp_size;
+        }
+    }
+
+    *out_size = (size_t)dst_off;
+    return out;
+}
+
+static bool rastate_extract_mem(const void *src, size_t src_size, const void **out, size_t *out_size) {
+    const uint8_t *data = (const uint8_t *)src;
+    if (src_size < 8 || memcmp(data, "RASTATE", 7) != 0) return false;
+
+    size_t off = 8;
+    while (off + 8 <= src_size) {
+        uint32_t block_size;
+        memcpy(&block_size, data + off + 4, 4);
+        if (memcmp(data + off, "MEM ", 4) == 0) {
+            if (off + 8 + block_size > src_size) return false;
+            *out = data + off + 8;
+            *out_size = block_size;
+            return true;
+        }
+        off += 8 + block_size;
+    }
+    return false;
+}
+
 JNIEXPORT jboolean JNICALL
 Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadState(JNIEnv *env, jobject, jstring path) {
     const char *p = env->GetStringUTFChars(path, nullptr);
@@ -630,14 +691,30 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadState(JNIEnv *env, job
     if (!f) return JNI_FALSE;
 
     fseek(f, 0, SEEK_END);
-    long size = ftell(f);
+    long file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    void *buf = malloc(size);
-    fread(buf, 1, size, f);
+    void *file_buf = malloc(file_size);
+    fread(file_buf, 1, file_size, f);
     fclose(f);
 
-    bool ok = core.unserialize(buf, size);
-    free(buf);
+    const void *state_data = nullptr;
+    size_t state_size = 0;
+    void *alloc_buf = nullptr;
+    bool ok = false;
+
+    if (rastate_extract_mem(file_buf, file_size, &state_data, &state_size)) {
+        ok = core.unserialize(const_cast<void*>(state_data), state_size);
+    } else {
+        alloc_buf = rzip_decompress(file_buf, file_size, &state_size);
+        if (alloc_buf) {
+            ok = core.unserialize(alloc_buf, state_size);
+        } else {
+            ok = core.unserialize(file_buf, file_size);
+        }
+    }
+
+    free(alloc_buf);
+    free(file_buf);
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
