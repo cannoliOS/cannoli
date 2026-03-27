@@ -26,7 +26,6 @@ class LaunchManager(
     private val apkLauncher: ApkLauncher,
 ) {
     private var raConfigPath: String? = null
-    private val CONFIG_VERSION = 3
 
     fun syncRetroArchConfig(root: File) {
         val configDir = File(root, "Config")
@@ -148,7 +147,7 @@ class LaunchManager(
 
     fun resolveLaunchFile(game: Game): File? {
         if (game.discFiles != null) return createTempM3u(game)
-        if (ArchiveExtractor.isArchive(game.file)) {
+        if (ArchiveExtractor.isArchive(game.file) && !platformResolver.isArcade(game.platformTag)) {
             return ArchiveExtractor.extract(game.file, context.cacheDir)
         }
         return game.file
@@ -284,7 +283,7 @@ class LaunchManager(
         retroArchLauncher.launch(launchFile, core, launchConfig)
     }
 
-    fun toLaunchDialog(result: LaunchResult): DialogState? {
+    private fun toLaunchDialog(result: LaunchResult): DialogState? {
         return when (result) {
             is LaunchResult.CoreNotInstalled -> DialogState.MissingCore(result.coreName)
             is LaunchResult.AppNotInstalled -> {
@@ -352,6 +351,8 @@ class LaunchManager(
         Normalizer.normalize(game.file.nameWithoutExtension, Normalizer.Form.NFC)
 
     companion object {
+        private const val CONFIG_VERSION = 3
+
         fun extractBundledCores(context: Context): String {
             val coresDir = File(context.filesDir, "cores")
             coresDir.mkdirs()

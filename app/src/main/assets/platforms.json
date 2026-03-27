@@ -150,15 +150,18 @@
   
   "NEOGEO": {
     "name": "Neo Geo",
-    "core": "fbneo_libretro"
+    "core": "fbneo_libretro",
+    "arcade": true
   },
   "MAME": {
     "name": "Arcade",
-    "core": "mame2003_plus_libretro"
+    "core": "mame2003_plus_libretro",
+    "arcade": true
   },
   "FBN": {
     "name": "Arcade",
-    "core": "fbneo_libretro"
+    "core": "fbneo_libretro",
+    "arcade": true
   },
   "VIRTUALBOY": {
     "name": "Virtual Boy",

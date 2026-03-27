@@ -23,6 +23,7 @@ class PlatformResolver(
     private var defaultPlatformNames = mapOf<String, String>()
     private var defaultRetroArchCores = mapOf<String, List<String>>()
     private var defaultApps = mapOf<String, List<String>>()
+    private var arcadePlatforms = setOf<String>()
 
     private fun loadPlatformsAsset() {
         val json = JSONObject(assets.open("platforms.json").use { it.bufferedReader().readText() })
@@ -30,10 +31,12 @@ class PlatformResolver(
         val names = mutableMapOf<String, String>()
         val raCores = mutableMapOf<String, List<String>>()
         val apps = mutableMapOf<String, List<String>>()
+        val arcade = mutableSetOf<String>()
         for (tag in json.keys()) {
             val entry = json.getJSONObject(tag)
             entry.optString("name", "").takeIf { it.isNotEmpty() }?.let { names[tag] = it }
             entry.optString("core", "").takeIf { it.isNotEmpty() }?.let { cores[tag] = it }
+            if (entry.optBoolean("arcade")) arcade.add(tag)
             val appArray = entry.optJSONArray("app")
             if (appArray != null) {
                 val list = (0 until appArray.length()).map { appArray.getString(it) }
@@ -51,6 +54,7 @@ class PlatformResolver(
         defaultPlatformNames = names
         defaultRetroArchCores = raCores
         defaultApps = apps
+        arcadePlatforms = arcade
     }
 
     private var ini: IniData = IniData(emptyMap())
@@ -167,6 +171,8 @@ class PlatformResolver(
     }
 
     fun isKnownTag(tag: String): Boolean = tag in defaultPlatformNames || tag in ini.getSection("platforms")
+
+    fun isArcade(tag: String): Boolean = tag in arcadePlatforms
 
     fun getAllTags(): Set<String> = defaultPlatformNames.keys + ini.getSection("platforms").keys
 
