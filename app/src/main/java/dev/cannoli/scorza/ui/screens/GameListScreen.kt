@@ -184,9 +184,6 @@ fun GameListScreen(
             } else {
                 stringResource(R.string.label_play)
             }
-            val showFavHint = state.games.isNotEmpty() && !state.multiSelectMode &&
-                !state.isCollectionsList && selectedGame?.isSubfolder != true &&
-                state.platformTag != "tools" && state.platformTag != "ports"
             val rightItems = if (state.games.isEmpty()) {
                 if (state.isCollectionsList) listOf("X" to stringResource(R.string.label_new))
                 else emptyList()
@@ -194,11 +191,6 @@ fun GameListScreen(
                 listOf("A" to actionLabel, "▶" to stringResource(R.string.label_confirm))
             } else {
                 buildList {
-                    if (showFavHint) {
-                        val isFav = selectedGame?.displayName?.startsWith("★") == true ||
-                            (state.isCollection && state.collectionName == "Favorites")
-                        add("Y" to if (isFav) "UNFAVORITE" else "FAVORITE")
-                    }
                     if (state.isCollectionsList) add("X" to stringResource(R.string.label_new))
                     else if (hasResumeState) add("X" to "RESUME")
                     add("A" to actionLabel)
