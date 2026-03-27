@@ -12,6 +12,7 @@ import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.settings.TimeFormat
 import dev.cannoli.scorza.ui.screens.DialogState
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 import java.text.Normalizer
 
@@ -42,13 +43,13 @@ class LaunchManager(
             return
         }
 
-        val sourceBytes = try { sourceConfig.readBytes() } catch (_: Exception) {
+        val sourceBytes = try { sourceConfig.readBytes() } catch (_: IOException) {
             if (!localConfig.exists()) localConfig.writeText(buildMinimalConfig(root.absolutePath))
             raConfigPath = localConfig.absolutePath
             return
         }
-        val sourceHash = sha256(sourceBytes + "${settings.raUsername}:${settings.raToken}".toByteArray())
-        val storedHash = if (hashFile.exists()) try { hashFile.readText().trim() } catch (_: Exception) { "" } else ""
+        val sourceHash = sha256(sourceBytes, "${settings.raUsername}:${settings.raToken}".toByteArray())
+        val storedHash = if (hashFile.exists()) try { hashFile.readText().trim() } catch (_: IOException) { "" } else ""
 
         if (sourceHash != storedHash || !localConfig.exists()) {
             val patched = patchRetroArchConfig(String(sourceBytes), root.absolutePath)
@@ -69,22 +70,22 @@ class LaunchManager(
     }
 
     private fun patchRetroArchConfig(source: String, rootPath: String): String {
-        val overrides = mutableMapOf(
-            "savefile_directory" to "$rootPath/Saves",
-            "savestate_directory" to "$rootPath/Save States",
-            "system_directory" to "$rootPath/BIOS",
-            "screenshot_directory" to "$rootPath/Media/Screenshots",
-            "recording_output_directory" to "$rootPath/Media/Recordings",
-            "sort_savefiles_by_content_enable" to "true",
-            "sort_savestates_by_content_enable" to "true",
-            "config_save_on_exit" to "false",
-        )
         val raUser = settings.raUsername
         val raToken = settings.raToken
-        if (raUser.isNotEmpty() && raToken.isNotEmpty()) {
-            overrides["cheevos_enable"] = "true"
-            overrides["cheevos_username"] = raUser
-            overrides["cheevos_token"] = raToken
+        val overrides = buildMap {
+            put("savefile_directory", "$rootPath/Saves")
+            put("savestate_directory", "$rootPath/Save States")
+            put("system_directory", "$rootPath/BIOS")
+            put("screenshot_directory", "$rootPath/Media/Screenshots")
+            put("recording_output_directory", "$rootPath/Media/Recordings")
+            put("sort_savefiles_by_content_enable", "true")
+            put("sort_savestates_by_content_enable", "true")
+            put("config_save_on_exit", "false")
+            if (raUser.isNotEmpty() && raToken.isNotEmpty()) {
+                put("cheevos_enable", "true")
+                put("cheevos_username", raUser)
+                put("cheevos_token", raToken)
+            }
         }
         val applied = mutableSetOf<String>()
         val lines = source.lines().map { line ->
@@ -101,8 +102,11 @@ class LaunchManager(
         return lines.joinToString("\n")
     }
 
-    private fun sha256(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    private fun sha256(vararg parts: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        for (part in parts) digest.update(part)
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
 
     fun createTempM3u(game: Game): File {
         val m3uDir = File(context.cacheDir, "m3u")
@@ -135,16 +139,10 @@ class LaunchManager(
         val romName = normalizedRomName(game)
         val stateBase = File(cannoliRoot, "Save States/${game.platformTag}/$romName/$romName.state")
         val slotManager = SaveSlotManager(stateBase.absolutePath)
-        var bestSlot = -1
-        var bestTime = 0L
-        for (slot in slotManager.slots) {
-            val f = File(slotManager.statePath(slot))
-            if (f.exists() && f.lastModified() > bestTime) {
-                bestTime = f.lastModified()
-                bestSlot = slot.index
-            }
-        }
-        return if (bestSlot >= 0) bestSlot else null
+        return slotManager.slots
+            .filter { File(slotManager.statePath(it)).exists() }
+            .maxByOrNull { File(slotManager.statePath(it)).lastModified() }
+            ?.index
     }
 
     fun findResumableGames(games: List<Game>): Set<String> {
@@ -272,7 +270,7 @@ class LaunchManager(
             putExtra("graphics_backend", settings.graphicsBackend)
             putExtra("ra_username", settings.raUsername)
             putExtra("ra_token", settings.raToken)
-            val raIdFile = java.io.File(File(settings.sdCardRoot, "Config"), "ra_game_ids.txt")
+            val raIdFile = File(File(settings.sdCardRoot, "Config"), "ra_game_ids.txt")
             if (raIdFile.exists()) {
                 val romAbs = game.file.absolutePath
                 raIdFile.readLines().firstOrNull { it.startsWith("$romAbs=") }
