@@ -21,6 +21,7 @@ import dev.cannoli.scorza.ui.components.PillRowKeyValue
 import dev.cannoli.scorza.ui.components.PillRowText
 import dev.cannoli.scorza.ui.components.ScreenBackground
 import dev.cannoli.scorza.ui.components.ScreenTitle
+import dev.cannoli.scorza.ui.components.pillInternalH
 import dev.cannoli.scorza.ui.components.pillItemHeight
 import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.LocalCannoliColors
@@ -57,8 +58,7 @@ fun IGMSettingsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(bottom = 48.dp)
                 ) {
                     ScreenTitle(
                         text = items.getOrNull(selectedIndex)?.label ?: "",
@@ -71,10 +71,9 @@ fun IGMSettingsScreen(
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontSize = 16.sp,
                             lineHeight = 22.sp,
-                            color = colors.text.copy(alpha = 0.8f),
-                            textAlign = TextAlign.Center
+                            color = colors.text.copy(alpha = 0.8f)
                         ),
-                        modifier = Modifier.fillMaxWidth(0.85f)
+                        modifier = Modifier.padding(start = pillInternalH)
                     )
                 }
             } else {
