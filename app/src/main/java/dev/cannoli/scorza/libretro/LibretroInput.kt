@@ -53,14 +53,6 @@ class LibretroInput {
         rebuildMap()
     }
 
-    fun swapStartSelect() {
-        val startCode = assignments["btn_start"] ?: KeyEvent.KEYCODE_BUTTON_START
-        val selectCode = assignments["btn_select"] ?: KeyEvent.KEYCODE_BUTTON_SELECT
-        assignments["btn_start"] = selectCode
-        assignments["btn_select"] = startCode
-        rebuildMap()
-    }
-
     fun resetDefaults() {
         assignments.clear()
         rebuildMap()

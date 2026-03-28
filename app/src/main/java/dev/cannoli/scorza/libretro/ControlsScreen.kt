@@ -32,11 +32,16 @@ fun ControlsScreen(
     listenTimeoutMs: Int = 3000,
     listenCountdownMs: Int = 0,
     controlSource: OverrideSource? = null,
+    controllerLabel: String? = null,
     title: String = "Controls"
 ) {
     val itemHeight = pillItemHeight(lineHeight, verticalPadding)
+    val hasControllerRow = controllerLabel != null
     val hasSourceRow = controlSource != null
-    val buttonOffset = if (hasSourceRow) 1 else 0
+    var headerRows = 0
+    if (hasControllerRow) headerRows++
+    if (hasSourceRow) headerRows++
+    val buttonOffset = headerRows
 
     ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
         Box(
@@ -55,7 +60,18 @@ fun ControlsScreen(
                     lineHeight = lineHeight
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                if (hasControllerRow) {
+                    PillRowKeyValue(
+                        label = "Controller",
+                        value = controllerLabel!!,
+                        isSelected = selectedIndex == 0,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        verticalPadding = verticalPadding
+                    )
+                }
                 if (hasSourceRow) {
+                    val sourceIndex = if (hasControllerRow) 1 else 0
                     val sourceLabel = when (controlSource!!) {
                         OverrideSource.GLOBAL -> "Global"
                         OverrideSource.PLATFORM -> "Platform"
@@ -64,7 +80,7 @@ fun ControlsScreen(
                     PillRowKeyValue(
                         label = "Source",
                         value = sourceLabel,
-                        isSelected = selectedIndex == 0,
+                        isSelected = selectedIndex == sourceIndex,
                         fontSize = fontSize,
                         lineHeight = lineHeight,
                         verticalPadding = verticalPadding
@@ -99,9 +115,10 @@ fun ControlsScreen(
             } else {
                 listOf("B" to "BACK", "X" to "RESET ALL")
             }
+            val isOnHeaderRow = selectedIndex < buttonOffset
             val bottomRight = if (listeningIndex >= 0) {
                 listOf("" to "PRESS A BUTTON... $remainingSec")
-            } else if (hasSourceRow && selectedIndex == 0) {
+            } else if (isOnHeaderRow) {
                 listOf("←→" to "CHANGE")
             } else {
                 listOf("A" to "REMAP")

@@ -37,10 +37,12 @@ static struct {
     retro_get_memory_data_t get_memory_data;
     retro_get_memory_size_t get_memory_size;
     retro_reset_t reset;
+    retro_set_controller_port_device_t set_controller_port_device;
 } core;
 
 // State shared with callbacks
-static int16_t g_input_state = 0;
+#define MAX_PORTS 4
+static int16_t g_input_state[MAX_PORTS] = {0};
 static unsigned g_pixel_format = RETRO_PIXEL_FORMAT_0RGB1555;
 
 // Frame buffer written by video callback, read by renderer
@@ -415,9 +417,9 @@ static void input_poll_cb(void) {
 }
 
 static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, unsigned id) {
-    if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
-    if (id == RETRO_DEVICE_ID_JOYPAD_MASK) return g_input_state;
-    return (g_input_state >> id) & 1;
+    if (port >= MAX_PORTS || device != RETRO_DEVICE_JOYPAD) return 0;
+    if (id == RETRO_DEVICE_ID_JOYPAD_MASK) return g_input_state[port];
+    return (g_input_state[port] >> id) & 1;
 }
 
 // --- JNI helpers ---
@@ -466,6 +468,7 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadCore(JNIEnv *env, jobj
     LOAD_SYM(get_memory_data);
     LOAD_SYM(get_memory_size);
     LOAD_SYM(reset);
+    core.set_controller_port_device = (retro_set_controller_port_device_t)dlsym(core.handle, "retro_set_controller_port_device");
 
     return JNI_TRUE;
 }
@@ -559,8 +562,15 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeRun(JNIEnv *, jobject) {
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetInput(JNIEnv *, jobject, jint mask) {
-    g_input_state = (int16_t)mask;
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetInput(JNIEnv *, jobject, jint port, jint mask) {
+    if (port >= 0 && port < MAX_PORTS)
+        g_input_state[port] = (int16_t)mask;
+}
+
+JNIEXPORT void JNICALL
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeSetControllerPortDevice(JNIEnv *, jobject, jint port, jint device) {
+    if (core.set_controller_port_device && port >= 0 && port < MAX_PORTS)
+        core.set_controller_port_device((unsigned)port, (unsigned)device);
 }
 
 JNIEXPORT jint JNICALL

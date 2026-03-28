@@ -1,6 +1,10 @@
 package dev.cannoli.scorza.libretro
 
+import android.content.Context
+import android.hardware.input.InputManager
 import dev.cannoli.scorza.input.CannoliAccessibilityService
+import dev.cannoli.scorza.input.ControllerConfigStore
+import dev.cannoli.scorza.input.ControllerManager
 import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
 import android.os.Bundle
@@ -33,13 +37,14 @@ import dev.cannoli.scorza.ui.theme.hexToColor
 import android.os.Handler
 import android.os.Looper
 import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
 
 class LibretroActivity : ComponentActivity() {
 
     private lateinit var runner: LibretroRunner
     private lateinit var renderer: GraphicsBackend
     private lateinit var input: LibretroInput
+    private lateinit var controllerManager: ControllerManager
+    private lateinit var controllerConfigStore: ControllerConfigStore
     private lateinit var slotManager: SaveSlotManager
     private lateinit var overrideManager: OverrideManager
     private var audio: LibretroAudio? = null
@@ -47,7 +52,6 @@ class LibretroActivity : ComponentActivity() {
     private var gameView: android.view.View? = null
     private var loading by mutableStateOf(true)
 
-    private val inputMask = AtomicInteger(0)
     private val screenStack = mutableStateListOf<IGMScreen>()
 
     private var selectedSlotIndex by mutableIntStateOf(0)
@@ -83,6 +87,7 @@ class LibretroActivity : ComponentActivity() {
     private var shaderParamsDirty = false
     private var platformBaseline: OverrideManager.Settings? = null
     private var globalControls = emptyMap<String, Int>()
+    private var editingPort by mutableIntStateOf(0)
 
     private var diskCount by mutableIntStateOf(0)
     private var currentDiskIndex by mutableIntStateOf(0)
@@ -189,9 +194,18 @@ class LibretroActivity : ComponentActivity() {
         use24h = intent.getBooleanExtra("use_24h", false)
 
         slotManager = SaveSlotManager(stateBasePath)
-        input = LibretroInput()
-        if (intent.getBooleanExtra("swap_start_select", false)) input.swapStartSelect()
+        controllerConfigStore = ControllerConfigStore(cannoliRoot)
+        controllerManager = ControllerManager(
+            configStore = controllerConfigStore,
+            defaultControls = { globalControls }
+        )
+        controllerManager.onDeviceDisconnected = { port -> onControllerDisconnected(port) }
+        controllerManager.onDeviceConnected = { port, _ -> onControllerReconnected(port) }
+        controllerManager.initialize()
+        input = controllerManager.portInputs[0]
         runner = LibretroRunner()
+        val inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
+        inputManager.registerInputDeviceListener(controllerManager, Handler(Looper.getMainLooper()))
 
         val colors = CannoliColors(
             highlight = hexToColor(intent.getStringExtra("color_highlight") ?: "#FFFFFF") ?: Color.White,
@@ -224,8 +238,9 @@ class LibretroActivity : ComponentActivity() {
                             },
                             settingsItems = if (screen is IGMScreen.Menu) emptyList() else buildSettingsItems(),
                             coreInfo = coreInfoText,
-                            input = input,
+                            input = controllerManager.portInputs[editingPort],
                             controlSource = controlSource,
+                            controllerLabel = if (controllerManager.connectedPortCount > 1) "P${editingPort + 1}" else null,
                             debugHud = debugHud,
                             renderer = renderer,
                             runner = runner,
@@ -365,8 +380,6 @@ class LibretroActivity : ComponentActivity() {
 
     // --- Input ---
 
-    private val pressedKeys = mutableSetOf<Int>()
-
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_MENU) {
             if (event.action == KeyEvent.ACTION_DOWN) onKeyDown(event.keyCode, event)
@@ -395,6 +408,7 @@ class LibretroActivity : ComponentActivity() {
             }
             is IGMScreen.Achievements -> handleAchievementsInput(screen, resolved)
             is IGMScreen.AchievementDetail -> handleAchievementDetailInput(screen, resolved)
+            is IGMScreen.Reconnect -> true
         }
     }
 
@@ -404,19 +418,22 @@ class LibretroActivity : ComponentActivity() {
             handleShortcutKeyUp(keyCode)
             return true
         }
-        pressedKeys.remove(keyCode)
+        val port = controllerManager.getPortForDeviceId(event.deviceId) ?: 0
+        val portKeys = controllerManager.portPressedKeys[port]
+        portKeys.remove(keyCode)
 
         if (holdingFf) {
             val holdChord = shortcuts[ShortcutAction.HOLD_FF]
-            if (holdChord != null && !pressedKeys.containsAll(holdChord)) {
+            if (holdChord != null && !portKeys.containsAll(holdChord)) {
                 holdingFf = false
                 setFastForward(false)
             }
         }
 
-        val mask = input.keyCodeToRetroMask(keyCode) ?: return super.onKeyUp(keyCode, event)
-        inputMask.updateAndGet { it and mask.inv() }
-        runner.setInput(inputMask.get())
+        val portInput = controllerManager.portInputs[port]
+        val mask = portInput.keyCodeToRetroMask(keyCode) ?: return super.onKeyUp(keyCode, event)
+        controllerManager.portInputMasks[port] = controllerManager.portInputMasks[port] and mask.inv()
+        runner.setInput(port, controllerManager.portInputMasks[port])
         return true
     }
 
@@ -431,17 +448,21 @@ class LibretroActivity : ComponentActivity() {
     private fun handleGameplayInput(keyCode: Int, event: KeyEvent): Boolean {
         val menuCode = globalControls["btn_menu"] ?: KeyEvent.KEYCODE_BUTTON_MODE
         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_MENU || keyCode == menuCode) { openMenu(); return true }
-        val isNewPress = pressedKeys.add(keyCode)
-        if (isNewPress) checkShortcuts()
-        val mask = input.keyCodeToRetroMask(keyCode) ?: return super.onKeyDown(keyCode, event)
-        inputMask.updateAndGet { it or mask }
-        runner.setInput(inputMask.get())
+        val port = controllerManager.getPortForDeviceId(event.deviceId) ?: 0
+        val portKeys = controllerManager.portPressedKeys[port]
+        val isNewPress = portKeys.add(keyCode)
+        if (isNewPress) checkShortcuts(port)
+        val portInput = controllerManager.portInputs[port]
+        val mask = portInput.keyCodeToRetroMask(keyCode) ?: return super.onKeyDown(keyCode, event)
+        controllerManager.portInputMasks[port] = controllerManager.portInputMasks[port] or mask
+        runner.setInput(port, controllerManager.portInputMasks[port])
         return true
     }
 
-    private fun checkShortcuts() {
+    private fun checkShortcuts(port: Int) {
+        val portKeys = controllerManager.portPressedKeys[port]
         for ((action, chord) in shortcuts) {
-            if (chord.isEmpty() || !pressedKeys.containsAll(chord)) continue
+            if (chord.isEmpty() || !portKeys.containsAll(chord)) continue
             when (action) {
                 ShortcutAction.SAVE_STATE -> {
                     if (stateBasePath.isNotEmpty()) {
@@ -490,9 +511,9 @@ class LibretroActivity : ComponentActivity() {
                     holdingFf = true; setFastForward(true)
                 }
             }
-            pressedKeys.clear()
-            inputMask.set(0)
-            runner.setInput(0)
+            portKeys.clear()
+            controllerManager.portInputMasks[port] = 0
+            runner.setInput(port, 0)
             break
         }
     }
@@ -512,10 +533,35 @@ class LibretroActivity : ComponentActivity() {
 
     private fun closeAll() {
         screenStack.clear()
-        pressedKeys.clear()
-        inputMask.set(0)
-        runner.setInput(0)
+        controllerManager.resetAllInput()
+        for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
         renderer.paused = false
+    }
+
+    private fun onControllerDisconnected(port: Int) {
+        if (loading) return
+        runner.setInput(port, 0)
+        val screen = currentScreen
+        if (screen is IGMScreen.Reconnect) {
+            replaceTop(screen.copy(disconnectedPorts = screen.disconnectedPorts + port))
+        } else {
+            screenStack.clear()
+            push(IGMScreen.Reconnect(disconnectedPorts = setOf(port)))
+            renderer.paused = true
+        }
+    }
+
+    private fun onControllerReconnected(port: Int) {
+        val screen = currentScreen as? IGMScreen.Reconnect ?: return
+        val remaining = screen.disconnectedPorts - port
+        if (remaining.isEmpty()) {
+            screenStack.clear()
+            controllerManager.resetAllInput()
+            for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
+            renderer.paused = false
+        } else {
+            replaceTop(screen.copy(disconnectedPorts = remaining))
+        }
     }
 
     private fun refreshSlotInfo() {
@@ -688,7 +734,9 @@ class LibretroActivity : ComponentActivity() {
                         push(IGMScreen.Emulator())
                     }
                     IGMSettings.CONTROLS -> {
-                        controlsSnapshot = input.buttons.associate { it.prefKey to input.getKeyCodeFor(it) }
+                        editingPort = 0
+                        val inp = editingInput
+                        controlsSnapshot = inp.buttons.associate { it.prefKey to inp.getKeyCodeFor(it) }
                         push(IGMScreen.Controls())
                     }
                     IGMSettings.SHORTCUTS -> push(IGMScreen.Shortcuts())
@@ -1139,16 +1187,30 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
+    private val editingInput: LibretroInput get() = controllerManager.portInputs[editingPort]
+    private val hasControllerRow: Boolean get() = controllerManager.connectedPortCount > 1
+
+    private fun controlsHeaderRows(): Int {
+        var n = 1
+        if (hasControllerRow) n++
+        return n
+    }
+
+    private fun controllerRowIndex(): Int = 0
+    private fun sourceRowIndex(): Int = if (hasControllerRow) 1 else 0
+
     private fun handleControlsInput(screen: IGMScreen.Controls, rawKeyCode: Int, keyCode: Int): Boolean {
+        val headerRows = controlsHeaderRows()
+        val inp = editingInput
         if (screen.listeningIndex >= 0) {
             shortcutCountdownHandler.removeCallbacks(controlListenRunnable)
-            val buttonIndex = screen.listeningIndex - 1
-            input.assign(input.buttons[buttonIndex], rawKeyCode)
+            val buttonIndex = screen.listeningIndex - headerRows
+            inp.assign(inp.buttons[buttonIndex], rawKeyCode)
             replaceTop(screen.copy(listeningIndex = -1, listenCountdownMs = 0))
-            saveCurrentControls()
+            saveControlsForPort(editingPort)
             return true
         }
-        val count = input.buttons.size + 1
+        val count = inp.buttons.size + headerRows
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
@@ -1157,35 +1219,64 @@ class LibretroActivity : ComponentActivity() {
                 replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (screen.selectedIndex == 0) cycleControlSource(-1)
+                when (screen.selectedIndex) {
+                    controllerRowIndex() -> if (hasControllerRow) cycleEditingPort(-1)
+                    sourceRowIndex() -> cycleControlSource(-1)
+                }
                 true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (screen.selectedIndex == 0) cycleControlSource(1)
+                when (screen.selectedIndex) {
+                    controllerRowIndex() -> if (hasControllerRow) cycleEditingPort(1)
+                    sourceRowIndex() -> cycleControlSource(1)
+                }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (screen.selectedIndex == 0) {
-                    cycleControlSource(1)
-                } else {
-                    replaceTop(screen.copy(listeningIndex = screen.selectedIndex, listenCountdownMs = 0))
-                    shortcutCountdownHandler.postDelayed(controlListenRunnable, controlListenTickMs)
+                when {
+                    hasControllerRow && screen.selectedIndex == controllerRowIndex() -> cycleEditingPort(1)
+                    screen.selectedIndex == sourceRowIndex() -> cycleControlSource(1)
+                    else -> {
+                        replaceTop(screen.copy(listeningIndex = screen.selectedIndex, listenCountdownMs = 0))
+                        shortcutCountdownHandler.postDelayed(controlListenRunnable, controlListenTickMs)
+                    }
                 }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_X -> {
-                input.resetDefaults()
+                inp.resetDefaults()
                 for ((key, kc) in controlsSnapshot) {
-                    val btn = input.buttons.find { it.prefKey == key } ?: continue
-                    input.assign(btn, kc)
+                    val btn = inp.buttons.find { it.prefKey == key } ?: continue
+                    inp.assign(btn, kc)
                 }
-                saveCurrentControls()
+                saveControlsForPort(editingPort)
                 screenStack.removeAt(screenStack.lastIndex)
-                screenStack.add(IGMScreen.Controls(selectedIndex = screen.selectedIndex))
+                screenStack.add(IGMScreen.Controls(selectedIndex = screen.selectedIndex, port = editingPort))
                 true
             }
-            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { editingPort = 0; pop(); true }
             else -> true
+        }
+    }
+
+    private fun cycleEditingPort(direction: Int) {
+        val ports = (0 until LibretroRunner.MAX_PORTS).filter { controllerManager.slots[it] != null }
+        if (ports.size < 2) return
+        val currentIdx = ports.indexOf(editingPort)
+        val nextIdx = ((currentIdx + direction) + ports.size) % ports.size
+        editingPort = ports[nextIdx]
+        val inp = editingInput
+        controlsSnapshot = inp.buttons.associate { it.prefKey to inp.getKeyCodeFor(it) }
+    }
+
+    private fun saveControlsForPort(port: Int) {
+        val inp = controllerManager.portInputs[port]
+        val controlMap = mutableMapOf<String, Int>()
+        for (btn in inp.buttons) controlMap[btn.prefKey] = inp.getKeyCodeFor(btn)
+        if (port == 0) overrideManager.saveControls(controlSource, controlMap)
+        val identity = controllerManager.slots[port]
+        if (identity != null) {
+            controllerConfigStore.saveControls(identity.descriptor, identity.name, controlMap)
         }
     }
 
@@ -1193,18 +1284,14 @@ class LibretroActivity : ComponentActivity() {
         val sources = OverrideSource.entries
         controlSource = sources[(controlSource.ordinal + direction + sources.size) % sources.size]
         overrideManager.saveControlSource(controlSource)
-        input.resetDefaults()
+        val inp = editingInput
+        inp.resetDefaults()
         for ((key, kc) in overrideManager.loadControlsForSource(controlSource)) {
-            val btn = input.buttons.find { it.prefKey == key } ?: continue
-            input.assign(btn, kc)
+            val btn = inp.buttons.find { it.prefKey == key } ?: continue
+            inp.assign(btn, kc)
         }
     }
 
-    private fun saveCurrentControls() {
-        val controlMap = mutableMapOf<String, Int>()
-        for (btn in input.buttons) controlMap[btn.prefKey] = input.getKeyCodeFor(btn)
-        overrideManager.saveControls(controlSource, controlMap)
-    }
 
     // --- Shortcuts ---
 
@@ -1529,7 +1616,12 @@ class LibretroActivity : ComponentActivity() {
             }
         }
     }
-    override fun onDestroy() { super.onDestroy(); cleanup() }
+    override fun onDestroy() {
+        val inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
+        inputManager.unregisterInputDeviceListener(controllerManager)
+        super.onDestroy()
+        cleanup()
+    }
 
 
     private fun goFullscreen() {

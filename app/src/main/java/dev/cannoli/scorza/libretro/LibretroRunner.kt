@@ -18,6 +18,9 @@ class LibretroRunner {
 
         const val PIXEL_FORMAT_RGB565 = 2
         const val PIXEL_FORMAT_XRGB8888 = 1
+        const val DEVICE_NONE = 0
+        const val DEVICE_JOYPAD = 1
+        const val MAX_PORTS = 4
     }
 
     fun loadCore(corePath: String): Boolean = nativeLoadCore(corePath)
@@ -38,7 +41,9 @@ class LibretroRunner {
 
     fun run() = nativeRun()
 
-    fun setInput(mask: Int) = nativeSetInput(mask)
+    fun setInput(port: Int, mask: Int) = nativeSetInput(port, mask)
+
+    fun setControllerPortDevice(port: Int, device: Int) = nativeSetControllerPortDevice(port, device)
 
     fun getRotation(): Int = nativeGetRotation()
     fun getPixelFormat(): Int = nativeGetPixelFormat()
@@ -121,7 +126,8 @@ class LibretroRunner {
     private external fun nativeSetAudioCallback(audio: LibretroAudio)
     private external fun nativeLoadGame(romPath: String): IntArray?
     private external fun nativeRun()
-    private external fun nativeSetInput(mask: Int)
+    private external fun nativeSetInput(port: Int, mask: Int)
+    private external fun nativeSetControllerPortDevice(port: Int, device: Int)
     private external fun nativeGetRotation(): Int
     private external fun nativeGetPixelFormat(): Int
     private external fun nativeGetFrameWidth(): Int

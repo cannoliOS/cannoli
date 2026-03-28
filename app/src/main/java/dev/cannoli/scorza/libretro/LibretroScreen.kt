@@ -71,6 +71,7 @@ fun LibretroScreen(
     coreInfo: String,
     input: LibretroInput,
     controlSource: OverrideSource,
+    controllerLabel: String? = null,
     debugHud: Boolean,
     renderer: GraphicsBackend,
     runner: LibretroRunner,
@@ -153,7 +154,8 @@ fun LibretroScreen(
                 selectedIndex = screen.selectedIndex,
                 listeningIndex = screen.listeningIndex,
                 listenCountdownMs = screen.listenCountdownMs,
-                controlSource = controlSource
+                controlSource = controlSource,
+                controllerLabel = controllerLabel
             )
             is IGMScreen.Settings, is IGMScreen.Video, is IGMScreen.Advanced,
             is IGMScreen.ShaderSettings,
@@ -350,6 +352,56 @@ fun LibretroScreen(
                             leftItems = listOf("B" to "BACK"),
                             rightItems = emptyList()
                         )
+                    }
+                }
+            }
+            is IGMScreen.Reconnect -> {
+                ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(screenPadding),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth(0.8f)
+                        ) {
+                            Text(
+                                text = "Controller Disconnected",
+                                style = TextStyle(
+                                    fontFamily = MPlus1Code,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 24.sp,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            for (port in screen.disconnectedPorts.sorted()) {
+                                Text(
+                                    text = "P${port + 1} disconnected",
+                                    style = TextStyle(
+                                        fontFamily = MPlus1Code,
+                                        fontSize = 18.sp,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    )
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Reconnect to continue",
+                                style = TextStyle(
+                                    fontFamily = MPlus1Code,
+                                    fontSize = 16.sp,
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    textAlign = TextAlign.Center
+                                )
+                            )
+                        }
                     }
                 }
             }
