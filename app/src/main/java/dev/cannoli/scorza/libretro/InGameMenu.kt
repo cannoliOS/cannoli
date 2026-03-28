@@ -44,12 +44,13 @@ import dev.cannoli.scorza.ui.components.screenPadding
 import dev.cannoli.scorza.ui.theme.GrayText
 
 
-class InGameMenuOptions(hasDiscs: Boolean, val discLabel: String, hasAchievements: Boolean = false) {
+class InGameMenuOptions(hasDiscs: Boolean, val discLabel: String, hasAchievements: Boolean = false, hasGuides: Boolean = false) {
     val options: List<String>
     val resumeIndex = 0
     val saveStateIndex = 1
     val loadStateIndex = 2
     val achievementsIndex: Int
+    val guideIndex: Int
     val settingsIndex: Int
     val switchDiscIndex: Int
     val resetIndex: Int
@@ -62,6 +63,12 @@ class InGameMenuOptions(hasDiscs: Boolean, val discLabel: String, hasAchievement
             list.add("Achievements")
         } else {
             achievementsIndex = -1
+        }
+        if (hasGuides) {
+            guideIndex = list.size
+            list.add("Guide")
+        } else {
+            guideIndex = -1
         }
         settingsIndex = list.size
         list.add("Settings")

@@ -141,7 +141,19 @@ class LibretroActivity : ComponentActivity() {
 
     @Volatile private var raHasAchievements = false
 
-    private fun menuOptions() = InGameMenuOptions(hasDiscs, diskLabel(currentDiskIndex), raHasAchievements)
+    private lateinit var guideManager: GuideManager
+    private var guideFiles by mutableStateOf(emptyList<GuideFile>())
+    private var guidePageCount by mutableIntStateOf(0)
+    private var guideScrollDir by mutableIntStateOf(0)
+    private var guideScrollXDir by mutableIntStateOf(0)
+    private var guidePageJump by mutableIntStateOf(0)
+    private var guidePageJumpDir = 0
+    private var guideScrollPos = 0
+    private var guideScrollXPos = 0
+    private var guideInitialScroll by mutableIntStateOf(0)
+    private var guideInitialScrollX by mutableIntStateOf(0)
+
+    private fun menuOptions() = InGameMenuOptions(hasDiscs, diskLabel(currentDiskIndex), raHasAchievements, guideFiles.isNotEmpty())
 
     private fun refreshDiskInfo() {
         if (!romPath.endsWith(".m3u", ignoreCase = true)) return
@@ -195,6 +207,7 @@ class LibretroActivity : ComponentActivity() {
         use24h = intent.getBooleanExtra("use_24h", false)
 
         slotManager = SaveSlotManager(stateBasePath)
+        guideManager = GuideManager(cannoliRoot, platformTag, gameTitle)
         profileManager = ProfileManager(cannoliRoot)
         profileManager.ensureDefault()
         controllerManager = ControllerManager()
@@ -254,6 +267,15 @@ class LibretroActivity : ComponentActivity() {
                             use24h = use24h,
                             osdMessage = osdMessage,
                             fastForwarding = fastForwarding,
+                            guideFiles = guideFiles,
+                            guidePageCount = guidePageCount,
+                            guideScrollDir = guideScrollDir,
+                            guideScrollXDir = guideScrollXDir,
+                            guidePageJump = guidePageJump,
+                            guidePageJumpDir = guidePageJumpDir,
+                            guideInitialScroll = guideInitialScroll,
+                            guideInitialScrollX = guideInitialScrollX,
+                            onGuideScrollChanged = { y, x -> guideScrollPos = y; guideScrollXPos = x },
                             gameInfo = GameInfo(
                                 coreName = coreInfoText,
                                 romPath = romPath,
@@ -421,7 +443,12 @@ class LibretroActivity : ComponentActivity() {
             menuHeldKey = key
             if (key != 0) {
                 onKeyDown(key, KeyEvent(KeyEvent.ACTION_DOWN, key))
-                menuRepeatHandler.postDelayed(menuRepeatRunnable, menuRepeatDelay)
+                if (currentScreen !is IGMScreen.Guide) {
+                    menuRepeatHandler.postDelayed(menuRepeatRunnable, menuRepeatDelay)
+                }
+            } else if (currentScreen is IGMScreen.Guide) {
+                guideScrollDir = 0
+                guideScrollXDir = 0
             }
         }
     }
@@ -467,6 +494,7 @@ class LibretroActivity : ComponentActivity() {
         val isGamepad = source and android.view.InputDevice.SOURCE_GAMEPAD == android.view.InputDevice.SOURCE_GAMEPAD ||
                 source and android.view.InputDevice.SOURCE_JOYSTICK == android.view.InputDevice.SOURCE_JOYSTICK
         if (isGamepad || event.keyCode == KeyEvent.KEYCODE_MENU) {
+            if (currentScreen is IGMScreen.Guide && event.repeatCount > 0) return true
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> onKeyDown(event.keyCode, event)
                 KeyEvent.ACTION_UP -> onKeyUp(event.keyCode, event)
@@ -498,12 +526,21 @@ class LibretroActivity : ComponentActivity() {
             }
             is IGMScreen.Achievements -> handleAchievementsInput(screen, resolved)
             is IGMScreen.AchievementDetail -> handleAchievementDetailInput(screen, resolved)
+            is IGMScreen.GuidePicker -> handleGuidePickerInput(screen, resolved)
+            is IGMScreen.Guide -> handleGuideInput(screen, resolved)
         }
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         if (loading) return true
         if (screenStack.isNotEmpty()) {
+            if (currentScreen is IGMScreen.Guide) {
+                val resolved = resolveGlobal(keyCode)
+                when (resolved) {
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> guideScrollDir = 0
+                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> guideScrollXDir = 0
+                }
+            }
             handleShortcutKeyUp(keyCode)
             return true
         }
@@ -616,6 +653,7 @@ class LibretroActivity : ComponentActivity() {
         if (!raHasAchievements) {
             raManager?.let { ra -> raHasAchievements = ra.isLoggedIn && ra.getAchievements().isNotEmpty() }
         }
+        guideFiles = guideManager.findGuides()
         screenStack.clear()
         push(IGMScreen.Menu())
         renderer.paused = true
@@ -759,6 +797,13 @@ class LibretroActivity : ComponentActivity() {
                     showOsd("Loaded ${slot.label}")
                 }
                 closeAll()
+            }
+            menu.guideIndex -> {
+                if (guideFiles.size == 1) {
+                    openGuide(guideFiles[0])
+                } else {
+                    push(IGMScreen.GuidePicker())
+                }
             }
             menu.settingsIndex -> {
                 coreOptions = runner.getCoreOptions()
@@ -1093,6 +1138,101 @@ class LibretroActivity : ComponentActivity() {
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { detailHeldKeys.clear(); pop(); true }
+            else -> true
+        }
+    }
+
+    private fun openGuide(guide: GuideFile) {
+        val pos = guideManager.loadPosition(guide.file)
+        val scrollX = guideManager.loadScrollX(guide.file)
+        val zoom = guideManager.loadZoom(guide.file)
+        guideScrollDir = 0
+        guideScrollXDir = 0
+        guidePageJump = 0
+        guideScrollXPos = scrollX
+        guideInitialScrollX = scrollX
+        guidePageCount = if (guide.type == GuideType.PDF) {
+            try {
+                val pfd = android.os.ParcelFileDescriptor.open(guide.file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+                val r = android.graphics.pdf.PdfRenderer(pfd)
+                val count = r.pageCount
+                r.close()
+                pfd.close()
+                count
+            } catch (_: Exception) { 1 }
+        } else 0
+        val scrollY = guideManager.loadScrollY(guide.file)
+        guideScrollPos = if (guide.type == GuideType.PDF) scrollY else pos
+        guideInitialScroll = guideScrollPos
+        if (guide.type == GuideType.PDF) {
+            push(IGMScreen.Guide(filePath = guide.file.absolutePath, page = pos.coerceIn(0, (guidePageCount - 1).coerceAtLeast(0)), textZoom = zoom))
+        } else {
+            push(IGMScreen.Guide(filePath = guide.file.absolutePath, textZoom = zoom))
+        }
+    }
+
+    private fun handleGuidePickerInput(screen: IGMScreen.GuidePicker, keyCode: Int): Boolean {
+        val count = guideFiles.size
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                replaceTop(screen.copy(selectedIndex = ((screen.selectedIndex - 1) + count) % count)); true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1) % count)); true
+            }
+            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                guideFiles.getOrNull(screen.selectedIndex)?.let { openGuide(it) }
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            else -> true
+        }
+    }
+
+    private fun handleGuideInput(screen: IGMScreen.Guide, keyCode: Int): Boolean {
+        val guide = guideFiles.firstOrNull { it.file.absolutePath == screen.filePath }
+        val type = guide?.type ?: return true
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> { guideScrollDir = -1; true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { guideScrollDir = 1; true }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (type != GuideType.TXT && screen.textZoom > 1) guideScrollXDir = -1
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (type != GuideType.TXT && screen.textZoom > 1) guideScrollXDir = 1
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_L1 -> {
+                if (type == GuideType.PDF) {
+                    replaceTop(screen.copy(page = (screen.page - 1).coerceAtLeast(0)))
+                } else {
+                    guidePageJumpDir = -1; guidePageJump++
+                }
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_R1 -> {
+                if (type == GuideType.PDF) {
+                    replaceTop(screen.copy(page = (screen.page + 1).coerceAtMost(guidePageCount - 1)))
+                } else {
+                    guidePageJumpDir = 1; guidePageJump++
+                }
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_Y -> {
+                guideInitialScroll = guideScrollPos
+                guideInitialScrollX = guideScrollXPos
+                replaceTop(screen.copy(textZoom = if (screen.textZoom >= 3) 1 else screen.textZoom + 1))
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
+                val pos = if (type == GuideType.PDF) screen.page else guideScrollPos
+                guideManager.save(guide.file, pos, guideScrollPos, guideScrollXPos, screen.textZoom)
+                guideScrollDir = 0
+                guideScrollXDir = 0
+                pop()
+                true
+            }
             else -> true
         }
     }

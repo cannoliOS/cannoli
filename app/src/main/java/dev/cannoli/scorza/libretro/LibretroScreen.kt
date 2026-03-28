@@ -25,11 +25,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
+import dev.cannoli.scorza.R
 import dev.cannoli.scorza.ui.theme.GrayText
 import dev.cannoli.scorza.ui.theme.MPlus1Code
 import androidx.compose.runtime.CompositionLocalProvider
@@ -83,6 +85,15 @@ fun LibretroScreen(
     use24h: Boolean,
     osdMessage: String?,
     fastForwarding: Boolean,
+    guideFiles: List<GuideFile> = emptyList(),
+    guidePageCount: Int = 0,
+    guideScrollDir: Int = 0,
+    guideScrollXDir: Int = 0,
+    guidePageJump: Int = 0,
+    guidePageJumpDir: Int = 0,
+    guideInitialScroll: Int = 0,
+    guideInitialScrollX: Int = 0,
+    onGuideScrollChanged: (y: Int, x: Int) -> Unit = { _, _ -> },
     gameInfo: GameInfo = GameInfo("", "", null)
 ) {
     val overlayVisible = screen != null
@@ -91,7 +102,8 @@ fun LibretroScreen(
         is IGMScreen.EmulatorCategory -> screen.showDescription
         else -> false
     }
-    val statusBarEnabled = (showWifi || showBluetooth || showClock || showBattery) && !showDescription
+    val isGuideScreen = screen is IGMScreen.Guide
+    val statusBarEnabled = (showWifi || showBluetooth || showClock || showBattery) && !showDescription && !isGuideScreen
     val statusBarLeftEdge = remember { mutableIntStateOf(Int.MAX_VALUE) }
 
     CompositionLocalProvider(LocalStatusBarLeftEdge provides statusBarLeftEdge) {
@@ -125,7 +137,7 @@ fun LibretroScreen(
                             modifier = Modifier.padding(24.dp)
                         ) {
                             Text(
-                                text = "Delete ${selectedSlot.label}?",
+                                text = stringResource(R.string.igm_delete_slot, selectedSlot.label),
                                 style = MaterialTheme.typography.titleLarge,
                                 color = Color.White
                             )
@@ -143,30 +155,31 @@ fun LibretroScreen(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(screenPadding),
-                            leftItems = listOf("B" to "CANCEL"),
-                            rightItems = listOf("X" to "DELETE")
+                            leftItems = listOf("B" to stringResource(R.string.label_cancel)),
+                            rightItems = listOf("X" to stringResource(R.string.label_delete))
                         )
                     }
                 }
             }
             is IGMScreen.Controls -> {
+                val activeLabel = stringResource(R.string.value_active)
                 val items = profileNames.map { name ->
                     IGMSettingsItem(
                         label = name,
-                        value = if (name == profileName) "Active" else null
+                        value = if (name == profileName) activeLabel else null
                     )
                 }
                 val isDeletable = profileNames.getOrNull(screen.selectedIndex)?.let {
                     it != dev.cannoli.scorza.input.ProfileManager.DEFAULT
                 } ?: false
-                val left = if (screen.confirmingDelete) listOf("B" to "CANCEL")
-                    else if (isDeletable) listOf("B" to "BACK", "X" to "DELETE")
-                    else listOf("B" to "BACK")
-                val right = if (screen.confirmingDelete) listOf("A" to "CONFIRM DELETE")
-                    else if (isDeletable) listOf("START" to "RENAME", "Y" to "NEW", "A" to "SELECT")
-                    else listOf("Y" to "NEW", "A" to "SELECT")
+                val left = if (screen.confirmingDelete) listOf("B" to stringResource(R.string.label_cancel))
+                    else if (isDeletable) listOf("B" to stringResource(R.string.label_back), "X" to stringResource(R.string.label_delete))
+                    else listOf("B" to stringResource(R.string.label_back))
+                val right = if (screen.confirmingDelete) listOf("A" to stringResource(R.string.label_confirm_delete))
+                    else if (isDeletable) listOf("START" to stringResource(R.string.label_rename), "Y" to stringResource(R.string.label_new), "A" to stringResource(R.string.label_select))
+                    else listOf("Y" to stringResource(R.string.label_new), "A" to stringResource(R.string.label_select))
                 IGMSettingsScreen(
-                    title = if (screen.confirmingDelete) "Delete Profile?" else "Controls",
+                    title = if (screen.confirmingDelete) stringResource(R.string.igm_delete_profile) else stringResource(R.string.title_controls),
                     items = items,
                     selectedIndex = screen.selectedIndex,
                     bottomBarLeft = left,
@@ -200,25 +213,28 @@ fun LibretroScreen(
                 } else null
                 val isOptionList = screen is IGMScreen.EmulatorCategory ||
                     (screen is IGMScreen.Emulator && settingsItems.all { it.value != null })
+                val changeLabel = stringResource(R.string.label_change)
+                val selectLabel = stringResource(R.string.label_select)
                 val bottomBarRight = when {
-                    isOptionList -> listOf("A" to "INFO", "←→" to "CHANGE")
-                    screen is IGMScreen.Shortcuts && screen.selectedIndex == 0 -> listOf("←→" to "CHANGE")
-                    screen is IGMScreen.Shortcuts -> listOf("X" to "CLEAR", "A" to "SET")
-                    screen is IGMScreen.Video -> listOf("A" to "SELECT", "←→" to "CHANGE")
-                    screen is IGMScreen.Advanced -> listOf("←→" to "CHANGE")
-                    screen is IGMScreen.ShaderSettings -> listOf("←→" to "CHANGE")
-                    else -> listOf("A" to "SELECT")
+                    isOptionList -> listOf("A" to stringResource(R.string.label_info), "←→" to changeLabel)
+                    screen is IGMScreen.Shortcuts && screen.selectedIndex == 0 -> listOf("←→" to changeLabel)
+                    screen is IGMScreen.Shortcuts -> listOf("X" to stringResource(R.string.label_clear), "A" to stringResource(R.string.label_set))
+                    screen is IGMScreen.Video -> listOf("A" to selectLabel, "←→" to changeLabel)
+                    screen is IGMScreen.Advanced -> listOf("←→" to changeLabel)
+                    screen is IGMScreen.ShaderSettings -> listOf("←→" to changeLabel)
+                    else -> listOf("A" to selectLabel)
                 }
+                val emulatorLabel = stringResource(R.string.igm_emulator)
                 val title = when (screen) {
-                    is IGMScreen.Settings -> "Settings"
-                    is IGMScreen.Video -> "Video"
-                    is IGMScreen.Advanced -> "Advanced"
-                    is IGMScreen.ShaderSettings -> "Shader Settings"
-                    is IGMScreen.Emulator -> "Emulator"
-                    is IGMScreen.EmulatorCategory -> screen.categoryTitle.ifEmpty { "Emulator" }
-                    is IGMScreen.Shortcuts -> "Shortcuts"
-                    is IGMScreen.SavePrompt -> "Save Changes"
-                    else -> "Settings"
+                    is IGMScreen.Settings -> stringResource(R.string.igm_settings)
+                    is IGMScreen.Video -> stringResource(R.string.igm_video)
+                    is IGMScreen.Advanced -> stringResource(R.string.igm_advanced)
+                    is IGMScreen.ShaderSettings -> stringResource(R.string.igm_shader_settings)
+                    is IGMScreen.Emulator -> emulatorLabel
+                    is IGMScreen.EmulatorCategory -> screen.categoryTitle.ifEmpty { emulatorLabel }
+                    is IGMScreen.Shortcuts -> stringResource(R.string.title_shortcuts)
+                    is IGMScreen.SavePrompt -> stringResource(R.string.igm_save_changes)
+                    else -> stringResource(R.string.igm_settings)
                 }
                 IGMSettingsScreen(
                     title = title,
@@ -261,49 +277,74 @@ fun LibretroScreen(
                                     .verticalScroll(rememberScrollState())
                             ) {
                                 Spacer(modifier = Modifier.height(16.dp))
-                                InfoRow("Core", gameInfo.coreName, infoModifier)
+                                InfoRow(stringResource(R.string.info_core), gameInfo.coreName, infoModifier)
                                 Spacer(modifier = Modifier.height(12.dp))
                                 if (gameInfo.originalRomPath != null) {
-                                    InfoRow("ROM", stripRoot(gameInfo.originalRomPath), infoModifier)
+                                    InfoRow(stringResource(R.string.info_rom), stripRoot(gameInfo.originalRomPath), infoModifier)
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    InfoRow("Extracted", stripRoot(gameInfo.romPath), infoModifier)
+                                    InfoRow(stringResource(R.string.info_extracted), stripRoot(gameInfo.romPath), infoModifier)
                                 } else {
-                                    InfoRow("ROM", stripRoot(gameInfo.romPath), infoModifier)
+                                    InfoRow(stringResource(R.string.info_rom), stripRoot(gameInfo.romPath), infoModifier)
                                 }
                                 if (gameInfo.savePath != null) {
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    InfoRow("Save", stripRoot(gameInfo.savePath), infoModifier)
+                                    InfoRow(stringResource(R.string.info_save), stripRoot(gameInfo.savePath), infoModifier)
                                 }
                                 if (gameInfo.rendererName.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    InfoRow("Renderer", gameInfo.rendererName, infoModifier)
+                                    InfoRow(stringResource(R.string.info_renderer), gameInfo.rendererName, infoModifier)
                                 }
                                 if (gameInfo.raStatus != null) {
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    InfoRow("RetroAchievements", gameInfo.raStatus, infoModifier)
+                                    InfoRow(stringResource(R.string.ra_title), gameInfo.raStatus, infoModifier)
                                 }
                                 if (gameInfo.raGameId != null) {
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    InfoRow("Game ID", gameInfo.raGameId, infoModifier)
+                                    InfoRow(stringResource(R.string.info_game_id), gameInfo.raGameId, infoModifier)
                                 }
                             }
                         }
                         BottomBar(
                             modifier = Modifier.align(Alignment.BottomCenter),
-                            leftItems = listOf("B" to "BACK"),
+                            leftItems = listOf("B" to stringResource(R.string.label_back)),
                             rightItems = emptyList()
                         )
                     }
                 }
             }
+            is IGMScreen.GuidePicker -> {
+                IGMSettingsScreen(
+                    title = stringResource(R.string.title_guide),
+                    items = guideFiles.map { IGMSettingsItem(it.name) },
+                    selectedIndex = screen.selectedIndex
+                )
+            }
+            is IGMScreen.Guide -> {
+                val guide = guideFiles.firstOrNull { it.file.absolutePath == screen.filePath }
+                val type = guide?.type ?: GuideType.TXT
+                GuideScreen(
+                    filePath = screen.filePath,
+                    guideType = type,
+                    page = screen.page,
+                    initialScrollY = guideInitialScroll,
+                    initialScrollX = guideInitialScrollX,
+                    scrollDir = guideScrollDir,
+                    scrollXDir = guideScrollXDir,
+                    pageJump = guidePageJump,
+                    pageJumpDir = guidePageJumpDir,
+                    pageCount = guidePageCount,
+                    textZoom = screen.textZoom,
+                    onScrollPosChanged = onGuideScrollChanged
+                )
+            }
             is IGMScreen.Achievements -> {
-                val filterLabel = when (screen.filter) { 0 -> "ALL"; else -> "UNLOCKED" }
+                val filterLabel = when (screen.filter) { 0 -> stringResource(R.string.label_all); else -> stringResource(R.string.label_unlocked) }
                 val filtered = when (screen.filter) {
                     1 -> screen.achievements.filter { it.unlocked }
                     else -> screen.achievements
                 }
                 IGMSettingsScreen(
-                    title = "Achievements (${screen.achievements.count { it.unlocked }}/${screen.achievements.size})",
+                    title = stringResource(R.string.ach_title, screen.achievements.count { it.unlocked }, screen.achievements.size),
                     items = filtered.map { ach ->
                         val prefix = when {
                             ach.pendingSync -> "◐"
@@ -312,23 +353,23 @@ fun LibretroScreen(
                         }
                         IGMSettingsItem(
                             label = "$prefix ${ach.title}",
-                            value = "${ach.points}pts"
+                            value = stringResource(R.string.ach_points_short, ach.points)
                         )
                     },
                     selectedIndex = screen.selectedIndex.coerceAtMost((filtered.size - 1).coerceAtLeast(0)),
                     coreInfo = screen.status,
-                    bottomBarRight = listOf("Y" to filterLabel, "A" to "DETAILS")
+                    bottomBarRight = listOf("Y" to filterLabel, "A" to stringResource(R.string.label_details))
                 )
             }
             is IGMScreen.AchievementDetail -> {
                 val ach = screen.achievement
                 val unlockText = if (ach.pendingSync) {
-                    "Unlocked \u2022 Pending Sync"
+                    stringResource(R.string.ach_unlocked_pending)
                 } else if (ach.unlocked && ach.unlockTime > 0) {
                     val date = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
                         .format(java.util.Date(ach.unlockTime * 1000))
-                    "Unlocked $date"
-                } else if (ach.unlocked) "Unlocked" else "Locked"
+                    stringResource(R.string.ach_unlocked_date, date)
+                } else if (ach.unlocked) stringResource(R.string.ach_unlocked) else stringResource(R.string.ach_locked)
 
                 ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
                     Box(
@@ -363,7 +404,7 @@ fun LibretroScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "${ach.points} points",
+                                text = stringResource(R.string.ach_points, ach.points),
                                 style = TextStyle(
                                     fontFamily = MPlus1Code,
                                     fontSize = 16.sp,
@@ -383,7 +424,7 @@ fun LibretroScreen(
                         }
                         BottomBar(
                             modifier = Modifier.align(Alignment.BottomCenter),
-                            leftItems = listOf("B" to "BACK"),
+                            leftItems = listOf("B" to stringResource(R.string.label_back)),
                             rightItems = emptyList()
                         )
                     }
@@ -414,7 +455,7 @@ fun LibretroScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (screen.heldKeys.isEmpty()) "Hold buttons..."
+                        text = if (screen.heldKeys.isEmpty()) stringResource(R.string.shortcut_hold_prompt)
                         else screen.heldKeys.joinToString(" + ") { LibretroInput.keyCodeName(it) },
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontSize = 24.sp,

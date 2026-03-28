@@ -462,6 +462,7 @@ class FileScanner(
             File(cannoliRoot, "Config/Overrides/systems"),
             File(cannoliRoot, "Config/Overrides/Games"),
             File(cannoliRoot, "Backup"),
+            File(cannoliRoot, "Guides"),
             File(cannoliRoot, "Wallpapers"),
             toolsDir, portsDir
         ).forEach { it.mkdirs() }
