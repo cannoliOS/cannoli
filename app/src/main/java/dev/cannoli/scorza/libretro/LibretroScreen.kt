@@ -356,6 +356,7 @@ fun LibretroScreen(
                 }
             }
             is IGMScreen.Reconnect -> {
+                val portList = screen.disconnectedPorts.sorted().joinToString(", ") { "Player ${it + 1}" }
                 ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
                     Box(
                         modifier = Modifier
@@ -369,7 +370,7 @@ fun LibretroScreen(
                             modifier = Modifier.fillMaxWidth(0.8f)
                         ) {
                             Text(
-                                text = "Controller Disconnected",
+                                text = "$portList Disconnected",
                                 style = TextStyle(
                                     fontFamily = MPlus1Code,
                                     fontWeight = FontWeight.Bold,
@@ -378,30 +379,12 @@ fun LibretroScreen(
                                     textAlign = TextAlign.Center
                                 )
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            for (port in screen.disconnectedPorts.sorted()) {
-                                Text(
-                                    text = "P${port + 1} disconnected",
-                                    style = TextStyle(
-                                        fontFamily = MPlus1Code,
-                                        fontSize = 18.sp,
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center
-                                    )
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Reconnect to continue",
-                                style = TextStyle(
-                                    fontFamily = MPlus1Code,
-                                    fontSize = 16.sp,
-                                    color = Color.White.copy(alpha = 0.6f),
-                                    textAlign = TextAlign.Center
-                                )
-                            )
                         }
+                        BottomBar(
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                            leftItems = emptyList(),
+                            rightItems = listOf("A" to "IGNORE")
+                        )
                     }
                 }
             }

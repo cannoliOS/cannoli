@@ -7,8 +7,7 @@ import dev.cannoli.scorza.libretro.LibretroRunner
 
 data class ControllerIdentity(
     val descriptor: String,
-    val name: String,
-    val isInternal: Boolean
+    val name: String
 )
 
 class ControllerManager(
@@ -24,7 +23,7 @@ class ControllerManager(
 
     private val deviceToPort = mutableMapOf<Int, Int>()
     private val descriptorToPort = mutableMapOf<String, Int>()
-    private var hasInternal = false
+    private val startupDeviceIds = mutableSetOf<Int>()
 
     var onDeviceDisconnected: ((port: Int) -> Unit)? = null
     var onDeviceConnected: ((port: Int, identity: ControllerIdentity) -> Unit)? = null
@@ -33,20 +32,27 @@ class ControllerManager(
 
     fun initialize() {
         val ids = InputDevice.getDeviceIds()
-        val gameDevices = mutableListOf<Pair<Int, InputDevice>>()
-        var foundInternal = false
+        val fullControllers = mutableListOf<Pair<Int, InputDevice>>()
+        val subDevices = mutableListOf<Int>()
         for (id in ids) {
             val device = InputDevice.getDevice(id) ?: continue
             if (!isGameController(device)) continue
-            gameDevices.add(id to device)
-            if (isInternalDevice(device)) foundInternal = true
+            startupDeviceIds.add(id)
+            if (isFullController(device)) fullControllers.add(id to device)
+            else subDevices.add(id)
         }
-        if (foundInternal) {
-            for ((id, _) in gameDevices) deviceToPort[id] = 0
-            slots[0] = ControllerIdentity("builtin", "Built-in Controller", true)
-            hasInternal = true
-        } else {
-            for ((id, _) in gameDevices) assignDevice(id)
+        for ((id, device) in fullControllers) {
+            val port = nextAvailablePort() ?: break
+            val identity = ControllerIdentity(device.descriptor, device.name)
+            slots[port] = identity
+            deviceToPort[id] = port
+            descriptorToPort[device.descriptor] = port
+        }
+        for (id in subDevices) {
+            deviceToPort[id] = 0
+        }
+        if (slots[0] == null && subDevices.isNotEmpty()) {
+            slots[0] = ControllerIdentity("builtin", "Built-in Controller")
         }
     }
 
@@ -55,11 +61,10 @@ class ControllerManager(
 
         val device = InputDevice.getDevice(deviceId) ?: return -1
         val descriptor = device.descriptor
-        val internal = isInternalDevice(device)
-        val identity = ControllerIdentity(descriptor, device.name, internal)
 
         val existingPort = descriptorToPort[descriptor]
         if (existingPort != null) {
+            val identity = ControllerIdentity(descriptor, device.name)
             slots[existingPort] = identity
             deviceToPort[deviceId] = existingPort
             loadControlsForPort(existingPort, descriptor)
@@ -67,20 +72,8 @@ class ControllerManager(
             return existingPort
         }
 
-        val port: Int
-        if (internal) {
-            if (slots[0]?.isInternal == true) {
-                deviceToPort[deviceId] = 0
-                return 0
-            }
-            if (slots[0] != null) bumpPort0ToNext()
-            port = 0
-            hasInternal = true
-        } else {
-            val start = if (hasInternal) 1 else 0
-            port = (start until maxPorts).firstOrNull { slots[it] == null } ?: return -1
-        }
-
+        val port = nextAvailablePort() ?: return -1
+        val identity = ControllerIdentity(descriptor, device.name)
         slots[port] = identity
         deviceToPort[deviceId] = port
         descriptorToPort[descriptor] = port
@@ -88,6 +81,8 @@ class ControllerManager(
         onDeviceConnected?.invoke(port, identity)
         return port
     }
+
+    private fun nextAvailablePort(): Int? = (0 until maxPorts).firstOrNull { slots[it] == null }
 
     private fun loadControlsForPort(port: Int, descriptor: String) {
         val portInput = portInputs[port]
@@ -101,16 +96,6 @@ class ControllerManager(
         }
     }
 
-    private fun bumpPort0ToNext() {
-        val bumped = slots[0] ?: return
-        val newPort = (1 until maxPorts).firstOrNull { slots[it] == null } ?: return
-        slots[newPort] = bumped
-        slots[0] = null
-        descriptorToPort[bumped.descriptor] = newPort
-        val bumpedDeviceId = deviceToPort.entries.firstOrNull { it.value == 0 }?.key
-        if (bumpedDeviceId != null) deviceToPort[bumpedDeviceId] = newPort
-    }
-
     fun removeDevice(deviceId: Int): Int? {
         val port = deviceToPort.remove(deviceId) ?: return null
         portInputMasks[port] = 0
@@ -119,7 +104,14 @@ class ControllerManager(
         return port
     }
 
-    fun getPortForDeviceId(deviceId: Int): Int? = deviceToPort[deviceId]
+    fun getPortForDeviceId(deviceId: Int): Int? {
+        deviceToPort[deviceId]?.let { return it }
+        if (deviceId in startupDeviceIds) {
+            deviceToPort[deviceId] = 0
+            return 0
+        }
+        return null
+    }
 
     fun resetAllInput() {
         for (p in 0 until maxPorts) {
@@ -142,14 +134,17 @@ class ControllerManager(
 
     companion object {
         fun isGameController(device: InputDevice): Boolean {
+            if (device.vendorId == 0 && device.productId == 0) return false
             val sources = device.sources
             return sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
-                    sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK ||
-                    sources and InputDevice.SOURCE_DPAD == InputDevice.SOURCE_DPAD
+                    sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
         }
 
-        fun isInternalDevice(device: InputDevice): Boolean {
-            return device.vendorId == 0 && device.productId == 0
+        fun isFullController(device: InputDevice): Boolean {
+            if (device.vendorId == 0 && device.productId == 0) return false
+            val sources = device.sources
+            return sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
+                    sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
         }
     }
 }

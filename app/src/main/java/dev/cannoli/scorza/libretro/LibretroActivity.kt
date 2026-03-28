@@ -200,7 +200,10 @@ class LibretroActivity : ComponentActivity() {
             defaultControls = { globalControls }
         )
         controllerManager.onDeviceDisconnected = { port -> onControllerDisconnected(port) }
-        controllerManager.onDeviceConnected = { port, _ -> onControllerReconnected(port) }
+        controllerManager.onDeviceConnected = { port, _ ->
+            if (::runner.isInitialized) runner.setControllerPortDevice(port, LibretroRunner.DEVICE_JOYPAD)
+            onControllerReconnected(port)
+        }
         controllerManager.initialize()
         input = controllerManager.portInputs[0]
         runner = LibretroRunner()
@@ -311,6 +314,9 @@ class LibretroActivity : ComponentActivity() {
                 val gameBaseName = if (romPath.isNotEmpty()) File(romPath).nameWithoutExtension else ""
                 overrideManager = OverrideManager(cannoliRoot, platformTag, gameBaseName, coreBaseName)
                 loadOverrides()
+                for (p in 0 until LibretroRunner.MAX_PORTS) {
+                    if (controllerManager.slots[p] != null) runner.setControllerPortDevice(p, LibretroRunner.DEVICE_JOYPAD)
+                }
                 scanOverlayImages()
                 copyBundledShaders()
                 scanShaderPresets()
@@ -380,9 +386,92 @@ class LibretroActivity : ComponentActivity() {
 
     // --- Input ---
 
+    private val axisMask = LibretroInput.RETRO_UP or LibretroInput.RETRO_DOWN or
+            LibretroInput.RETRO_LEFT or LibretroInput.RETRO_RIGHT or
+            LibretroInput.RETRO_L2 or LibretroInput.RETRO_R2
+
+    private var menuHeldKey = 0
+    private val menuRepeatHandler = Handler(Looper.getMainLooper())
+    private val menuRepeatDelay = 400L
+    private val menuRepeatInterval = 80L
+    private val menuRepeatRunnable = object : Runnable {
+        override fun run() {
+            if (menuHeldKey != 0 && screenStack.isNotEmpty()) {
+                onKeyDown(menuHeldKey, KeyEvent(KeyEvent.ACTION_DOWN, menuHeldKey))
+                menuRepeatHandler.postDelayed(this, menuRepeatInterval)
+            }
+        }
+    }
+
+    private fun handleMenuMotion(event: android.view.MotionEvent) {
+        val hatX = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_X)
+        val hatY = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_Y)
+        val stickX = event.getAxisValue(android.view.MotionEvent.AXIS_X)
+        val stickY = event.getAxisValue(android.view.MotionEvent.AXIS_Y)
+        val x = if (kotlin.math.abs(hatX) > 0.5f) hatX else stickX
+        val y = if (kotlin.math.abs(hatY) > 0.5f) hatY else stickY
+        val key = when {
+            y < -0.5f -> KeyEvent.KEYCODE_DPAD_UP
+            y > 0.5f -> KeyEvent.KEYCODE_DPAD_DOWN
+            x < -0.5f -> KeyEvent.KEYCODE_DPAD_LEFT
+            x > 0.5f -> KeyEvent.KEYCODE_DPAD_RIGHT
+            else -> 0
+        }
+        if (key != menuHeldKey) {
+            menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
+            menuHeldKey = key
+            if (key != 0) {
+                onKeyDown(key, KeyEvent(KeyEvent.ACTION_DOWN, key))
+                menuRepeatHandler.postDelayed(menuRepeatRunnable, menuRepeatDelay)
+            }
+        }
+    }
+
+    override fun dispatchGenericMotionEvent(event: android.view.MotionEvent): Boolean {
+        if (loading) return super.dispatchGenericMotionEvent(event)
+        val source = event.source
+        val isJoystick = source and android.view.InputDevice.SOURCE_JOYSTICK == android.view.InputDevice.SOURCE_JOYSTICK ||
+                source and android.view.InputDevice.SOURCE_GAMEPAD == android.view.InputDevice.SOURCE_GAMEPAD
+        if (!isJoystick) return super.dispatchGenericMotionEvent(event)
+        if (screenStack.isNotEmpty()) {
+            handleMenuMotion(event)
+            return true
+        }
+
+        val port = controllerManager.getPortForDeviceId(event.deviceId) ?: 0
+        var axes = 0
+
+        val hatX = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_X)
+        val hatY = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_Y)
+        if (hatX < -0.5f) axes = axes or LibretroInput.RETRO_LEFT
+        if (hatX > 0.5f) axes = axes or LibretroInput.RETRO_RIGHT
+        if (hatY < -0.5f) axes = axes or LibretroInput.RETRO_UP
+        if (hatY > 0.5f) axes = axes or LibretroInput.RETRO_DOWN
+
+        val stickX = event.getAxisValue(android.view.MotionEvent.AXIS_X)
+        val stickY = event.getAxisValue(android.view.MotionEvent.AXIS_Y)
+        if (stickX < -0.5f) axes = axes or LibretroInput.RETRO_LEFT
+        if (stickX > 0.5f) axes = axes or LibretroInput.RETRO_RIGHT
+        if (stickY < -0.5f) axes = axes or LibretroInput.RETRO_UP
+        if (stickY > 0.5f) axes = axes or LibretroInput.RETRO_DOWN
+
+        if (event.getAxisValue(android.view.MotionEvent.AXIS_LTRIGGER) > 0.5f) axes = axes or LibretroInput.RETRO_L2
+        if (event.getAxisValue(android.view.MotionEvent.AXIS_RTRIGGER) > 0.5f) axes = axes or LibretroInput.RETRO_R2
+
+        controllerManager.portInputMasks[port] = (controllerManager.portInputMasks[port] and axisMask.inv()) or axes
+        runner.setInput(port, controllerManager.portInputMasks[port])
+        return true
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_MENU) {
-            if (event.action == KeyEvent.ACTION_DOWN) onKeyDown(event.keyCode, event)
+        val source = event.source
+        val isGamepad = source and android.view.InputDevice.SOURCE_GAMEPAD == android.view.InputDevice.SOURCE_GAMEPAD ||
+                source and android.view.InputDevice.SOURCE_JOYSTICK == android.view.InputDevice.SOURCE_JOYSTICK
+        if (isGamepad || event.keyCode == KeyEvent.KEYCODE_MENU) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> onKeyDown(event.keyCode, event)
+                KeyEvent.ACTION_UP -> onKeyUp(event.keyCode, event)
+            }
             return true
         }
         return super.dispatchKeyEvent(event)
@@ -408,7 +497,15 @@ class LibretroActivity : ComponentActivity() {
             }
             is IGMScreen.Achievements -> handleAchievementsInput(screen, resolved)
             is IGMScreen.AchievementDetail -> handleAchievementDetailInput(screen, resolved)
-            is IGMScreen.Reconnect -> true
+            is IGMScreen.Reconnect -> {
+                if (resolved == KeyEvent.KEYCODE_BUTTON_A || resolved == KeyEvent.KEYCODE_DPAD_CENTER || resolved == KeyEvent.KEYCODE_ENTER) {
+                    screenStack.clear()
+                    controllerManager.resetAllInput()
+                    for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
+                    renderer.paused = false
+                }
+                true
+            }
         }
     }
 
@@ -451,7 +548,10 @@ class LibretroActivity : ComponentActivity() {
         val port = controllerManager.getPortForDeviceId(event.deviceId) ?: 0
         val portKeys = controllerManager.portPressedKeys[port]
         val isNewPress = portKeys.add(keyCode)
-        if (isNewPress) checkShortcuts(port)
+        if (isNewPress) {
+            dev.cannoli.scorza.util.DebugLog.write("INPUT kc=$keyCode dev=${event.deviceId} -> port=$port")
+            checkShortcuts(port)
+        }
         val portInput = controllerManager.portInputs[port]
         val mask = portInput.keyCodeToRetroMask(keyCode) ?: return super.onKeyDown(keyCode, event)
         controllerManager.portInputMasks[port] = controllerManager.portInputMasks[port] or mask
@@ -533,6 +633,8 @@ class LibretroActivity : ComponentActivity() {
 
     private fun closeAll() {
         screenStack.clear()
+        menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
+        menuHeldKey = 0
         controllerManager.resetAllInput()
         for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
         renderer.paused = false
@@ -1617,8 +1719,10 @@ class LibretroActivity : ComponentActivity() {
         }
     }
     override fun onDestroy() {
-        val inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
-        inputManager.unregisterInputDeviceListener(controllerManager)
+        if (::controllerManager.isInitialized) {
+            val inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
+            inputManager.unregisterInputDeviceListener(controllerManager)
+        }
         super.onDestroy()
         cleanup()
     }
