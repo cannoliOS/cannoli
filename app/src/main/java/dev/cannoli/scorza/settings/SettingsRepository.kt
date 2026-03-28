@@ -96,10 +96,6 @@ class SettingsRepository(context: Context) {
         get() = jsonRead { optString(KEY_RA_PACKAGE, DEFAULT_RA_PACKAGE) }
         set(value) = jsonWrite { put(KEY_RA_PACKAGE, value) }
 
-    var buttonLayout: ButtonLayout
-        get() = ButtonLayout.fromString(jsonRead { optString(KEY_BUTTON_LAYOUT, null) })
-        set(value) = jsonWrite { put(KEY_BUTTON_LAYOUT, value.name) }
-
     var textSize: TextSize
         get() = TextSize.fromString(jsonRead { optString(KEY_TEXT_SIZE, null) })
         set(value) = jsonWrite { put(KEY_TEXT_SIZE, value.name) }
@@ -111,10 +107,6 @@ class SettingsRepository(context: Context) {
     var backgroundImagePath: String?
         get() = jsonRead { optString(KEY_BG_IMAGE, "").ifEmpty { null } }
         set(value) = jsonWrite { if (value != null) put(KEY_BG_IMAGE, value) else remove(KEY_BG_IMAGE) }
-
-    var swapStartSelect: Boolean
-        get() = jsonRead { optBoolean(KEY_SWAP_START_SELECT, false) }
-        set(value) = jsonWrite { put(KEY_SWAP_START_SELECT, value) }
 
     var graphicsBackend: String
         get() = jsonRead { optString(KEY_GRAPHICS_BACKEND, "GLES") }
@@ -204,11 +196,9 @@ class SettingsRepository(context: Context) {
         private const val KEY_SETUP_COMPLETED = "setup_completed"
         private const val KEY_SD_ROOT = "sd_root"
         private const val KEY_RA_PACKAGE = "ra_package"
-        private const val KEY_BUTTON_LAYOUT = "button_layout"
         private const val KEY_TEXT_SIZE = "text_size"
         private const val KEY_TIME_FORMAT = "time_format"
         private const val KEY_BG_IMAGE = "bg_image"
-        private const val KEY_SWAP_START_SELECT = "swap_start_select"
         private const val KEY_BG_TINT = "bg_tint"
         private const val KEY_COLOR_HIGHLIGHT = "color_highlight"
         private const val KEY_COLOR_TEXT = "color_text"
@@ -228,14 +218,6 @@ class SettingsRepository(context: Context) {
         private const val KEY_GRAPHICS_BACKEND = "graphics_backend"
         private const val KEY_RA_USERNAME = "ra_username"
         private const val KEY_RA_TOKEN = "ra_token"
-    }
-}
-
-enum class ButtonLayout {
-    XBOX, NINTENDO;
-    companion object {
-        fun fromString(value: String?): ButtonLayout =
-            entries.firstOrNull { it.name == value } ?: XBOX
     }
 }
 

@@ -331,7 +331,6 @@ class LaunchManager(
             putExtra("show_clock", settings.showClock)
             putExtra("show_battery", settings.showBattery)
             putExtra("use_24h", settings.timeFormat == TimeFormat.TWENTY_FOUR_HOUR)
-            putExtra("swap_start_select", settings.swapStartSelect)
             putExtra("graphics_backend", settings.graphicsBackend)
             putExtra("ra_username", settings.raUsername)
             putExtra("ra_token", settings.raToken)

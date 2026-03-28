@@ -45,10 +45,8 @@
     <string name="setting_clock">Clock</string>
     <string name="setting_battery">Battery</string>
     <string name="setting_time_format">Time Format</string>
-    <string name="setting_button_layout">Button Layout</string>
     <string name="setting_controls">Button Mapping</string>
     <string name="setting_shortcuts">Shortcuts</string>
-    <string name="setting_swap_start_select">Swap Start / Select</string>
     <string name="setting_platform_switching">L1 / R1 Switches Platform</string>
     <string name="setting_show_empty">Empty Platforms</string>
     <string name="setting_scroll_speed">Marquee Speed</string>

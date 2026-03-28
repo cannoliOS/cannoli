@@ -1,11 +1,8 @@
 package dev.cannoli.scorza.input
 
 import android.view.KeyEvent
-import dev.cannoli.scorza.settings.ButtonLayout
 
 class InputHandler(
-    private val getButtonLayout: () -> ButtonLayout,
-    private val getSwapStartSelect: () -> Boolean = { false },
     private val getButtonMappings: () -> Map<String, Int> = { emptyMap() }
 ) {
 
@@ -59,12 +56,12 @@ class InputHandler(
             "btn_down" -> onDown()
             "btn_left" -> onLeft()
             "btn_right" -> onRight()
-            "btn_a" -> if (getButtonLayout() == ButtonLayout.XBOX) onConfirm() else onBack()
-            "btn_b" -> if (getButtonLayout() == ButtonLayout.XBOX) onBack() else onConfirm()
+            "btn_a" -> onConfirm()
+            "btn_b" -> onBack()
             "btn_x" -> onX()
             "btn_y" -> onY()
-            "btn_select" -> if (getSwapStartSelect()) onStart() else onSelect()
-            "btn_start" -> if (getSwapStartSelect()) onSelect() else onStart()
+            "btn_select" -> onSelect()
+            "btn_start" -> onStart()
             "btn_l" -> onL1()
             "btn_r" -> onR1()
             "btn_l2" -> onL2()

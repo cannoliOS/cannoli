@@ -566,8 +566,6 @@ class MainActivity : ComponentActivity() {
         globalOverrides = GlobalOverridesManager { settings.sdCardRoot }
 
         inputHandler = InputHandler(
-            getButtonLayout = { settings.buttonLayout },
-            getSwapStartSelect = { settings.swapStartSelect },
             getButtonMappings = {
                 (screenStack.lastOrNull() as? LauncherScreen.ControlBinding)?.controls
                     ?: globalOverrides.readControls()

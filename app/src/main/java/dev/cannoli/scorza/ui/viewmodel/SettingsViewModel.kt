@@ -116,7 +116,6 @@ class SettingsViewModel(
         val colorHighlightText: String,
         val colorAccent: String,
         val graphicsBackend: String,
-        val swapStartSelect: Boolean,
         val platformSwitching: Boolean,
         val showWifi: Boolean,
         val showBluetooth: Boolean,
@@ -358,7 +357,6 @@ class SettingsViewModel(
         colorHighlightText = settings.colorHighlightText,
         colorAccent = settings.colorAccent,
         graphicsBackend = settings.graphicsBackend,
-        swapStartSelect = settings.swapStartSelect,
         platformSwitching = settings.platformSwitching,
         showWifi = settings.showWifi,
         showBluetooth = settings.showBluetooth,
@@ -384,7 +382,6 @@ class SettingsViewModel(
         settings.colorHighlightText = snap.colorHighlightText
         settings.colorAccent = snap.colorAccent
         settings.graphicsBackend = snap.graphicsBackend
-        settings.swapStartSelect = snap.swapStartSelect
         settings.platformSwitching = snap.platformSwitching
         settings.showWifi = snap.showWifi
         settings.showBluetooth = snap.showBluetooth
