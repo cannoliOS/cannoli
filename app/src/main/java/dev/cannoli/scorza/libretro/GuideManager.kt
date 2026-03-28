@@ -1,6 +1,5 @@
 package dev.cannoli.scorza.libretro
 
-import dev.cannoli.scorza.util.IniData
 import dev.cannoli.scorza.util.IniParser
 import dev.cannoli.scorza.util.IniWriter
 import java.io.File
@@ -39,29 +38,27 @@ class GuideManager(
     private fun positionKey(file: File): String =
         "$platformTag/$gameTitle/${file.name}"
 
-    fun loadPosition(file: File): Int {
-        val ini = IniParser.parse(positionsFile)
-        return ini.get("positions", positionKey(file))?.toIntOrNull() ?: 0
-    }
+    data class SavedPosition(
+        val position: Int = 0,
+        val scrollY: Int = 0,
+        val scrollX: Int = 0,
+        val zoom: Int = 1
+    )
 
-    fun loadScrollY(file: File): Int {
+    fun loadSavedPosition(file: File): SavedPosition {
         val ini = IniParser.parse(positionsFile)
-        return ini.get("scroll_y", positionKey(file))?.toIntOrNull() ?: 0
-    }
-
-    fun loadZoom(file: File): Int {
-        val ini = IniParser.parse(positionsFile)
-        return ini.get("zoom", positionKey(file))?.toIntOrNull() ?: 1
-    }
-
-    fun loadScrollX(file: File): Int {
-        val ini = IniParser.parse(positionsFile)
-        return ini.get("scroll_x", positionKey(file))?.toIntOrNull() ?: 0
+        val key = positionKey(file)
+        return SavedPosition(
+            position = ini.get("positions", key)?.toIntOrNull() ?: 0,
+            scrollY = ini.get("scroll_y", key)?.toIntOrNull() ?: 0,
+            scrollX = ini.get("scroll_x", key)?.toIntOrNull() ?: 0,
+            zoom = ini.get("zoom", key)?.toIntOrNull() ?: 1
+        )
     }
 
     fun save(file: File, position: Int, scrollY: Int, scrollX: Int, zoom: Int) {
         val key = positionKey(file)
-        val ini = if (positionsFile.exists()) IniParser.parse(positionsFile) else IniData(emptyMap())
+        val ini = IniParser.parse(positionsFile)
         val sections = ini.sections.toMutableMap()
         fun put(section: String, value: String) {
             val map = (sections[section] ?: emptyMap()).toMutableMap()

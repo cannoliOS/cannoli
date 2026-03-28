@@ -1143,31 +1143,24 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun openGuide(guide: GuideFile) {
-        val pos = guideManager.loadPosition(guide.file)
-        val scrollX = guideManager.loadScrollX(guide.file)
-        val zoom = guideManager.loadZoom(guide.file)
+        val saved = guideManager.loadSavedPosition(guide.file)
         guideScrollDir = 0
         guideScrollXDir = 0
         guidePageJump = 0
-        guideScrollXPos = scrollX
-        guideInitialScrollX = scrollX
+        guideScrollXPos = saved.scrollX
+        guideInitialScrollX = saved.scrollX
         guidePageCount = if (guide.type == GuideType.PDF) {
             try {
                 val pfd = android.os.ParcelFileDescriptor.open(guide.file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
-                val r = android.graphics.pdf.PdfRenderer(pfd)
-                val count = r.pageCount
-                r.close()
-                pfd.close()
-                count
+                pfd.use { android.graphics.pdf.PdfRenderer(it).use { r -> r.pageCount } }
             } catch (_: Exception) { 1 }
         } else 0
-        val scrollY = guideManager.loadScrollY(guide.file)
-        guideScrollPos = if (guide.type == GuideType.PDF) scrollY else pos
+        guideScrollPos = if (guide.type == GuideType.PDF) saved.scrollY else saved.position
         guideInitialScroll = guideScrollPos
         if (guide.type == GuideType.PDF) {
-            push(IGMScreen.Guide(filePath = guide.file.absolutePath, page = pos.coerceIn(0, (guidePageCount - 1).coerceAtLeast(0)), textZoom = zoom))
+            push(IGMScreen.Guide(filePath = guide.file.absolutePath, page = saved.position.coerceIn(0, (guidePageCount - 1).coerceAtLeast(0)), textZoom = saved.zoom))
         } else {
-            push(IGMScreen.Guide(filePath = guide.file.absolutePath, textZoom = zoom))
+            push(IGMScreen.Guide(filePath = guide.file.absolutePath, textZoom = saved.zoom))
         }
     }
 

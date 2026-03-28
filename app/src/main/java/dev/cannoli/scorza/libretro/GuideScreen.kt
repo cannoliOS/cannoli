@@ -63,7 +63,7 @@ fun GuideScreen(
     val colors = LocalCannoliColors.current
     val zoomIndex = (textZoom - 1).coerceIn(0, ZOOM_SCALES.lastIndex)
 
-    ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.92f) {
+    ScreenBackground(backgroundImagePath = null, backgroundAlpha = 1f) {
         Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             when (guideType) {
                 GuideType.PDF -> PdfContent(
@@ -135,6 +135,8 @@ private fun PdfContent(
             renderer = PdfRenderer(pfd)
         }
         onDispose {
+            bitmap?.recycle()
+            bitmap = null
             renderer?.close()
             fd?.close()
         }
@@ -151,7 +153,9 @@ private fun PdfContent(
         bmp.eraseColor(android.graphics.Color.WHITE)
         pdfPage.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
         pdfPage.close()
+        val old = bitmap
         bitmap = bmp
+        old?.recycle()
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -264,9 +268,10 @@ private fun ImageContent(
             .collect { (y, x) -> onScrollPosChanged(y, x) }
     }
 
-    LaunchedEffect(filePath) {
+    DisposableEffect(filePath) {
         val file = File(filePath)
         if (file.exists()) bitmap = BitmapFactory.decodeFile(file.absolutePath)
+        onDispose { bitmap?.recycle(); bitmap = null }
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
