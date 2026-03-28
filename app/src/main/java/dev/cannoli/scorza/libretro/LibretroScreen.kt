@@ -355,39 +355,6 @@ fun LibretroScreen(
                     }
                 }
             }
-            is IGMScreen.Reconnect -> {
-                val portList = screen.disconnectedPorts.sorted().joinToString(", ") { "Player ${it + 1}" }
-                ScreenBackground(backgroundImagePath = null, backgroundAlpha = 0.85f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(screenPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth(0.8f)
-                        ) {
-                            Text(
-                                text = "$portList Disconnected",
-                                style = TextStyle(
-                                    fontFamily = MPlus1Code,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 24.sp,
-                                    color = Color.White,
-                                    textAlign = TextAlign.Center
-                                )
-                            )
-                        }
-                        BottomBar(
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                            leftItems = emptyList(),
-                            rightItems = listOf("A" to "IGNORE")
-                        )
-                    }
-                }
-            }
             null -> {}
         }
 

@@ -497,15 +497,6 @@ class LibretroActivity : ComponentActivity() {
             }
             is IGMScreen.Achievements -> handleAchievementsInput(screen, resolved)
             is IGMScreen.AchievementDetail -> handleAchievementDetailInput(screen, resolved)
-            is IGMScreen.Reconnect -> {
-                if (resolved == KeyEvent.KEYCODE_BUTTON_A || resolved == KeyEvent.KEYCODE_DPAD_CENTER || resolved == KeyEvent.KEYCODE_ENTER) {
-                    screenStack.clear()
-                    controllerManager.resetAllInput()
-                    for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
-                    renderer.paused = false
-                }
-                true
-            }
         }
     }
 
@@ -643,27 +634,13 @@ class LibretroActivity : ComponentActivity() {
     private fun onControllerDisconnected(port: Int) {
         if (loading) return
         runner.setInput(port, 0)
-        val screen = currentScreen
-        if (screen is IGMScreen.Reconnect) {
-            replaceTop(screen.copy(disconnectedPorts = screen.disconnectedPorts + port))
-        } else {
-            screenStack.clear()
-            push(IGMScreen.Reconnect(disconnectedPorts = setOf(port)))
-            renderer.paused = true
-        }
+        runner.setControllerPortDevice(port, LibretroRunner.DEVICE_NONE)
+        showOsd("Player ${port + 1} Disconnected")
     }
 
     private fun onControllerReconnected(port: Int) {
-        val screen = currentScreen as? IGMScreen.Reconnect ?: return
-        val remaining = screen.disconnectedPorts - port
-        if (remaining.isEmpty()) {
-            screenStack.clear()
-            controllerManager.resetAllInput()
-            for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
-            renderer.paused = false
-        } else {
-            replaceTop(screen.copy(disconnectedPorts = remaining))
-        }
+        runner.setControllerPortDevice(port, LibretroRunner.DEVICE_JOYPAD)
+        if (!loading) showOsd("Player ${port + 1} connected")
     }
 
     private fun refreshSlotInfo() {
