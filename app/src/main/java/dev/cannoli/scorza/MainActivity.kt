@@ -569,13 +569,13 @@ class MainActivity : ComponentActivity() {
 
         globalOverrides = GlobalOverridesManager { settings.sdCardRoot }
         profileManager = dev.cannoli.scorza.input.ProfileManager(settings.sdCardRoot)
-        profileManager.migrate()
         profileManager.ensureDefault()
 
         inputHandler = InputHandler(
             getButtonMappings = {
-                (screenStack.lastOrNull() as? LauncherScreen.ControlBinding)?.controls
-                    ?: profileManager.readControls(dev.cannoli.scorza.input.ProfileManager.DEFAULT)
+                val screen = screenStack.lastOrNull() as? LauncherScreen.ControlBinding
+                if (screen != null && screen.profileName == dev.cannoli.scorza.input.ProfileManager.DEFAULT) screen.controls
+                else profileManager.readControls(dev.cannoli.scorza.input.ProfileManager.DEFAULT)
             }
         )
         wireInput()
@@ -620,7 +620,8 @@ class MainActivity : ComponentActivity() {
                 }
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     val rows = getKeyboardRows(ks.caps, ks.symbols)
                     val newRow = if (ks.keyRow <= 0) rows.lastIndex else ks.keyRow - 1
@@ -684,7 +685,8 @@ class MainActivity : ComponentActivity() {
                 }
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     val rows = getKeyboardRows(ks.caps, ks.symbols)
                     val newRow = if (ks.keyRow >= rows.lastIndex) 0 else ks.keyRow + 1
@@ -744,7 +746,8 @@ class MainActivity : ComponentActivity() {
             when (val ds = dialogState.value) {
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     val rows = getKeyboardRows(ks.caps, ks.symbols)
                     val rowSize = rows[ks.keyRow.coerceIn(0, rows.lastIndex)].size
@@ -776,7 +779,8 @@ class MainActivity : ComponentActivity() {
             when (val ds = dialogState.value) {
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     val rows = getKeyboardRows(ks.caps, ks.symbols)
                     val rowSize = rows[ks.keyRow.coerceIn(0, rows.lastIndex)].size
@@ -936,6 +940,7 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             when (val key = settingsViewModel.enterSelected()) {
+                                "status_bar" -> settingsViewModel.enterSubCategory("status_bar", R.string.settings_status_bar)
                                 "sd_root" -> folderPickerLauncher.launch(null)
                                 "colors" -> screenStack.add(LauncherScreen.ColorList(
                                     colors = settingsViewModel.getColorEntries()
@@ -1284,11 +1289,9 @@ class MainActivity : ComponentActivity() {
                         val pl = currentScreen as LauncherScreen.ProfileList
                         val name = pl.profiles.getOrNull(pl.selectedIndex)
                         if (name != null && name != dev.cannoli.scorza.input.ProfileManager.DEFAULT) {
-                            dialogState.value = DialogState.ProfileNameInput(
-                                isNew = false,
-                                originalName = name,
-                                currentName = name,
-                                cursorPos = name.length
+                            dialogState.value = DialogState.ContextMenu(
+                                gameName = name,
+                                options = listOf("Rename", "Delete")
                             )
                         }
                     }
@@ -1302,7 +1305,8 @@ class MainActivity : ComponentActivity() {
             when (val ds = dialogState.value) {
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     val (newCaps, newSymbols) = when {
                         ks.symbols -> false to false
@@ -1345,7 +1349,8 @@ class MainActivity : ComponentActivity() {
             when (val ds = dialogState.value) {
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     ds.withInsertedChar(" ")?.let { dialogState.value = it }
                 }
                 DialogState.About -> {
@@ -1390,12 +1395,6 @@ class MainActivity : ComponentActivity() {
                     is LauncherScreen.CollectionPicker -> {
                         dialogState.value = DialogState.NewCollectionInput(gamePaths = screen.gamePaths)
                     }
-                    is LauncherScreen.ProfileList -> {
-                        val name = screen.profiles.getOrNull(screen.selectedIndex)
-                        if (name != null && name != dev.cannoli.scorza.input.ProfileManager.DEFAULT) {
-                            dialogState.value = DialogState.DeleteProfileConfirm(name)
-                        }
-                    }
                     is LauncherScreen.ControlBinding -> {
                         screenStack[screenStack.lastIndex] = screen.copy(controls = emptyMap())
                     }
@@ -1420,7 +1419,8 @@ class MainActivity : ComponentActivity() {
                 is DialogState.CollectionRenameInput -> {
                     restoreContextMenu()
                 }
-                is DialogState.NewCollectionInput -> {
+                is DialogState.NewCollectionInput,
+                is DialogState.ProfileNameInput -> {
                     dialogState.value = DialogState.None
                 }
                 DialogState.None -> {
@@ -1451,7 +1451,8 @@ class MainActivity : ComponentActivity() {
             when (val ds = dialogState.value) {
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     if (ks.cursorPos > 0) dialogState.value = ds.withCursor(ks.cursorPos - 1)
                 }
@@ -1464,7 +1465,8 @@ class MainActivity : ComponentActivity() {
             when (val ds = dialogState.value) {
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     if (ks.cursorPos < ks.currentName.length) dialogState.value = ds.withCursor(ks.cursorPos + 1)
                 }
@@ -1488,7 +1490,8 @@ class MainActivity : ComponentActivity() {
             when (val ds = dialogState.value) {
                 is DialogState.RenameInput,
                 is DialogState.NewCollectionInput,
-                is DialogState.CollectionRenameInput -> {
+                is DialogState.CollectionRenameInput,
+                is DialogState.ProfileNameInput -> {
                     val ks = ds.asKeyboardState()!!
                     dialogState.value = ds.withCursor(ks.currentName.length)
                 }
@@ -1783,6 +1786,22 @@ class MainActivity : ComponentActivity() {
     private val gameContextOptions = listOf(MENU_MANAGE_COLLECTIONS, MENU_EMULATOR_OVERRIDE, MENU_RA_GAME_ID, MENU_RENAME, MENU_DELETE_GAME)
 
     private fun onContextMenuConfirm(state: DialogState.ContextMenu) {
+        if (currentScreen is LauncherScreen.ProfileList) {
+            when (state.options[state.selectedOption]) {
+                "Rename" -> {
+                    dialogState.value = DialogState.ProfileNameInput(
+                        isNew = false,
+                        originalName = state.gameName,
+                        currentName = state.gameName,
+                        cursorPos = state.gameName.length
+                    )
+                }
+                "Delete" -> {
+                    dialogState.value = DialogState.DeleteProfileConfirm(state.gameName)
+                }
+            }
+            return
+        }
         if (currentScreen == LauncherScreen.SystemList) {
             when (state.options[state.selectedOption]) {
                 MENU_RENAME -> {

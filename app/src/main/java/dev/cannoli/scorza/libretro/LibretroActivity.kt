@@ -465,21 +465,22 @@ class LibretroActivity : ComponentActivity() {
         }
 
         val port = controllerManager.getPortForDeviceId(event.deviceId) ?: 0
+        val portInput = controllerManager.portInputs[port]
         var axes = 0
 
         val hatX = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_X)
         val hatY = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_Y)
-        if (hatX < -0.5f) axes = axes or LibretroInput.RETRO_LEFT
-        if (hatX > 0.5f) axes = axes or LibretroInput.RETRO_RIGHT
-        if (hatY < -0.5f) axes = axes or LibretroInput.RETRO_UP
-        if (hatY > 0.5f) axes = axes or LibretroInput.RETRO_DOWN
+        if (hatX < -0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_LEFT) ?: LibretroInput.RETRO_LEFT)
+        if (hatX > 0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_RIGHT) ?: LibretroInput.RETRO_RIGHT)
+        if (hatY < -0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_UP) ?: LibretroInput.RETRO_UP)
+        if (hatY > 0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_DOWN) ?: LibretroInput.RETRO_DOWN)
 
         val stickX = event.getAxisValue(android.view.MotionEvent.AXIS_X)
         val stickY = event.getAxisValue(android.view.MotionEvent.AXIS_Y)
-        if (stickX < -0.5f) axes = axes or LibretroInput.RETRO_LEFT
-        if (stickX > 0.5f) axes = axes or LibretroInput.RETRO_RIGHT
-        if (stickY < -0.5f) axes = axes or LibretroInput.RETRO_UP
-        if (stickY > 0.5f) axes = axes or LibretroInput.RETRO_DOWN
+        if (stickX < -0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_LEFT) ?: LibretroInput.RETRO_LEFT)
+        if (stickX > 0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_RIGHT) ?: LibretroInput.RETRO_RIGHT)
+        if (stickY < -0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_UP) ?: LibretroInput.RETRO_UP)
+        if (stickY > 0.5f) axes = axes or (portInput.keyCodeToRetroMask(KeyEvent.KEYCODE_DPAD_DOWN) ?: LibretroInput.RETRO_DOWN)
 
         if (event.getAxisValue(android.view.MotionEvent.AXIS_LTRIGGER) > 0.5f) axes = axes or LibretroInput.RETRO_L2
         if (event.getAxisValue(android.view.MotionEvent.AXIS_RTRIGGER) > 0.5f) axes = axes or LibretroInput.RETRO_R2
@@ -577,10 +578,7 @@ class LibretroActivity : ComponentActivity() {
         val port = controllerManager.getPortForDeviceId(event.deviceId) ?: 0
         val portKeys = controllerManager.portPressedKeys[port]
         val isNewPress = portKeys.add(keyCode)
-        if (isNewPress) {
-            dev.cannoli.scorza.util.DebugLog.write("INPUT kc=$keyCode dev=${event.deviceId} -> port=$port")
-            checkShortcuts(port)
-        }
+        if (isNewPress) checkShortcuts(port)
         val portInput = controllerManager.portInputs[port]
         val mask = portInput.keyCodeToRetroMask(keyCode) ?: return super.onKeyDown(keyCode, event)
         controllerManager.portInputMasks[port] = controllerManager.portInputMasks[port] or mask
@@ -639,6 +637,16 @@ class LibretroActivity : ComponentActivity() {
                     if (holdingFf) continue
                     holdingFf = true; setFastForward(true)
                 }
+                ShortcutAction.OPEN_GUIDE -> {
+                    val guides = guideManager.findGuides()
+                    if (guides.isNotEmpty()) {
+                        renderer.paused = true
+                        screenStack.clear()
+                        guideFiles = guides
+                        if (guides.size == 1) openGuide(guides[0])
+                        else push(IGMScreen.GuidePicker())
+                    }
+                }
             }
             portKeys.clear()
             controllerManager.portInputMasks[port] = 0
@@ -665,6 +673,7 @@ class LibretroActivity : ComponentActivity() {
         screenStack.clear()
         menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
         menuHeldKey = 0
+        applyProfileToAllPorts(profileManager.readControls(currentProfileName))
         controllerManager.resetAllInput()
         for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
         renderer.paused = false
@@ -1177,7 +1186,11 @@ class LibretroActivity : ComponentActivity() {
                 guideFiles.getOrNull(screen.selectedIndex)?.let { openGuide(it) }
                 true
             }
-            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> { pop(); true }
+            KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BACK -> {
+                pop()
+                if (screenStack.isEmpty()) closeAll()
+                true
+            }
             else -> true
         }
     }
@@ -1224,6 +1237,7 @@ class LibretroActivity : ComponentActivity() {
                 guideScrollDir = 0
                 guideScrollXDir = 0
                 pop()
+                if (screenStack.isEmpty()) closeAll()
                 true
             }
             else -> true
@@ -1398,23 +1412,30 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun handleProfilePickerInput(screen: IGMScreen.Controls, keyCode: Int): Boolean {
-        if (screen.confirmingDelete) {
+        if (screen.menuOpen) {
             return when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> { replaceTop(screen.copy(menuIndex = if (screen.menuIndex <= 0) 1 else 0)); true }
+                KeyEvent.KEYCODE_DPAD_DOWN -> { replaceTop(screen.copy(menuIndex = if (screen.menuIndex >= 1) 0 else 1)); true }
                 KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    val name = profileNames.getOrNull(screen.selectedIndex)
-                    if (name != null && name != ProfileManager.DEFAULT) {
-                        profileManager.deleteProfile(name)
-                        profileNames = profileManager.listProfiles()
-                        if (currentProfileName == name) {
-                            currentProfileName = ProfileManager.DEFAULT
-                            profileManager.saveProfileSelection(platformTag, gameBaseName, currentProfileName)
-                            applyProfileToAllPorts(profileManager.readControls(currentProfileName))
+                    val name = profileNames.getOrNull(screen.selectedIndex) ?: return true
+                    when (screen.menuIndex) {
+                        0 -> {
+                            replaceTop(screen.copy(menuOpen = false))
+                            push(IGMScreen.ProfileName(name = name, cursorPos = name.length, isNew = false, originalName = name))
+                        }
+                        1 -> {
+                            profileManager.deleteProfile(name)
+                            profileNames = profileManager.listProfiles()
+                            if (currentProfileName == name) {
+                                currentProfileName = ProfileManager.DEFAULT
+                                profileManager.saveProfileSelection(platformTag, gameBaseName, currentProfileName)
+                            }
+                            replaceTop(IGMScreen.Controls(selectedIndex = screen.selectedIndex.coerceAtMost(profileNames.lastIndex)))
                         }
                     }
-                    replaceTop(IGMScreen.Controls(selectedIndex = screen.selectedIndex.coerceAtMost(profileNames.lastIndex)))
                     true
                 }
-                else -> { replaceTop(screen.copy(confirmingDelete = false)); true }
+                else -> { replaceTop(screen.copy(menuOpen = false)); true }
             }
         }
         val count = profileNames.size
@@ -1429,17 +1450,17 @@ class LibretroActivity : ComponentActivity() {
                 val name = profileNames.getOrNull(screen.selectedIndex) ?: return true
                 currentProfileName = name
                 profileManager.saveProfileSelection(platformTag, gameBaseName, name)
+                replaceTop(screen)
+                true
+            }
+            KeyEvent.KEYCODE_BUTTON_X -> {
+                val name = profileNames.getOrNull(screen.selectedIndex) ?: return true
+                currentProfileName = name
+                profileManager.saveProfileSelection(platformTag, gameBaseName, name)
                 applyProfileToAllPorts(profileManager.readControls(name))
                 val inp = controllerManager.portInputs[0]
                 controlsSnapshot = inp.buttons.associate { it.prefKey to inp.getKeyCodeFor(it) }
                 push(IGMScreen.ControlEdit())
-                true
-            }
-            KeyEvent.KEYCODE_BUTTON_X -> {
-                val name = profileNames.getOrNull(screen.selectedIndex)
-                if (name != null && name != ProfileManager.DEFAULT) {
-                    replaceTop(screen.copy(confirmingDelete = true))
-                }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_Y -> {
@@ -1449,7 +1470,7 @@ class LibretroActivity : ComponentActivity() {
             KeyEvent.KEYCODE_BUTTON_START -> {
                 val name = profileNames.getOrNull(screen.selectedIndex)
                 if (name != null && name != ProfileManager.DEFAULT) {
-                    push(IGMScreen.ProfileName(name = name, cursorPos = name.length, isNew = false, originalName = name))
+                    replaceTop(screen.copy(menuOpen = true, menuIndex = 0))
                 }
                 true
             }

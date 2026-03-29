@@ -381,19 +381,13 @@ fun AppNavGraph(
                 }
             }
             is LauncherScreen.ProfileList -> {
-                val isDeletable = currentScreen.profiles.getOrNull(currentScreen.selectedIndex)?.let {
-                    it != dev.cannoli.scorza.input.ProfileManager.DEFAULT
-                } ?: false
-                val leftItems = if (isDeletable) listOf("B" to stringResource(R.string.label_back), "X" to stringResource(R.string.label_delete)) else listOf("B" to stringResource(R.string.label_back))
-                val rightItems = if (isDeletable) listOf("START" to stringResource(R.string.label_rename), "Y" to stringResource(R.string.label_new), "A" to stringResource(R.string.label_edit))
-                    else listOf("Y" to stringResource(R.string.label_new), "A" to stringResource(R.string.label_edit))
                 ListDialogScreen(
                     backgroundImagePath = appSettings.backgroundImagePath,
                     backgroundTint = appSettings.backgroundTint,
                     title = stringResource(R.string.title_profiles),
                     listFontSize = listFontSize,
                     listLineHeight = listLineHeight,
-                    rightBottomItems = rightItems
+                    rightBottomItems = listOf("Y" to stringResource(R.string.label_new), "A" to stringResource(R.string.label_edit))
                 ) {
                     List(
                         items = currentScreen.profiles,

@@ -163,28 +163,33 @@ fun LibretroScreen(
             }
             is IGMScreen.Controls -> {
                 val activeLabel = stringResource(R.string.value_active)
-                val items = profileNames.map { name ->
-                    IGMSettingsItem(
-                        label = name,
-                        value = if (name == profileName) activeLabel else null
+                if (screen.menuOpen) {
+                    val menuItems = listOf(
+                        IGMSettingsItem(label = stringResource(R.string.context_rename)),
+                        IGMSettingsItem(label = stringResource(R.string.context_delete))
+                    )
+                    IGMSettingsScreen(
+                        title = profileNames.getOrNull(screen.selectedIndex) ?: "",
+                        items = menuItems,
+                        selectedIndex = screen.menuIndex,
+                        bottomBarLeft = listOf("B" to stringResource(R.string.label_cancel)),
+                        bottomBarRight = listOf("A" to stringResource(R.string.label_select))
+                    )
+                } else {
+                    val items = profileNames.map { name ->
+                        IGMSettingsItem(
+                            label = name,
+                            value = if (name == profileName) activeLabel else null
+                        )
+                    }
+                    IGMSettingsScreen(
+                        title = stringResource(R.string.title_controls),
+                        items = items,
+                        selectedIndex = screen.selectedIndex,
+                        bottomBarLeft = listOf("B" to stringResource(R.string.label_back), "Y" to stringResource(R.string.label_new)),
+                        bottomBarRight = listOf("X" to stringResource(R.string.label_edit), "A" to stringResource(R.string.label_select))
                     )
                 }
-                val isDeletable = profileNames.getOrNull(screen.selectedIndex)?.let {
-                    it != dev.cannoli.scorza.input.ProfileManager.DEFAULT
-                } ?: false
-                val left = if (screen.confirmingDelete) listOf("B" to stringResource(R.string.label_cancel))
-                    else if (isDeletable) listOf("B" to stringResource(R.string.label_back), "X" to stringResource(R.string.label_delete))
-                    else listOf("B" to stringResource(R.string.label_back))
-                val right = if (screen.confirmingDelete) listOf("A" to stringResource(R.string.label_confirm_delete))
-                    else if (isDeletable) listOf("START" to stringResource(R.string.label_rename), "Y" to stringResource(R.string.label_new), "A" to stringResource(R.string.label_select))
-                    else listOf("Y" to stringResource(R.string.label_new), "A" to stringResource(R.string.label_select))
-                IGMSettingsScreen(
-                    title = if (screen.confirmingDelete) stringResource(R.string.igm_delete_profile) else stringResource(R.string.title_controls),
-                    items = items,
-                    selectedIndex = screen.selectedIndex,
-                    bottomBarLeft = left,
-                    bottomBarRight = right
-                )
             }
             is IGMScreen.ControlEdit -> ControlsScreen(
                 input = input,
