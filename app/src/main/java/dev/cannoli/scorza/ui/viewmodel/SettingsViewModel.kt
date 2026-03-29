@@ -42,6 +42,9 @@ class SettingsViewModel(
         val categories: List<Category> = emptyList(),
         val categoryIndex: Int = 0,
         val activeCategory: String? = null,
+        val parentCategory: String? = null,
+        val parentSelectedIndex: Int = 0,
+        @param:StringRes val activeCategoryLabel: Int? = null,
         val items: List<SettingsItem> = emptyList(),
         val selectedIndex: Int = 0
     ) {
@@ -93,7 +96,6 @@ class SettingsViewModel(
     private val allCategories = listOf(
         Category("appearance", R.string.settings_appearance),
         Category("content", R.string.settings_content),
-        Category("status_bar", R.string.settings_status_bar),
         Category("input", R.string.settings_input),
         Category("kitchen", R.string.settings_kitchen),
         Category("retroachievements", R.string.settings_retroachievements),
@@ -176,7 +178,7 @@ class SettingsViewModel(
         val cat = current.categories.getOrNull(current.categoryIndex) ?: return false
         val items = buildItemsForCategory(cat.key)
         _state.update {
-            it.copy(activeCategory = cat.key, items = items, selectedIndex = 0)
+            it.copy(activeCategory = cat.key, activeCategoryLabel = cat.labelRes, items = items, selectedIndex = 0)
         }
         return true
     }
@@ -188,11 +190,28 @@ class SettingsViewModel(
         _state.update { it.copy(items = items) }
     }
 
+    fun enterSubCategory(key: String, @StringRes labelRes: Int) {
+        val current = _state.value
+        val items = buildItemsForCategory(key)
+        _state.update {
+            it.copy(activeCategory = key, parentCategory = current.activeCategory, parentSelectedIndex = current.selectedIndex, activeCategoryLabel = labelRes, items = items, selectedIndex = 0)
+        }
+    }
+
     fun exitSubList(): Boolean {
         val current = _state.value
         if (!current.inSubList) return false
-        _state.update {
-            it.copy(activeCategory = null, items = emptyList(), selectedIndex = 0)
+        val parent = current.parentCategory
+        if (parent != null) {
+            val parentLabel = current.categories.getOrNull(current.categoryIndex)?.labelRes
+            val items = buildItemsForCategory(parent)
+            _state.update {
+                it.copy(activeCategory = parent, parentCategory = null, parentSelectedIndex = 0, activeCategoryLabel = parentLabel, items = items, selectedIndex = current.parentSelectedIndex)
+            }
+        } else {
+            _state.update {
+                it.copy(activeCategory = null, activeCategoryLabel = null, items = emptyList(), selectedIndex = 0)
+            }
         }
         return true
     }
@@ -408,6 +427,7 @@ class SettingsViewModel(
                 add(SettingsItem("bg_tint", R.string.setting_bg_tint, valueText = if (tintVal == 0) null else "$tintVal%", valueRes = if (tintVal == 0) R.string.value_off else null))
             }
             add(SettingsItem("colors", R.string.setting_colors, isEditable = true))
+            add(SettingsItem("status_bar", R.string.settings_status_bar, isEditable = true))
             add(SettingsItem("text_size", R.string.setting_text_size, valueRes = when (settings.textSize) {
                 TextSize.COMPACT -> R.string.text_size_compact
                 TextSize.DEFAULT -> R.string.text_size_default

@@ -54,7 +54,7 @@ fun SettingsScreen(
                     .fillMaxSize()
                     .padding(bottom = 48.dp)
             ) {
-                val categoryLabel = state.categories.getOrNull(state.categoryIndex)?.labelRes
+                val categoryLabel = state.activeCategoryLabel
                 if (categoryLabel != null) {
                     ScreenTitle(
                         text = stringResource(categoryLabel),
