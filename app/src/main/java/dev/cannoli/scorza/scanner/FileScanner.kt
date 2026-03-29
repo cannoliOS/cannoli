@@ -470,8 +470,10 @@ class FileScanner(
         for (tag in platformResolver.getAllTags()) {
             File(romsDir, tag).mkdirs()
             File(artDir, tag).mkdirs()
+            File(cannoliRoot, "BIOS/$tag").mkdirs()
             File(cannoliRoot, "Saves/$tag").mkdirs()
             File(cannoliRoot, "Save States/$tag").mkdirs()
+            File(cannoliRoot, "Guides/$tag").mkdirs()
         }
     }
 
