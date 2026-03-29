@@ -68,7 +68,10 @@ class LaunchManager(
         val romName = normalizedRomName(game)
         val stateDir = File(cannoliRoot, "Save States/${game.platformTag}/$romName")
         stateDir.mkdirs()
+        val biosDir = File(cannoliRoot, "BIOS/${game.platformTag}")
+        biosDir.mkdirs()
         val gameOverrides = buildMap {
+            put("system_directory", biosDir.absolutePath)
             put("savestate_directory", stateDir.absolutePath)
             put("sort_savestates_by_content_enable", "false")
             put("state_slot", "0")
@@ -85,7 +88,6 @@ class LaunchManager(
     private fun buildMinimalConfig(rootPath: String) = buildString {
         appendLine("savefile_directory = \"$rootPath/Saves\"")
         appendLine("savestate_directory = \"$rootPath/Save States\"")
-        appendLine("system_directory = \"$rootPath/BIOS\"")
         appendLine("sort_savefiles_by_content_enable = \"true\"")
         appendLine("savestate_file_compression = \"false\"")
         appendLine("config_save_on_exit = \"false\"")
@@ -97,7 +99,6 @@ class LaunchManager(
         val overrides = buildMap {
             put("savefile_directory", "$rootPath/Saves")
             put("savestate_directory", "$rootPath/Save States")
-            put("system_directory", "$rootPath/BIOS")
             put("screenshot_directory", "$rootPath/Media/Screenshots")
             put("recording_output_directory", "$rootPath/Media/Recordings")
             put("sort_savefiles_by_content_enable", "true")
@@ -320,7 +321,7 @@ class LaunchManager(
             putExtra("platform_tag", game.platformTag)
             putExtra("platform_name", platformResolver.getDisplayName(game.platformTag))
             putExtra("cannoli_root", cannoliRoot.absolutePath)
-            putExtra("system_dir", File(cannoliRoot, "BIOS").absolutePath)
+            putExtra("system_dir", File(cannoliRoot, "BIOS/${game.platformTag}").absolutePath)
             putExtra("save_dir", saveDir.absolutePath)
             putExtra("color_highlight", settings.colorHighlight)
             putExtra("color_text", settings.colorText)
@@ -331,6 +332,7 @@ class LaunchManager(
             putExtra("show_clock", settings.showClock)
             putExtra("show_battery", settings.showBattery)
             putExtra("use_24h", settings.timeFormat == TimeFormat.TWENTY_FOUR_HOUR)
+            putExtra("auto_lock_ms", settings.autoLockTimeout.millis)
             putExtra("graphics_backend", settings.graphicsBackend)
             putExtra("ra_username", settings.raUsername)
             putExtra("ra_token", settings.raToken)

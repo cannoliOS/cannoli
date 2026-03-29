@@ -108,6 +108,10 @@ class SettingsRepository(context: Context) {
         get() = jsonRead { optString(KEY_BG_IMAGE, "").ifEmpty { null } }
         set(value) = jsonWrite { if (value != null) put(KEY_BG_IMAGE, value) else remove(KEY_BG_IMAGE) }
 
+    var autoLockTimeout: AutoLockTimeout
+        get() = AutoLockTimeout.fromString(jsonRead { optString(KEY_AUTO_LOCK, null) })
+        set(value) = jsonWrite { put(KEY_AUTO_LOCK, value.name) }
+
     var graphicsBackend: String
         get() = jsonRead { optString(KEY_GRAPHICS_BACKEND, "GLES") }
         set(value) = jsonWrite { put(KEY_GRAPHICS_BACKEND, value) }
@@ -215,6 +219,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_SHOW_PORTS = "show_ports"
         private const val KEY_TOOLS_NAME = "tools_name"
         private const val KEY_PORTS_NAME = "ports_name"
+        private const val KEY_AUTO_LOCK = "auto_lock"
         private const val KEY_GRAPHICS_BACKEND = "graphics_backend"
         private const val KEY_RA_USERNAME = "ra_username"
         private const val KEY_RA_TOKEN = "ra_token"
@@ -234,5 +239,18 @@ enum class TimeFormat {
     companion object {
         fun fromString(value: String?): TimeFormat =
             entries.firstOrNull { it.name == value } ?: TWELVE_HOUR
+    }
+}
+
+enum class AutoLockTimeout(val millis: Long) {
+    ONE_MIN(60_000L),
+    TWO_MIN(120_000L),
+    FIVE_MIN(300_000L),
+    TEN_MIN(600_000L),
+    THIRTY_MIN(1_800_000L),
+    NEVER(0L);
+    companion object {
+        fun fromString(value: String?): AutoLockTimeout =
+            entries.firstOrNull { it.name == value } ?: FIVE_MIN
     }
 }

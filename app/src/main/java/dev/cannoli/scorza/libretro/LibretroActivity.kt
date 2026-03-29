@@ -113,6 +113,10 @@ class LibretroActivity : ComponentActivity() {
     private var osdMessage by mutableStateOf<String?>(null)
     private val osdHandler = Handler(Looper.getMainLooper())
     private val clearOsdRunnable = Runnable { osdMessage = null }
+    private val autoLockHandler = Handler(Looper.getMainLooper())
+    private val autoLockRunnable = Runnable {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
 
     private var gameTitle: String = ""
     private var corePath: String = ""
@@ -131,6 +135,7 @@ class LibretroActivity : ComponentActivity() {
     private var showClock = true
     private var showBattery = true
     private var use24h = false
+    private var autoLockMs = 300_000L
 
     private val currentSlot get() = slotManager.slots[selectedSlotIndex]
     private val currentScreen get() = screenStack.lastOrNull()
@@ -205,6 +210,7 @@ class LibretroActivity : ComponentActivity() {
         showClock = intent.getBooleanExtra("show_clock", true)
         showBattery = intent.getBooleanExtra("show_battery", true)
         use24h = intent.getBooleanExtra("use_24h", false)
+        autoLockMs = intent.getLongExtra("auto_lock_ms", 300_000L)
 
         slotManager = SaveSlotManager(stateBasePath)
         guideManager = GuideManager(cannoliRoot, platformTag, gameTitle)
@@ -507,6 +513,7 @@ class LibretroActivity : ComponentActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (loading) return true
+        if (screenStack.isNotEmpty()) resetAutoLock()
         val screen = currentScreen ?: return handleGameplayInput(keyCode, event)
         val resolved = resolveGlobal(keyCode)
         return when (screen) {
@@ -655,6 +662,14 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
+    private fun resetAutoLock() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        autoLockHandler.removeCallbacks(autoLockRunnable)
+        if (screenStack.isNotEmpty() && autoLockMs > 0) {
+            autoLockHandler.postDelayed(autoLockRunnable, autoLockMs)
+        }
+    }
+
     // --- Menu screen ---
 
     private fun openMenu() {
@@ -667,6 +682,7 @@ class LibretroActivity : ComponentActivity() {
         renderer.paused = true
         refreshSlotInfo()
         refreshDiskInfo()
+        resetAutoLock()
     }
 
     private fun closeAll() {
@@ -677,6 +693,7 @@ class LibretroActivity : ComponentActivity() {
         controllerManager.resetAllInput()
         for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
         renderer.paused = false
+        resetAutoLock()
     }
 
     private fun onControllerDisconnected(port: Int) {

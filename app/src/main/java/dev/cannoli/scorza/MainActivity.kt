@@ -10,6 +10,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -102,6 +103,10 @@ class MainActivity : ComponentActivity() {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val controlButtons = LibretroInput().buttons
     private val controlButtonCount = controlButtons.size
+    private val autoLockHandler = Handler(Looper.getMainLooper())
+    private val autoLockRunnable = Runnable {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
     @Volatile private var navigating = false
     private var loginManager: RetroAchievementsManager? = null
     private val loginPollHandler = Handler(Looper.getMainLooper())
@@ -432,6 +437,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         hideSystemUI()
+        if (::settingsViewModel.isInitialized) resetAutoLock()
         if (LibretroActivity.isRunning) {
             val intent = Intent(this, LibretroActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -454,6 +460,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        autoLockHandler.removeCallbacks(autoLockRunnable)
         CannoliAccessibilityService.onMenuKey = null
     }
 
@@ -464,12 +471,20 @@ class MainActivity : ComponentActivity() {
         dev.cannoli.scorza.server.KitchenManager.stop()
     }
 
+    private fun resetAutoLock() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        autoLockHandler.removeCallbacks(autoLockRunnable)
+        val millis = settingsViewModel.appSettings.value.autoLockTimeout.millis
+        if (millis > 0) autoLockHandler.postDelayed(autoLockRunnable, millis)
+    }
+
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         return true
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_BACK) return true
+        if (event.action == KeyEvent.ACTION_DOWN && ::settingsViewModel.isInitialized) resetAutoLock()
         return super.dispatchKeyEvent(event)
     }
 
