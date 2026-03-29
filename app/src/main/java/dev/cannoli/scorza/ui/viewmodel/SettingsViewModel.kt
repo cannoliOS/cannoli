@@ -437,6 +437,7 @@ class SettingsViewModel(
 
     private fun buildItemsForCategory(categoryKey: String): List<SettingsItem> = when (categoryKey) {
         "display" -> buildList {
+            add(SettingsItem("auto_lock", R.string.setting_auto_lock, valueRes = autoLockLabel(settings.autoLockTimeout)))
             add(SettingsItem("bg_image", R.string.setting_bg_image, valueText = settings.backgroundImagePath?.let { java.io.File(it).name }, valueRes = if (settings.backgroundImagePath == null) R.string.value_none else null))
             if (settings.backgroundImagePath != null) {
                 val tintVal = settings.backgroundTint
@@ -448,7 +449,6 @@ class SettingsViewModel(
                 TextSize.COMPACT -> R.string.text_size_compact
                 TextSize.DEFAULT -> R.string.text_size_default
             }))
-            add(SettingsItem("auto_lock", R.string.setting_auto_lock, valueRes = autoLockLabel(settings.autoLockTimeout)))
         }
         "content" -> buildList {
             add(SettingsItem("show_empty", R.string.setting_show_empty, valueRes = showHide(settings.showEmpty)))
