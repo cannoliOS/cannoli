@@ -2,6 +2,8 @@ package dev.cannoli.scorza.scanner
 
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
+import dev.cannoli.scorza.launcher.InstalledCoreService
+import dev.cannoli.scorza.launcher.isPackageInstalled
 import dev.cannoli.scorza.model.LaunchTarget
 import dev.cannoli.scorza.model.Platform
 import dev.cannoli.scorza.util.IniData
@@ -10,7 +12,7 @@ import dev.cannoli.scorza.util.sortedNatural
 import org.json.JSONObject
 import java.io.File
 
-data class GameCoreOverride(val coreId: String = "", val runner: String? = null, val appPackage: String? = null)
+data class GameCoreOverride(val coreId: String = "", val runner: String? = null, val appPackage: String? = null, val raPackage: String? = null)
 
 class PlatformResolver(
     private val cannoliRoot: File,
@@ -61,6 +63,7 @@ class PlatformResolver(
     private var userCores: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
     private var userRunners: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
     private var userApps: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
+    private var userPackages: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
     private var gameOverrides: MutableMap<String, GameCoreOverride> = java.util.concurrent.ConcurrentHashMap()
     private val coresFile get() = File(cannoliRoot, "Config/cores.json")
 
@@ -78,6 +81,7 @@ class PlatformResolver(
         userCores.clear()
         userRunners.clear()
         userApps.clear()
+        userPackages.clear()
         gameOverrides.clear()
         if (!coresFile.exists()) return
         try {
@@ -88,6 +92,8 @@ class PlatformResolver(
             if (runners != null) for (key in runners.keys()) userRunners[key] = runners.getString(key)
             val apps = json.optJSONObject("apps")
             if (apps != null) for (key in apps.keys()) userApps[key] = apps.getString(key)
+            val packages = json.optJSONObject("packages")
+            if (packages != null) for (key in packages.keys()) userPackages[key] = packages.getString(key)
             val overrides = json.optJSONObject("gameOverrides")
             if (overrides != null) {
                 for (path in overrides.keys()) {
@@ -95,7 +101,8 @@ class PlatformResolver(
                     gameOverrides[path] = GameCoreOverride(
                         coreId = obj.optString("core", ""),
                         runner = obj.optString("runner", "").ifEmpty { null },
-                        appPackage = obj.optString("app", "").ifEmpty { null }
+                        appPackage = obj.optString("app", "").ifEmpty { null },
+                        raPackage = obj.optString("raPackage", "").ifEmpty { null }
                     )
                 }
             }
@@ -121,6 +128,11 @@ class PlatformResolver(
             for ((tag, app) in userApps) apps.put(tag, app)
             json.put("apps", apps)
         }
+        if (userPackages.isNotEmpty()) {
+            val packages = JSONObject()
+            for ((tag, pkg) in userPackages) packages.put(tag, pkg)
+            json.put("packages", packages)
+        }
         if (gameOverrides.isNotEmpty()) {
             val overrides = JSONObject()
             for ((path, ov) in gameOverrides) {
@@ -130,6 +142,7 @@ class PlatformResolver(
                 } else {
                     obj.put("core", ov.coreId)
                     if (ov.runner != null) obj.put("runner", ov.runner)
+                    if (ov.raPackage != null) obj.put("raPackage", ov.raPackage)
                 }
                 overrides.put(path, obj)
             }
@@ -143,7 +156,7 @@ class PlatformResolver(
         return userCores[tag] ?: defaultCores[tag] ?: ""
     }
 
-    fun setCoreMapping(tag: String, core: String, runner: String? = null) {
+    fun setCoreMapping(tag: String, core: String, runner: String? = null, raPackage: String? = null) {
         if (core.isBlank() || core == defaultCores[tag]) {
             userCores.remove(tag)
         } else {
@@ -154,18 +167,25 @@ class PlatformResolver(
         } else {
             userRunners.remove(tag)
         }
+        if (raPackage != null) {
+            userPackages[tag] = raPackage
+        } else {
+            userPackages.remove(tag)
+        }
         userApps.remove(tag)
     }
+
+    fun getPackage(tag: String): String? = userPackages[tag]
 
     fun getRunnerPreference(tag: String): String? = userRunners[tag]
 
     fun getGameOverride(gamePath: String): GameCoreOverride? = gameOverrides[gamePath]
 
-    fun setGameOverride(gamePath: String, coreId: String?, runner: String?) {
+    fun setGameOverride(gamePath: String, coreId: String?, runner: String?, raPackage: String? = null) {
         if (coreId == null) {
             gameOverrides.remove(gamePath)
         } else {
-            gameOverrides[gamePath] = GameCoreOverride(coreId, runner)
+            gameOverrides[gamePath] = GameCoreOverride(coreId, runner, raPackage = raPackage)
         }
         saveCoreMappings()
     }
@@ -186,9 +206,10 @@ class PlatformResolver(
             userRunners.remove(tag)
         } else {
             userApps[tag] = appPackage
-            userRunners[tag] = "App"
+            userRunners[tag] = "Standalone"
         }
         userCores.remove(tag)
+        userPackages.remove(tag)
     }
 
     fun setGameAppOverride(gamePath: String, appPackage: String?) {
@@ -208,64 +229,119 @@ class PlatformResolver(
         val romsDir = File(cannoliRoot, "Roms")
         if (File(romsDir, "$tag/.emu_launch").exists()) return "External"
         val override = userRunners[tag]
+        if (override == "App") return "Standalone"
         if (override != null) return override
         if (nativeLibDir != null && File(nativeLibDir, "${coreId}_android.so").exists()) return "Internal"
+        val pkg = userPackages[tag]
+        if (pkg != null) return InstalledCoreService.getPackageLabel(pkg)
         return "RetroArch"
     }
 
-    fun getDetailedMappings(pm: PackageManager? = null): List<dev.cannoli.scorza.ui.screens.CoreMappingEntry> {
+    fun getDetailedMappings(
+        pm: PackageManager? = null,
+        installedRaCores: Map<String, Set<String>> = emptyMap(),
+        embeddedCoresDir: String? = null
+    ): List<dev.cannoli.scorza.ui.screens.CoreMappingEntry> {
         val tags = (defaultCores.keys + defaultApps.keys + userCores.keys + userApps.keys)
         return tags.map { tag ->
             val app = getAppPackage(tag)
             val coreId = getCoreMapping(tag)
             if (app != null && coreId.isBlank()) {
-                val appName = pm?.let { resolveAppLabel(it, app) } ?: app
+                val installed = pm?.isPackageInstalled(app) ?: true
+                if (installed) {
+                    val appName = pm?.let { resolveAppLabel(it, app) } ?: app
+                    dev.cannoli.scorza.ui.screens.CoreMappingEntry(
+                        tag = tag, platformName = getDisplayName(tag),
+                        coreDisplayName = appName, runnerLabel = "Standalone"
+                    )
+                } else {
+                    dev.cannoli.scorza.ui.screens.CoreMappingEntry(
+                        tag = tag, platformName = getDisplayName(tag),
+                        coreDisplayName = "Missing", runnerLabel = ""
+                    )
+                }
+            } else if (coreId.isBlank()) {
                 dev.cannoli.scorza.ui.screens.CoreMappingEntry(
-                    tag = tag,
-                    platformName = getDisplayName(tag),
-                    coreDisplayName = appName,
-                    runnerLabel = "App"
+                    tag = tag, platformName = getDisplayName(tag),
+                    coreDisplayName = "None", runnerLabel = ""
                 )
             } else {
-                dev.cannoli.scorza.ui.screens.CoreMappingEntry(
-                    tag = tag,
-                    platformName = getDisplayName(tag),
-                    coreDisplayName = if (coreId.isBlank()) "None" else getCoreDisplayName(coreId),
-                    runnerLabel = if (coreId.isBlank()) "" else getRunnerLabel(tag, coreId)
-                )
+                val runner = getRunnerLabel(tag, coreId)
+                val present = isCorePresent(tag, coreId, runner, installedRaCores, embeddedCoresDir)
+                if (present) {
+                    dev.cannoli.scorza.ui.screens.CoreMappingEntry(
+                        tag = tag, platformName = getDisplayName(tag),
+                        coreDisplayName = getCoreDisplayName(coreId), runnerLabel = runner
+                    )
+                } else {
+                    dev.cannoli.scorza.ui.screens.CoreMappingEntry(
+                        tag = tag, platformName = getDisplayName(tag),
+                        coreDisplayName = "Missing", runnerLabel = ""
+                    )
+                }
             }
         }.sortedNatural { it.platformName }
     }
 
-    fun getCorePickerOptions(tag: String, pm: PackageManager? = null): List<dev.cannoli.scorza.ui.screens.CorePickerOption> {
+    private fun isCorePresent(
+        tag: String, coreId: String, runner: String,
+        installedRaCores: Map<String, Set<String>>,
+        embeddedCoresDir: String?
+    ): Boolean {
+        if (runner == "Internal") {
+            val dir = embeddedCoresDir ?: nativeLibDir ?: return false
+            return File(dir, "${coreId}_android.so").exists()
+        }
+        if (runner == "External") return true
+        // RetroArch / RicottaArch — check specific package first, then any package
+        val pkg = userPackages[tag]
+        if (pkg != null) return installedRaCores[pkg]?.contains(coreId) == true
+        return installedRaCores.any { it.value.contains(coreId) }
+    }
+
+    fun getCorePickerOptions(
+        tag: String,
+        pm: PackageManager? = null,
+        installedRaCores: Map<String, Set<String>> = emptyMap(),
+        embeddedCoresDir: String? = null
+    ): List<dev.cannoli.scorza.ui.screens.CorePickerOption> {
         val options = mutableListOf<dev.cannoli.scorza.ui.screens.CorePickerOption>()
 
-        val coreIds = mutableListOf<String>()
-        defaultCores[tag]?.let { coreIds.add(it) }
-        defaultRetroArchCores[tag]?.forEach { if (it !in coreIds) coreIds.add(it) }
+        // Gather all candidate core IDs from core info files + platform defaults
+        val candidateCoreIds = mutableSetOf<String>()
+        defaultCores[tag]?.let { candidateCoreIds.add(it) }
+        defaultRetroArchCores[tag]?.forEach { candidateCoreIds.add(it) }
+        coreInfo?.getCoresForTag(tag)?.forEach { candidateCoreIds.add(it.id) }
 
-        for (coreId in coreIds) {
+        for (coreId in candidateCoreIds) {
             val displayName = getCoreDisplayName(coreId)
-            val hasInternal = nativeLibDir != null && File(nativeLibDir, "${coreId}_android.so").exists()
-            if (hasInternal) {
+
+            // Check embedded/internal cores
+            val checkDir = embeddedCoresDir ?: nativeLibDir
+            if (checkDir != null && File(checkDir, "${coreId}_android.so").exists()) {
                 options.add(dev.cannoli.scorza.ui.screens.CorePickerOption(
                     coreId = coreId, displayName = displayName, runnerLabel = "Internal"
                 ))
-                options.add(dev.cannoli.scorza.ui.screens.CorePickerOption(
-                    coreId = coreId, displayName = displayName, runnerLabel = "RetroArch"
-                ))
-            } else {
-                options.add(dev.cannoli.scorza.ui.screens.CorePickerOption(
-                    coreId = coreId, displayName = displayName, runnerLabel = "RetroArch"
-                ))
+            }
+
+            // Check each RA package for this core
+            for ((pkg, cores) in installedRaCores) {
+                if (coreId in cores) {
+                    options.add(dev.cannoli.scorza.ui.screens.CorePickerOption(
+                        coreId = coreId, displayName = displayName,
+                        runnerLabel = InstalledCoreService.getPackageLabel(pkg),
+                        raPackage = pkg
+                    ))
+                }
             }
         }
 
+        // Standalone app options
         val appPackages = getAppOptions(tag)
         for (pkg in appPackages) {
             val appName = pm?.let { resolveAppLabel(it, pkg) } ?: pkg
             options.add(dev.cannoli.scorza.ui.screens.CorePickerOption(
-                coreId = "", displayName = appName, runnerLabel = "App", appPackage = pkg
+                coreId = "", displayName = appName, runnerLabel = "Standalone", appPackage = pkg
             ))
         }
 

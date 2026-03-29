@@ -10,8 +10,8 @@ class RetroArchLauncher(
     private val context: Context,
     private val getRetroArchPackage: () -> String
 ) {
-    fun launch(romFile: File, coreName: String, configPath: String? = null): LaunchResult {
-        val retroArchPackage = getRetroArchPackage()
+    fun launch(romFile: File, coreName: String, configPath: String? = null, targetPackage: String? = null): LaunchResult {
+        val retroArchPackage = targetPackage ?: getRetroArchPackage()
         if (!context.isPackageInstalled(retroArchPackage)) {
             return LaunchResult.AppNotInstalled(retroArchPackage)
         }

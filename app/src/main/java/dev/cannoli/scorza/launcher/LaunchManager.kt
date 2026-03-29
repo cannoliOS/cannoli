@@ -24,6 +24,7 @@ class LaunchManager(
     private val retroArchLauncher: RetroArchLauncher,
     private val emuLauncher: EmuLauncher,
     private val apkLauncher: ApkLauncher,
+    private val installedCoreService: InstalledCoreService? = null,
 ) {
     private var raConfigPath: String? = null
 
@@ -168,7 +169,7 @@ class LaunchManager(
         if (target !is LaunchTarget.RetroArch) return null
         val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag) ?: return null
         val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
-        if (runnerPref == "RetroArch") return null
+        if (runnerPref == "RetroArch" || runnerPref == "RicottaArch") return null
         return findEmbeddedCore(core)
     }
 
@@ -214,7 +215,7 @@ class LaunchManager(
         val result = when (val target = game.launchTarget) {
             is LaunchTarget.RetroArch -> {
                 val runnerPref = gameOverride?.runner ?: platformResolver.getRunnerPreference(game.platformTag)
-                if (runnerPref == "App") {
+                if (runnerPref == "App" || runnerPref == "Standalone") {
                     val app = platformResolver.getAppPackage(game.platformTag)
                     if (app != null) {
                         apkLauncher.launchWithRom(app, launchFile)
@@ -224,16 +225,28 @@ class LaunchManager(
                 } else {
                     val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag)
                     if (core != null) {
-                        if (runnerPref != "RetroArch") {
+                        if (runnerPref != "RetroArch" && runnerPref != "RicottaArch") {
                             val embeddedCorePath = findEmbeddedCore(core)
                             if (embeddedCorePath != null) {
                                 launchEmbedded(game.copy(file = launchFile), embeddedCorePath, originalRomPath = game.file.absolutePath)
                                 return null
                             }
                         }
+                        val raPackage = gameOverride?.raPackage
+                            ?: platformResolver.getPackage(game.platformTag)
+                        // Validate core presence in cached data
+                        if (raPackage != null && installedCoreService != null) {
+                            if (!context.isPackageInstalled(raPackage)) {
+                                return toLaunchDialog(LaunchResult.AppNotInstalled(raPackage))
+                            }
+                            if (!installedCoreService.hasCoreInPackage(core, raPackage)) {
+                                val label = InstalledCoreService.getPackageLabel(raPackage)
+                                return toLaunchDialog(LaunchResult.CoreNotInstalled("$core not found in $label"))
+                            }
+                        }
                         syncRetroArchConfig(File(settings.sdCardRoot))
                         val launchConfig = buildGameConfig(game) ?: raConfigPath
-                        retroArchLauncher.launch(launchFile, core, launchConfig)
+                        retroArchLauncher.launch(launchFile, core, launchConfig, raPackage)
                     } else {
                         LaunchResult.CoreNotInstalled("unknown")
                     }
@@ -279,9 +292,10 @@ class LaunchManager(
         }
         val gameOverride = platformResolver.getGameOverride(game.file.absolutePath)
         val core = gameOverride?.coreId ?: platformResolver.getCoreName(game.platformTag) ?: return
+        val raPackage = gameOverride?.raPackage ?: platformResolver.getPackage(game.platformTag)
         syncRetroArchConfig(File(settings.sdCardRoot))
         val launchConfig = buildGameConfig(game, resume = true) ?: raConfigPath
-        retroArchLauncher.launch(launchFile, core, launchConfig)
+        retroArchLauncher.launch(launchFile, core, launchConfig, raPackage)
     }
 
     private fun toLaunchDialog(result: LaunchResult): DialogState? {

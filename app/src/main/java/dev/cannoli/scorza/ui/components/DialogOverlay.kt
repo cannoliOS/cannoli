@@ -150,6 +150,7 @@ internal fun ListDialogScreen(
     listFontSize: TextUnit,
     listLineHeight: TextUnit,
     fullWidth: Boolean = false,
+    leftBottomItems: List<Pair<String, String>> = emptyList(),
     rightBottomItems: List<Pair<String, String>>,
     content: @Composable () -> Unit
 ) {
@@ -174,7 +175,7 @@ internal fun ListDialogScreen(
             }
             BottomBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
-                leftItems = listOf("B" to stringResource(R.string.label_back)),
+                leftItems = listOf("B" to stringResource(R.string.label_back)) + leftBottomItems,
                 rightItems = rightBottomItems
             )
         }
