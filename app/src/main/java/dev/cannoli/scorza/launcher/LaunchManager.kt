@@ -28,6 +28,17 @@ class LaunchManager(
 ) {
     private var raConfigPath: String? = null
 
+    fun syncRetroArchAssets(root: File) {
+        val fontDest = File(root, "Config/Assets/cannoli/font.ttf")
+        if (fontDest.exists()) return
+        fontDest.parentFile?.mkdirs()
+        try {
+            context.assets.open("fonts/MPlus-1c-NerdFont-Bold.ttf").use { input ->
+                fontDest.outputStream().use { input.copyTo(it) }
+            }
+        } catch (_: IOException) {}
+    }
+
     fun syncRetroArchConfig(root: File) {
         val configDir = File(root, "Config")
         configDir.mkdirs()
@@ -92,6 +103,8 @@ class LaunchManager(
         appendLine("sort_savefiles_by_content_enable = \"true\"")
         appendLine("savestate_file_compression = \"false\"")
         appendLine("config_save_on_exit = \"false\"")
+        appendLine("video_font_enable = \"false\"")
+        appendLine("assets_directory = \"$rootPath/Config/Assets\"")
     }
 
     private fun patchRetroArchConfig(source: String, rootPath: String): String {
@@ -108,6 +121,8 @@ class LaunchManager(
             put("savestate_thumbnail_enable", "true")
             put("savestate_auto_save", "true")
             put("config_save_on_exit", "false")
+            put("video_font_enable", "false")
+            put("assets_directory", "$rootPath/Config/Assets")
             if (raUser.isNotEmpty() && raToken.isNotEmpty()) {
                 put("cheevos_enable", "true")
                 put("cheevos_username", raUser)
@@ -234,12 +249,13 @@ class LaunchManager(
                         }
                         val raPackage = gameOverride?.raPackage
                             ?: platformResolver.getPackage(game.platformTag)
-                        // Validate core presence in cached data
                         if (raPackage != null && installedCoreService != null) {
                             if (!context.isPackageInstalled(raPackage)) {
                                 return toLaunchDialog(LaunchResult.AppNotInstalled(raPackage))
                             }
-                            if (!installedCoreService.hasCoreInPackage(core, raPackage)) {
+                            if (installedCoreService.cacheReady
+                                && raPackage !in installedCoreService.unresponsivePackages
+                                && !installedCoreService.hasCoreInPackage(core, raPackage)) {
                                 val label = InstalledCoreService.getPackageLabel(raPackage)
                                 return toLaunchDialog(LaunchResult.CoreNotInstalled("$core not found in $label"))
                             }
@@ -366,7 +382,7 @@ class LaunchManager(
         Normalizer.normalize(game.file.nameWithoutExtension, Normalizer.Form.NFC)
 
     companion object {
-        private const val CONFIG_VERSION = 3
+        private const val CONFIG_VERSION = 5
 
         fun extractBundledCores(context: Context): String {
             val coresDir = File(context.filesDir, "cores")
