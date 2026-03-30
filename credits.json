@@ -7,8 +7,10 @@
     { "name": "Nerd Fonts", "what": "NerdSymbols", "license": "OFL" }
   ],
   "libraries": [
-    { "name": "ZXing", "what": "QR Code", "license": "Apache 2.0" },
-    { "name": "PdfiumAndroid (io.legere)", "what": "PDF Renderer", "license": "Apache 2.0" }
+    { "name": "Apache Commons Compress", "what": "Archive Extraction", "license": "Apache 2.0" },
+    { "name": "PdfiumAndroid (io.legere)", "what": "PDF Renderer", "license": "Apache 2.0" },
+    { "name": "XZ for Java", "what": "7z Decompression", "license": "Public domain" },
+    { "name": "ZXing", "what": "QR Code Library", "license": "Apache 2.0" }
   ],
   "cores": [
     { "name": "FBNeo", "id": "fbneo", "what": "Neo Geo / Arcade", "license": "Non-commercial" },

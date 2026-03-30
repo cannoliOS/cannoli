@@ -85,10 +85,12 @@ Full license texts are available in the [licenses](licenses/) directory.
 
 ### Libraries
 
-| Name                      | License    |
-|---------------------------|------------|
-| ZXing                     | Apache 2.0 |
-| PdfiumAndroid (io.legere) | Apache 2.0 |
+| Name                      | License       |
+|---------------------------|---------------|
+| Apache Commons Compress   | Apache 2.0    |
+| PdfiumAndroid (io.legere) | Apache 2.0    |
+| XZ for Java               | Public domain |
+| ZXing                     | Apache 2.0    |
 
 ### Fonts
 
